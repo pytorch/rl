@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import Transform
+from torchrl.envs.transforms._base import _key_is_under, Transform
 
 __all__ = [
     "ExcludeTransform",
@@ -47,6 +47,11 @@ class ExcludeTransform(Transform):
             not present, it is simply ignored.
         inverse (bool, optional): if ``True``, the exclusion will occur during the ``inv`` call.
             Defaults to ``False``.
+
+    .. note:: With ``inverse=True`` the excluded entries are hidden from the transforms
+        placed after this one, so a stateful transform (e.g.
+        :class:`~torchrl.envs.RewardSum`) cannot keep its state under an excluded key:
+        building such a chain raises a ``ValueError``.
 
     Examples:
         >>> import gymnasium
@@ -95,6 +100,11 @@ class ExcludeTransform(Transform):
         if self.inverse:
             return tensordict.exclude(*self.excluded_keys)
         return tensordict
+
+    def _inv_drops_key(self, key: NestedKey) -> bool:
+        return self.inverse and any(
+            _key_is_under(key, excluded) for excluded in self.excluded_keys
+        )
 
     forward = _call
 
@@ -261,6 +271,12 @@ class RenameTransform(Transform):
             with a different name rather than being renamed. This allows for
             renaming immutable entries such as ``"reward"`` and ``"done"``.
 
+    .. note:: With ``create_copy=False``, the inverse pass renames the ``out_keys_inv``
+        entries back to ``in_keys_inv``, so they are hidden from the transforms
+        placed after this one. A stateful transform (e.g.
+        :class:`~torchrl.envs.RewardSum`) cannot keep its state under such a key:
+        building such a chain raises a ``ValueError``.
+
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> env = TransformedEnv(
@@ -350,6 +366,11 @@ class RenameTransform(Transform):
     ) -> TensorDictBase:
         with _set_missing_tolerance(self, True):
             return self._call(tensordict_reset)
+
+    def _inv_drops_key(self, key: NestedKey) -> bool:
+        return not self.create_copy and any(
+            _key_is_under(key, out_key) for out_key in self.out_keys_inv
+        )
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # no in-place modif

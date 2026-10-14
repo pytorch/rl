@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import Transform
+from torchrl.envs.transforms._base import _key_is_under, Transform
 
 __all__ = [
     "CatTensors",
@@ -1023,6 +1023,17 @@ class Stack(Transform):
     algorithms that expect the tensors for observations, rewards, etc. to
     contain batched data for all the agents.
 
+    .. note:: When ``in_key_inv`` is set, the inverse pass unstacks that entry
+        and removes it from the data handed to the environment *and* to the
+        ``_step`` of the transforms of the chain. A stateful transform that
+        keeps its state under the stacked key, such as
+        :class:`~torchrl.envs.RewardSum` reading ``("agents", "reward")`` from
+        a ``Stack`` output, would silently lose that state at every step.
+        Building such a chain raises a ``ValueError``: place the stateful
+        transform *before* ``Stack`` and give it the per-agent keys (e.g.
+        ``("agent_0", "reward")``); ``Stack`` then stacks its output entries
+        and the state is restored on every step.
+
     Args:
         in_keys (sequence of NestedKey): keys to be stacked.
         out_key (NestedKey): key of the resulting stacked entry.
@@ -1163,6 +1174,9 @@ class Stack(Transform):
         for value, out_key_inv in zip(values, self.out_keys_inv, strict=True):
             tensordict = tensordict.set(out_key_inv, value)
         return tensordict.exclude(self.in_keys_inv[0])
+
+    def _inv_drops_key(self, key: NestedKey) -> bool:
+        return len(self.in_keys_inv) > 0 and _key_is_under(key, self.in_keys_inv[0])
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
