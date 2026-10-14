@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-10-13
+# Flaky Test Report - 2026-10-14
 
 ## Summary
 
-- **Flaky tests**: 5773
-- **Newly flaky** (last 7 days): 5773
+- **Flaky tests**: 5772
+- **Newly flaky** (last 7 days): 5772
 - **Resolved**: 0
-- **Total tests analyzed**: 32508
+- **Total tests analyzed**: 32528
 - **CI runs analyzed**: 60
 
 ---
@@ -14,26 +14,26 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...y::TestRayCollector::test_distributed_collector_basic[50]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...::TestRayCollector::test_distributed_collector_basic[100]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...ted.py::TestRayCollector::test_distributed_collector_mult` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...tributed.py::TestRayCollector::test_collector_next_method` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...ibuted.py::TestRayCollector::test_dqn_trainer_ray_backend` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...ollector::test_offpolicy_trainer_ray_backend[DDPGTrainer]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...Collector::test_offpolicy_trainer_ray_backend[SACTrainer]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...Collector::test_offpolicy_trainer_ray_backend[TD3Trainer]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...tor::test_ray_learner_publishes_to_collector_owned_policy` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...py::TestRayCollector::test_ray_owned_inference_and_replay` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...RayCollector::test_ray_collector_pause_drains_and_resumes` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...:TestRayCollector::test_distributed_collector_sync[False]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...::TestRayCollector::test_distributed_collector_sync[True]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...r::test_collector_shutdown_clears_python_processes[False]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...or::test_collector_shutdown_clears_python_processes[True]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...tor::test_distributed_collector_class[MultiSyncCollector]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...or::test_distributed_collector_class[MultiAsyncCollector]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...RayCollector::test_distributed_collector_class[Collector]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...distributed_collector_updatepolicy[False-False-Collector]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
-| `...ed_collector_updatepolicy[False-False-MultiSyncCollector]` 🆕 | 46.7% (28/60) | 28 | 0.93 | 2026-10-09 |
+| `...y::TestRayCollector::test_distributed_collector_basic[50]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...::TestRayCollector::test_distributed_collector_basic[100]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...ted.py::TestRayCollector::test_distributed_collector_mult` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...tributed.py::TestRayCollector::test_collector_next_method` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...ibuted.py::TestRayCollector::test_dqn_trainer_ray_backend` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...ollector::test_offpolicy_trainer_ray_backend[DDPGTrainer]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...Collector::test_offpolicy_trainer_ray_backend[SACTrainer]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...Collector::test_offpolicy_trainer_ray_backend[TD3Trainer]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...tor::test_ray_learner_publishes_to_collector_owned_policy` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...py::TestRayCollector::test_ray_owned_inference_and_replay` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...RayCollector::test_ray_collector_pause_drains_and_resumes` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...:TestRayCollector::test_distributed_collector_sync[False]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...::TestRayCollector::test_distributed_collector_sync[True]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...r::test_collector_shutdown_clears_python_processes[False]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...or::test_collector_shutdown_clears_python_processes[True]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...tor::test_distributed_collector_class[MultiSyncCollector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...or::test_distributed_collector_class[MultiAsyncCollector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...RayCollector::test_distributed_collector_class[Collector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...distributed_collector_updatepolicy[False-False-Collector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...ed_collector_updatepolicy[False-False-MultiSyncCollector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
 
 
 ### Newly Flaky Tests
@@ -71,10 +71,6 @@
 - `test/test_distributed.py::TestRayCollector::test_ray_collector_policy_constructor`
 - `test/test_collectors.py::TestCollectorStats::test_ray_stats_during_collection`
 - `test/test_collectors.py::TestCollectorStats::test_ray_collector_stats`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[distributed-ray-dqn]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[ray-wandb-monitor]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[services-ray-collector]`
-- `test/test_inference_server.py::TestProcessSlotTransport::test_server_batched_pass_on_cuda[True]`
 - `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-async-True-True-True-frames]`
 - `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-sync-True-True-True-frames]`
 - `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-async-True-False-False-time]`
@@ -104,7 +100,9 @@
 - `test/test_custom_envs.py::TestCustomEnvs::test_financial_env_device`
 - `test/test_trainer.py::test_fql_update_matches_recipe[False-cuda]`
 - `test/test_trainer.py::test_fql_update_matches_recipe[True-cuda]`
-- `test/test_inference_server.py::TestInferenceServerCore::test_static_batch_pads_slices_and_owns_results[False]`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[services-ray-collector]`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[distributed-ray-dqn]`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[ray-wandb-monitor]`
 - `test/modules/test_actor.py::TestFlow::test_euler[1-batch0-True-device0]`
 - `test/modules/test_actor.py::TestFlow::test_euler[1-batch1-True-device0]`
 - `test/modules/test_actor.py::TestFlow::test_euler[2-batch0-True-device0]`
@@ -5811,6 +5809,7 @@
 - `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[None-3]`
 - `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[group_key1-3]`
 - `.github/unittest/examples/scripts/test_examples.py::test_run_example_terminates_timeouts`
+- `test/test_inference_server.py::TestProcessSlotTransport::test_server_batched_pass_on_cuda[True]`
 
 ---
 
@@ -5823,4 +5822,4 @@
 
 ---
 
-*Generated at 2026-10-13T06:32:10.825201+00:00*
+*Generated at 2026-10-14T06:24:38.352307+00:00*
