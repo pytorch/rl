@@ -16,7 +16,7 @@ apt-get install -y vim git wget cmake
 
 printf "* Installing glfw - glew - osmesa part 1\n"
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libx11-dev \
-  libegl-dev \
+  libegl-dev libglew-dev \
   librhash0 # For cmake
 
 #printf "* Installing glfw - glew - osmesa part 2\n"
