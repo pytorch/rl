@@ -242,8 +242,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmpnw7s5f9z/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmpnw7s5f9z/b/c.memmap
+the 'a' tensor is stored in /tmp/tmpq9n0rmku/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmpq9n0rmku/b/c.memmap
 samples: a= tensor([[ 0, 1, 2, 3],
  [ 8, 9, 10, 11],
  [ 0, 1, 2, 3],
@@ -644,7 +644,7 @@ print(sample)
 ```
 
 ```
-['foo', 'foo', 'foo', 'foo', 'foo', 'foo', 'foo', 'foo', 'foo', 'foo']
+['foo', 'foo', 'foo', 'foo', 'foo', 'foo', 'foo', 'foo', 'foo', None]
 ```
 
 The info contains the relative weights of the items as well as the indices.
@@ -655,7 +655,7 @@ print(info)
 
 ```
 {'priority_weight': tensor([2.0893e-10, 2.0893e-10, 2.0893e-10, 2.0893e-10, 2.0893e-10, 2.0893e-10,
- 2.0893e-10, 2.0893e-10, 2.0893e-10, 2.0893e-10]), 'index': tensor([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])}
+ 2.0893e-10, 2.0893e-10, 2.0893e-10, 6.9183e-07]), 'index': tensor([1, 1, 1, 1, 1, 1, 1, 1, 1, 2])}
 ```
 
 We see that using a prioritized replay buffer requires a series of extra
@@ -1135,7 +1135,7 @@ gc.collect()
 episode are grouped tensor([4, 4, 2, 2, 1, 1, 3, 3], dtype=torch.int32)
 steps are successive tensor([0, 1, 0, 1, 0, 1, 0, 1])
 
-4545
+4530
 ```
 
 ### Sequence sampling and trajectory queries
@@ -1304,7 +1304,7 @@ trajectory queries, consuming samples, statistics, and generation-aware
 updates.
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.935 seconds)
+**Total running time of the script:** (0 minutes 0.885 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 

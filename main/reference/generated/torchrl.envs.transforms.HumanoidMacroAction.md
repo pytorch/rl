@@ -208,7 +208,7 @@ Note
 - The auto_batch_size option allows for automatic batch size determination and application to the
 resulting TensorDict.
 
-from_h5(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+from_h5(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *non_tensor_as_stack: bool = False*)
 
 Creates a PersistentTensorDict from a h5 file.
 
@@ -218,12 +218,21 @@ Parameters:
 
 Keyword Arguments:
 
-- **mode** (*str**,**optional*) - Reading mode. Defaults to `"r"`.
+- **mode** (*str**,**optional*) - how the file is opened: `"r"` (read only),
+`"r+"` (read and write), or another mode of `h5py.File`
+(see [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)). Defaults to `"r"`.
 - **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically.
 Defaults to `False`.
 - **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output
 tensordict should have. Defaults to `None` (full batch-size at each level).
 - **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`.
+- **non_tensor_as_stack** (*bool**,**optional*) - if `True`, a non-tensor
+dataset that tensordict did not write, such as a string column
+with one string per row, reads as a
+[`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
+leading dims equal the batch size. Otherwise it reads as one
+[`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
+dataset. Defaults to `False`.
 
 Returns:
 
@@ -698,6 +707,26 @@ Tensor-castable types (such as int, float or np.ndarray) will be converted to to
 Note that this transformation is surjective: transforming back the tensordict to a pytree will not
 recover the original types.
 
+Note
+
+The list fields of a named tuple, and some of its dict and tuple
+fields, are converted with `from_any()` and do not
+round-trip through `to_pytree()`:
+
+- a list of numbers comes back as a tensor;
+- a dict holding a str, list or tuple, and an empty dict or named
+tuple (or a dict or named tuple holding one), come back as a
+`GenericDict` named tuple;
+- a tuple subclass, such as a `torch.return_types` result, and
+a plain tuple holding anything but tensors, Python ints and
+floats, dicts and named tuples (such as a str, a list or a NumPy
+number), or holding one of the dicts or named tuples above, make
+`to_pytree()` raise a `ValueError`, and an empty tuple
+comes back as an empty `GenericDict`.
+
+The other dict, named tuple and plain tuple fields come back with
+their own type.
+
 Examples
 
 ```
@@ -930,7 +959,7 @@ TensorDict(
  is_shared=False)
 ```
 
-from_zarr(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+from_zarr(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *non_tensor_as_stack: bool = False*)
 
 Creates a PersistentTensorDict from a zarr store.
 
@@ -952,6 +981,13 @@ tensordict should have. Defaults to `None` (full batch-size at each level).
 - **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`
 (read from the metadata written by `to_zarr()`, or automatically determined
 for stores written by other tools).
+- **non_tensor_as_stack** (*bool**,**optional*) - if `True`, a non-tensor
+array that tensordict did not write, such as a string column
+with one string per row, reads as a
+[`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
+leading dims equal the batch size. Otherwise it reads as one
+[`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
+array. Defaults to `False`.
 
 Returns:
 
@@ -1066,7 +1102,9 @@ nested tensordict to load, as a nested key (e.g.
 or as a `"/"`-separated string path (e.g. `"module/0"`).
 Only that subtree is loaded. Works both for directories
 (equivalent to appending the path to `prefix`) and for
-archives.
+archives. A nested key reaches the entries of a saved
+tensorclass as `obj.get(key)` does, without its
+`_tensordict` level.
 - **mode** (*str**,**optional*) - how the files are memory-mapped. With
 `"r"`, the mapping is copy-on-write: in-place writes to the
 leaves stay in memory. They reach the files only if the

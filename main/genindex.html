@@ -15348,12 +15348,12 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor">OnlineDTActor (class in torchrl.modules)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss">OnlineDTLoss (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer">OnPolicyTrainer (class in torchrl.trainers.algorithms)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig">OnPolicyTrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction.open_gripper">open_gripper() (torchrl.envs.transforms.RobotMacroAction class method)</a>
@@ -15443,13 +15443,19 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.objectives.ACTLoss.html#torchrl.objectives.ACTLoss.out_keys">(torchrl.objectives.ACTLoss property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.BCLoss.html#torchrl.objectives.BCLoss.out_keys">(torchrl.objectives.BCLoss property)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss.out_keys">(torchrl.objectives.ClipPPOLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss.out_keys">(torchrl.objectives.CQLLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.out_keys">(torchrl.objectives.CrossQLoss property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss.out_keys">(torchrl.objectives.DDPGLoss property)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.DiffusionBCLoss.html#torchrl.objectives.DiffusionBCLoss.out_keys">(torchrl.objectives.DiffusionBCLoss property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss.out_keys">(torchrl.objectives.DQNLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.DTLoss.html#torchrl.objectives.DTLoss.out_keys">(torchrl.objectives.DTLoss property)</a>
 </li>
@@ -15658,6 +15664,46 @@ document.write(`
 <h2 id="P">P</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.pack">pack() (torchrl.data.ConditionalUpdateResult method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.pack">(torchrl.data.llm.ContentBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.pack">(torchrl.data.llm.History method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory.pack">(torchrl.data.Trajectory method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.pack">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.pack">(torchrl.envs.llm.IFEvalScoreData method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask.pack">(torchrl.envs.MicroDuckTask method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory.pack">(torchrl.modules.llm.ChatHistory method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.llm.LogProbs.html#torchrl.modules.llm.LogProbs.pack">(torchrl.modules.llm.LogProbs method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.llm.Masks.html#torchrl.modules.llm.Masks.pack">(torchrl.modules.llm.Masks method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.llm.Text.html#torchrl.modules.llm.Text.pack">(torchrl.modules.llm.Text method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens.pack">(torchrl.modules.llm.Tokens method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.llm.CISPOLossOutput.html#torchrl.objectives.llm.CISPOLossOutput.pack">(torchrl.objectives.llm.CISPOLossOutput method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.llm.DAPOLossOutput.html#torchrl.objectives.llm.DAPOLossOutput.pack">(torchrl.objectives.llm.DAPOLossOutput method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.llm.DistillationLossOutput.html#torchrl.objectives.llm.DistillationLossOutput.pack">(torchrl.objectives.llm.DistillationLossOutput method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput.pack">(torchrl.objectives.llm.GRPOLossOutput method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.llm.LLMLossOutput.html#torchrl.objectives.llm.LLMLossOutput.pack">(torchrl.objectives.llm.LLMLossOutput method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.llm.RewardModelLossOutput.html#torchrl.objectives.llm.RewardModelLossOutput.pack">(torchrl.objectives.llm.RewardModelLossOutput method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput.pack">(torchrl.objectives.llm.SFTLossOutput method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.modules.llm.RemoteTransformersWrapper.html#torchrl.modules.llm.RemoteTransformersWrapper.pad_output">pad_output (torchrl.modules.llm.RemoteTransformersWrapper property)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.padding_value">padding_value (torchrl.modules.MaskedCategorical property)</a>
@@ -15916,6 +15962,8 @@ document.write(`
 </li>
       <li><a href="reference/glossary.html#term-policy_device"><strong>policy_device</strong></a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss.policy_operator">policy_operator() (torchrl.objectives.FQLLoss method)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.TdMpc2Planner.html#torchrl.modules.TdMpc2Planner.policy_prior">policy_prior (torchrl.modules.TdMpc2Planner property)</a>
@@ -15942,8 +15990,6 @@ document.write(`
         <li><a href="reference/generated/torchrl.modules.inference_server.ProcessInferenceServer.html#torchrl.modules.inference_server.ProcessInferenceServer.policy_version">(torchrl.modules.inference_server.ProcessInferenceServer property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.PolicyAgeFilter.html#torchrl.envs.transforms.PolicyAgeFilter">PolicyAgeFilter (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.inference_server.PolicyClientModule.html#torchrl.modules.inference_server.PolicyClientModule">PolicyClientModule (class in torchrl.modules.inference_server)</a>
