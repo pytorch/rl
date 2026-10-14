@@ -34,6 +34,7 @@ from tensordict import (
     is_tensor_collection,
     is_tensorclass,
     LazyStackedTensorDict,
+    NonTensorStack,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -761,6 +762,32 @@ class TestStorages:
         )
         assert (rb[:, 10:20] == 0).all()
         assert len(rb) == 100
+
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_storage_nontensor_extend(self, storage_type, tmpdir):
+        # Non-tensor entries written after init must not be dropped by the
+        # key filter of locked (memory-mapped) storages.
+        kwargs = {"scratch_dir": tmpdir} if storage_type is LazyMemmapStorage else {}
+        rb = ReplayBuffer(storage=storage_type(10, **kwargs))
+
+        def batch(start):
+            text = [f"step {i}" for i in range(start, start + 3)]
+            return TensorDict(
+                {
+                    "obs": torch.arange(start, start + 3),
+                    "text": NonTensorStack(*text),
+                    ("nested", "text"): NonTensorStack(*text),
+                },
+                [3],
+            )
+
+        rb.extend(batch(0))
+        rb.extend(batch(3))
+        out = rb[:6]
+        expected = [f"step {i}" for i in range(6)]
+        assert out["obs"].tolist() == list(range(6))
+        assert out["text"] == expected
+        assert out["nested", "text"] == expected
 
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"

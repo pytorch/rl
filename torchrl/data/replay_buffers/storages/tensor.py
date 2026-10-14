@@ -22,6 +22,7 @@ from typing import Any
 
 import torch
 from tensordict import (
+    is_leaf_nontensor,
     is_tensor_collection,
     LazyStackedTensorDict,
     NestedKey,
@@ -290,7 +291,7 @@ class TensorStorage(Storage):
                     self._storage.keys(
                         include_nested=True,
                         leaves_only=True,
-                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                        is_leaf=is_leaf_nontensor,
                     )
                 )
                 self.__dict__["_storage_keys"] = keys
@@ -813,12 +814,12 @@ class TensorStorage(Storage):
         # Get all keys from both storage and data
         storage_keys = set(
             self._storage.keys(
-                include_nested=True, leaves_only=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+                include_nested=True, leaves_only=True, is_leaf=is_leaf_nontensor
             )
         )
         data_keys = set(
             data.keys(
-                include_nested=True, leaves_only=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+                include_nested=True, leaves_only=True, is_leaf=is_leaf_nontensor
             )
         )
 
