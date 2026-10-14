@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import argparse
 
+from functools import partial
+
 import pytest
 
 import tensordict.tensordict
@@ -24,6 +26,7 @@ from torchrl.data import (
     LazyTensorStorage,
     ReplayBuffer,
     TensorDictReplayBuffer,
+    Unbounded,
 )
 from torchrl.envs import (
     CatFrames,
@@ -33,11 +36,14 @@ from torchrl.envs import (
     FlattenObservation,
     GrayScale,
     NextObservationDelta,
+    ObservationDelay,
+    ObservationNoise,
     ObservationNorm,
     ParallelEnv,
     PermuteTransform,
     Resize,
     SerialEnv,
+    SymmetryAugmentation,
     TimeMaxPool,
     ToTensorImage,
     TransformedEnv,
@@ -3469,6 +3475,213 @@ class TestNextObservationDeltaForward:
         out = NextObservationDelta(in_keys=["observation"])(td)
         assert "some_other_key" in out.keys(True, True)
         assert ("next", "observation") not in out.keys(True, True)
+
+
+def _make_sim2real_obs_env(transform_cls, *args, **kwargs) -> TransformedEnv:
+    return TransformedEnv(ContinuousActionVecMockEnv(), transform_cls(*args, **kwargs))
+
+
+class TestObservationDelay:
+    @pytest.mark.parametrize("delay", [2, (1, 3)])
+    @pytest.mark.parametrize("batched", ["single", "serial", "parallel"])
+    def test_env_specs(self, delay, batched, maybe_fork_ParallelEnv):
+        make_env = partial(_make_sim2real_obs_env, ObservationDelay, delay)
+        if batched == "single":
+            env = make_env()
+        elif batched == "serial":
+            env = SerialEnv(2, make_env)
+        else:
+            env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_fixed_delay(self):
+        env = TransformedEnv(
+            CountingEnv(max_steps=10), ObservationDelay(2, out_keys=["delayed"])
+        )
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(5, policy=policy)
+        assert rollout["next", "observation"].flatten().tolist() == [1, 2, 3, 4, 5]
+        # the reset observation is repeated until enough steps exist
+        assert rollout["next", "delayed"].flatten().tolist() == [0, 0, 1, 2, 3]
+
+    def test_random_delay_per_env(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            CountingEnv(max_steps=20, batch_size=[16]), ObservationDelay((0, 3))
+        )
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(6, policy=policy)
+        delay = rollout["observation_delay"]
+        assert (delay == delay[:, :1]).all(), "the delay is fixed for an episode"
+        assert set(delay[:, 0].tolist()) == {0, 1, 2, 3}
+        steps = torch.arange(1, 7)
+        expected = (steps - delay).clamp_min(0)
+        torch.testing.assert_close(
+            rollout["next", "observation"].squeeze(-1), expected.to(torch.int32)
+        )
+
+    def test_partial_reset(self):
+        env = TransformedEnv(
+            CountingEnv(max_steps=20, batch_size=[2]), ObservationDelay(2)
+        )
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        td = step_mdp(env.rollout(3, policy=policy)[..., -1])
+        td["_reset"] = torch.tensor([[True], [False]])
+        td = env.reset(td)
+        assert td["observation"].flatten().tolist() == [0, 1]
+        assert td["observation_history"][1].flatten().tolist() == [2, 3]
+        assert not td["observation_history"][0].any()
+
+    def test_nested_key(self):
+        env = TransformedEnv(
+            NestedCountingEnv(nest_obs_action=True, batch_size=[2], nested_dim=3),
+            ObservationDelay(1, in_keys=[("data", "states")], out_keys=[("data", "delayed")]),
+        )
+        check_env_specs(env)
+        assert env.transform.history_keys == [("data", "states_history")]
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], action_key=env.action_key
+        )
+        rollout = env.rollout(3, policy=policy)
+        torch.testing.assert_close(
+            rollout["next", "data", "delayed"], rollout["data", "states"]
+        )
+
+    def test_per_sensor_delays(self):
+        env = TransformedEnv(
+            CountingEnv(max_steps=10),
+            Compose(
+                ObservationDelay(1, out_keys=["fast"], history_keys=["fast_hist"]),
+                ObservationDelay(3, out_keys=["slow"], history_keys=["slow_hist"]),
+            ),
+        )
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(4, policy=policy)
+        assert rollout["next", "fast"].flatten().tolist() == [0, 1, 2, 3]
+        assert rollout["next", "slow"].flatten().tolist() == [0, 0, 0, 1]
+
+    @pytest.mark.parametrize("delay", [0, -1, (3, 1), 1.5])
+    def test_invalid_delay(self, delay):
+        with pytest.raises((ValueError, TypeError)):
+            ObservationDelay(delay)
+
+
+class TestObservationNoise:
+    def test_env_specs(self):
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            ObservationNoise(0.1, out_keys=["noisy"]),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_statistics(self):
+        torch.manual_seed(0)
+        std = torch.tensor([0.1, 1.0, 2.0])
+        loc = torch.tensor([0.0, -1.0, 3.0])
+        transform = ObservationNoise(std, loc=loc)
+        td = TensorDict(observation=torch.zeros(20000, 3), batch_size=[20000])
+        noisy = transform(td)["observation"]
+        torch.testing.assert_close(noisy.mean(0), loc, atol=0.05, rtol=0)
+        torch.testing.assert_close(noisy.std(0), std, atol=0.05, rtol=0)
+
+    def test_applies_at_reset_and_step(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), ObservationNoise(0.5, out_keys=["noisy"])
+        )
+        rollout = env.rollout(3)
+        assert (rollout["noisy"] != rollout["observation"]).all()
+        assert (rollout["next", "noisy"] != rollout["next", "observation"]).all()
+        assert isinstance(env.observation_spec["noisy"], Unbounded)
+
+    def test_nested_key(self):
+        transform = ObservationNoise(
+            1.0, in_keys=[("data", "obs")], out_keys=[("data", "noisy")]
+        )
+        td = TensorDict(data=TensorDict(obs=torch.zeros(4, 2), batch_size=[4]))
+        assert transform(td)["data", "noisy"].ne(0).all()
+
+    def test_rejects_integer_observations(self):
+        env = TransformedEnv(CountingEnv(), ObservationNoise(0.1))
+        with pytest.raises(TypeError, match="floating-point"):
+            env.reset()
+
+
+class TestSymmetryAugmentation:
+    @staticmethod
+    def _transform(mode="append"):
+        return SymmetryAugmentation(
+            ["observation", ("next", "observation"), "action"],
+            index=[[1, 0, 2], [1, 0, 2], [1, 0]],
+            sign=[[1.0, 1.0, -1.0], [1.0, 1.0, -1.0], None],
+            mode=mode,
+        )
+
+    @staticmethod
+    def _data(n=2):
+        obs = torch.arange(3 * n, dtype=torch.float32).view(n, 3)
+        return TensorDict(
+            observation=obs,
+            action=torch.arange(2 * n).view(n, 2),
+            reward=torch.ones(n, 1),
+            next=TensorDict(observation=obs + 10, batch_size=[n]),
+            batch_size=[n],
+        )
+
+    def test_append(self):
+        out = self._transform()(self._data())
+        assert out.shape == (4,)
+        torch.testing.assert_close(
+            out["observation"][2:],
+            torch.tensor([[1.0, 0.0, -2.0], [4.0, 3.0, -5.0]]),
+        )
+        torch.testing.assert_close(
+            out["next", "observation"][2:],
+            torch.tensor([[11.0, 10.0, -12.0], [14.0, 13.0, -15.0]]),
+        )
+        assert out["action"][2:].tolist() == [[1, 0], [3, 2]]
+        assert out["action"].dtype == torch.int64
+        assert_allclose_td(out[:2], self._data())
+        torch.testing.assert_close(out["reward"], torch.ones(4, 1))
+
+    def test_random(self):
+        torch.manual_seed(0)
+        data = self._data(64)
+        out = self._transform("random")(data)
+        assert out.shape == data.shape
+        mirrored = self._transform()(data)[64:]
+        is_mirrored = (out["observation"] == mirrored["observation"]).all(-1)
+        is_original = (out["observation"] == data["observation"]).all(-1)
+        assert (is_mirrored ^ is_original).all()
+        assert 0 < is_mirrored.sum() < 64
+        # every key of an element is mirrored together
+        assert ((out["action"] == mirrored["action"]).all(-1) == is_mirrored).all()
+
+    def test_replay_buffer(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10), transform=self._transform(), batch_size=3
+        )
+        rb.extend(self._data(5))
+        sample = rb.sample()
+        assert sample.shape == (6,)
+        torch.testing.assert_close(sample["action"][3:], sample["action"][:3].flip(-1))
+
+    def test_rejects_env(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), self._transform())
+        with pytest.raises(NotImplementedError):
+            env.reset()
+
+    def test_invalid_arguments(self):
+        with pytest.raises(ValueError, match="same length"):
+            SymmetryAugmentation(["observation"], index=[[0], [0]])
+        with pytest.raises(ValueError, match="sign"):
+            SymmetryAugmentation(["observation"], index=[[1, 0]], sign=[[1.0]])
 
 
 if __name__ == "__main__":

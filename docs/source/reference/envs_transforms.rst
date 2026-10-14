@@ -251,10 +251,12 @@ Available Transforms
     Transform
     TransformedEnv
     ActionChunkTransform
+    ActionDelay
     ActionDiscretizer
     ActionMask
     ActionScaling
     ActionTokenizerTransform
+    ActuatorModel
     AutoResetEnv
     AutoResetTransform
     BatchSizeTransform
@@ -306,6 +308,8 @@ Available Transforms
     PolicyAgeFilter
     PolicyVersion
     NoopResetEnv
+    ObservationDelay
+    ObservationNoise
     ObservationNorm
     ObservationTransform
     PermuteTransform
@@ -328,6 +332,7 @@ Available Transforms
     Stack
     StepCounter
     SuccessReward
+    SymmetryAugmentation
     TargetReturn
     TensorDictPrimer
     TerminateTransform
