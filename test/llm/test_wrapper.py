@@ -100,20 +100,17 @@ def vllm_instance() -> tuple[LLM, AutoTokenizer]:  # noqa # type: ignore
 
     envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
 
-    try:
-        model = LLM(
-            "Qwen/Qwen2.5-0.5B",
-            max_num_batched_tokens=32768,  # Match max_model_len
-            max_model_len=32768,
-            gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
-        )
-        from transformers import AutoTokenizer
+    model = LLM(
+        "Qwen/Qwen2.5-0.5B",
+        max_num_batched_tokens=32768,  # Match max_model_len
+        max_model_len=32768,
+        gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
+    )
+    from transformers import AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
-        tokenizer.pad_token = tokenizer.eos_token
-        return model, tokenizer
-    except Exception as e:
-        pytest.skip(f"Failed to load vLLM model: {e}")
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+    tokenizer.pad_token = tokenizer.eos_token
+    return model, tokenizer
 
 
 @pytest.fixture(scope="module")
@@ -130,23 +127,20 @@ def async_vllm_instance() -> (
 
     envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
 
-    try:
-        # Create async vLLM engine with same parameters as sync version
-        async_engine = AsyncVLLM.from_pretrained(
-            model_name="Qwen/Qwen2.5-0.5B",
-            num_devices=1,
-            num_replicas=1,
-            max_model_len=32768,
-            max_num_batched_tokens=32768,
-            gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
-        )
-        from transformers import AutoTokenizer
+    # Create async vLLM engine with same parameters as sync version.
+    async_engine = AsyncVLLM.from_pretrained(
+        model_name="Qwen/Qwen2.5-0.5B",
+        num_devices=1,
+        num_replicas=1,
+        max_model_len=32768,
+        max_num_batched_tokens=32768,
+        gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
+    )
+    from transformers import AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
-        tokenizer.pad_token = tokenizer.eos_token
-        return async_engine, tokenizer
-    except Exception as e:
-        pytest.skip(f"Failed to load async vLLM engine: {e}")
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+    tokenizer.pad_token = tokenizer.eos_token
+    return async_engine, tokenizer
 
 
 @pytest.fixture(scope="module")
@@ -222,7 +216,9 @@ def test_async_vllm_prefix_caching_defaults_to_false(monkeypatch):
             self.__dict__.update(kwargs)
 
     fake_vllm = types.SimpleNamespace(
-        AsyncEngineArgs=FakeAsyncEngineArgs, __version__="0.10.0"
+        AsyncEngineArgs=FakeAsyncEngineArgs,
+        # Version dispatch caches its first resolution; preserve the real backend.
+        __version__=getattr(vllm_async.vllm, "__version__", "0.30.0"),
     )
     captured = {}
 
@@ -244,6 +240,23 @@ def test_async_vllm_prefix_caching_defaults_to_false(monkeypatch):
         verbose=False,
     )
     assert captured["engine_args"].enable_prefix_caching is True
+
+
+@pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+@pytest.mark.parametrize("compile", [False, True])
+def test_async_vllm_compilation_config(monkeypatch, compile):
+    """Validate compilation options with the installed backend without a GPU."""
+    monkeypatch.setattr(
+        AsyncVLLM,
+        "launch",
+        staticmethod(lambda engine_args, num_replicas: engine_args),
+    )
+    engine_args = AsyncVLLM.from_pretrained(
+        "Qwen/Qwen2.5-0.5B", compile=compile, verbose=False
+    )
+    config = engine_args.compilation_config
+    mode = getattr(config, "mode", getattr(config, "level", None))
+    assert mode == (3 if compile else 0)
 
 
 def test_async_vllm_constructor_respects_engine_args_prefix_caching(monkeypatch):
