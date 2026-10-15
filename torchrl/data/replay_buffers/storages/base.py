@@ -237,6 +237,13 @@ class Storage:
     def _share_memory_(self) -> None:
         """Places the content where processes forked from this one read its later writes."""
 
+    def _content_devices(self) -> set[torch.device]:
+        """Returns data devices without reading or decoding stored items."""
+        device = getattr(self, "device", None)
+        return (
+            {torch.device(device)} if device is not None and device != "auto" else set()
+        )
+
     def _fork_safe(self) -> bool:
         """Whether a forked copy of this storage reads rows that match its length."""
         return True
