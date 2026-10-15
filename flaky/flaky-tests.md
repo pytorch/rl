@@ -1,9 +1,9 @@
-# Flaky Test Report - 2026-10-14
+# Flaky Test Report - 2026-10-15
 
 ## Summary
 
-- **Flaky tests**: 5772
-- **Newly flaky** (last 7 days): 5772
+- **Flaky tests**: 5771
+- **Newly flaky** (last 7 days): 5771
 - **Resolved**: 0
 - **Total tests analyzed**: 32528
 - **CI runs analyzed**: 60
@@ -14,30 +14,59 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...y::TestRayCollector::test_distributed_collector_basic[50]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...::TestRayCollector::test_distributed_collector_basic[100]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...ted.py::TestRayCollector::test_distributed_collector_mult` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...tributed.py::TestRayCollector::test_collector_next_method` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...ibuted.py::TestRayCollector::test_dqn_trainer_ray_backend` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...ollector::test_offpolicy_trainer_ray_backend[DDPGTrainer]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...Collector::test_offpolicy_trainer_ray_backend[SACTrainer]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...Collector::test_offpolicy_trainer_ray_backend[TD3Trainer]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...tor::test_ray_learner_publishes_to_collector_owned_policy` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...py::TestRayCollector::test_ray_owned_inference_and_replay` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...RayCollector::test_ray_collector_pause_drains_and_resumes` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...:TestRayCollector::test_distributed_collector_sync[False]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...::TestRayCollector::test_distributed_collector_sync[True]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...r::test_collector_shutdown_clears_python_processes[False]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...or::test_collector_shutdown_clears_python_processes[True]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...tor::test_distributed_collector_class[MultiSyncCollector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...or::test_distributed_collector_class[MultiAsyncCollector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...RayCollector::test_distributed_collector_class[Collector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...distributed_collector_updatepolicy[False-False-Collector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
-| `...ed_collector_updatepolicy[False-False-MultiSyncCollector]` 🆕 | 26.7% (16/60) | 16 | 0.53 | 2026-10-09 |
+| `...replay_collection_smoke[cuda-async-True-True-True-frames]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `..._replay_collection_smoke[cuda-sync-True-True-True-frames]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...replay_collection_smoke[cuda-async-True-False-False-time]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...play_collection_smoke[cuda-async-True-False-False-warmup]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...ollection_smoke[cuda-sync-True-False-False-reset_records]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...eamer_v3_process_inference_collection_smoke[cuda:0-False]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...reamer_v3_process_inference_collection_smoke[cuda:0-True]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...d.py::test_cuda_prioritized_replay_buffer_samples_on_cuda` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...ict_prioritized_replay_buffer_memmap_storage_cuda_sampler` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...cuda_prioritized_replay_buffer_weight_matches_cpu_formula` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...b/test_rb_core.py::TestSequenceUnit::test_non_cpu_storage` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...ce[tensor-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...torage_device[tensor-LazyMemmapStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...ce[tensor-LazyTensorStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...torage_device[tensor-LazyTensorStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...device[tc-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...st_storage_device[tc-LazyMemmapStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...device[tc-LazyTensorStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...st_storage_device[tc-LazyTensorStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...device[td-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
 
 
 ### Newly Flaky Tests
 
+- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-async-True-True-True-frames]`
+- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-sync-True-True-True-frames]`
+- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-async-True-False-False-time]`
+- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-async-True-False-False-warmup]`
+- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-sync-True-False-False-reset_records]`
+- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_process_inference_collection_smoke[cuda:0-False]`
+- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_process_inference_collection_smoke[cuda:0-True]`
+- `test/rb/test_prioritized.py::test_cuda_prioritized_replay_buffer_samples_on_cuda`
+- `test/rb/test_prioritized.py::test_tensordict_prioritized_replay_buffer_memmap_storage_cuda_sampler`
+- `test/rb/test_prioritized.py::test_cuda_prioritized_replay_buffer_weight_matches_cpu_formula`
+- `test/rb/test_rb_core.py::TestSequenceUnit::test_non_cpu_storage`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[tensor-LazyMemmapStorage-device_data0-device_storage0]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[tensor-LazyMemmapStorage-device_data3-auto]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[tensor-LazyTensorStorage-device_data0-device_storage0]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[tensor-LazyTensorStorage-device_data3-auto]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[tc-LazyMemmapStorage-device_data0-device_storage0]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[tc-LazyMemmapStorage-device_data3-auto]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[tc-LazyTensorStorage-device_data0-device_storage0]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[tc-LazyTensorStorage-device_data3-auto]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[td-LazyMemmapStorage-device_data0-device_storage0]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[td-LazyMemmapStorage-device_data3-auto]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[td-LazyTensorStorage-device_data0-device_storage0]`
+- `test/rb/test_storages.py::TestStorages::test_storage_device[td-LazyTensorStorage-device_data3-auto]`
+- `test/rb/test_storages.py::TestSharedStorageInit::test_prioritized_memmap_cuda_sampler_after_multiprocess_writes`
+- `test/rb/test_writers.py::TestWriterGeneration::test_generation_cuda_data_into_cuda_storage`
+- `test/test_checkpoint.py::test_cuda_map_location_and_rng`
+- `test/test_custom_envs.py::TestCustomEnvs::test_financial_env_device`
+- `test/test_trainer.py::test_fql_update_matches_recipe[False-cuda]`
+- `test/test_trainer.py::test_fql_update_matches_recipe[True-cuda]`
 - `test/test_distributed.py::TestRayCollector::test_distributed_collector_basic[50]`
 - `test/test_distributed.py::TestRayCollector::test_distributed_collector_basic[100]`
 - `test/test_distributed.py::TestRayCollector::test_distributed_collector_mult`
@@ -71,38 +100,9 @@
 - `test/test_distributed.py::TestRayCollector::test_ray_collector_policy_constructor`
 - `test/test_collectors.py::TestCollectorStats::test_ray_stats_during_collection`
 - `test/test_collectors.py::TestCollectorStats::test_ray_collector_stats`
-- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-async-True-True-True-frames]`
-- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-sync-True-True-True-frames]`
-- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-async-True-False-False-time]`
-- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-async-True-False-False-warmup]`
-- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_native_replay_collection_smoke[cuda-sync-True-False-False-reset_records]`
-- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_process_inference_collection_smoke[cuda:0-False]`
-- `test/objectives/test_dreamer_v3.py::test_dreamer_v3_process_inference_collection_smoke[cuda:0-True]`
-- `test/rb/test_prioritized.py::test_cuda_prioritized_replay_buffer_samples_on_cuda`
-- `test/rb/test_prioritized.py::test_tensordict_prioritized_replay_buffer_memmap_storage_cuda_sampler`
-- `test/rb/test_prioritized.py::test_cuda_prioritized_replay_buffer_weight_matches_cpu_formula`
-- `test/rb/test_rb_core.py::TestSequenceUnit::test_non_cpu_storage`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[tensor-LazyMemmapStorage-device_data0-device_storage0]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[tensor-LazyMemmapStorage-device_data3-auto]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[tensor-LazyTensorStorage-device_data0-device_storage0]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[tensor-LazyTensorStorage-device_data3-auto]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[tc-LazyMemmapStorage-device_data0-device_storage0]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[tc-LazyMemmapStorage-device_data3-auto]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[tc-LazyTensorStorage-device_data0-device_storage0]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[tc-LazyTensorStorage-device_data3-auto]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[td-LazyMemmapStorage-device_data0-device_storage0]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[td-LazyMemmapStorage-device_data3-auto]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[td-LazyTensorStorage-device_data0-device_storage0]`
-- `test/rb/test_storages.py::TestStorages::test_storage_device[td-LazyTensorStorage-device_data3-auto]`
-- `test/rb/test_storages.py::TestSharedStorageInit::test_prioritized_memmap_cuda_sampler_after_multiprocess_writes`
-- `test/rb/test_writers.py::TestWriterGeneration::test_generation_cuda_data_into_cuda_storage`
-- `test/test_checkpoint.py::test_cuda_map_location_and_rng`
-- `test/test_custom_envs.py::TestCustomEnvs::test_financial_env_device`
-- `test/test_trainer.py::test_fql_update_matches_recipe[False-cuda]`
-- `test/test_trainer.py::test_fql_update_matches_recipe[True-cuda]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[services-ray-collector]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[distributed-ray-dqn]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[ray-wandb-monitor]`
+- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_gru_nested_layout_across_decisions[True]`
+- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[None-3]`
+- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[group_key1-3]`
 - `test/modules/test_actor.py::TestFlow::test_euler[1-batch0-True-device0]`
 - `test/modules/test_actor.py::TestFlow::test_euler[1-batch1-True-device0]`
 - `test/modules/test_actor.py::TestFlow::test_euler[2-batch0-True-device0]`
@@ -5805,11 +5805,10 @@
 - `test/test_trainer.py::TestPPOFromEnv::test_training_and_checkpoint_resume[True-True]`
 - `test/test_trainer.py::test_fql_update_matches_recipe[True-cpu]`
 - `test/test_utils.py::test_rng_decorator[device0]`
-- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_gru_nested_layout_across_decisions[True]`
-- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[None-3]`
-- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[group_key1-3]`
 - `.github/unittest/examples/scripts/test_examples.py::test_run_example_terminates_timeouts`
-- `test/test_inference_server.py::TestProcessSlotTransport::test_server_batched_pass_on_cuda[True]`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[distributed-ray-dqn]`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[ray-wandb-monitor]`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[services-ray-collector]`
 
 ---
 
@@ -5822,4 +5821,4 @@
 
 ---
 
-*Generated at 2026-10-14T06:24:38.352307+00:00*
+*Generated at 2026-10-15T06:27:11.572844+00:00*
