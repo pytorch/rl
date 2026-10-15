@@ -4,24 +4,35 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import doctest
 import importlib.util
 import os
 import shutil
 import time
 from contextlib import nullcontext
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
-from tensordict import assert_allclose_td, NonTensorData, TensorDict
+from tensordict import assert_allclose_td, NonTensorData, TensorDict, TensorDictBase
+from torch.utils.data import DataLoader, Dataset, Subset
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
+    ListStorage,
     ReplayBuffer,
     ReplayBufferEnsemble,
     SamplerWithoutReplacement,
+    tensordict_collate,
+    TensorStorage,
     VideoClipRef,
+)
+from torchrl.data.datasets import (
+    huggingface,
+    HuggingFaceDatasetAdapter,
+    ReplayDatasetAdapter,
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -65,6 +76,286 @@ _has_d4rl = importlib.util.find_spec("d4rl") is not None
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 _has_minari = importlib.util.find_spec("minari") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_datasets = importlib.util.find_spec("datasets") is not None
+_has_pyarrow = importlib.util.find_spec("pyarrow") is not None
+
+if _has_datasets and _has_pyarrow:
+    import datasets
+
+
+class TestHuggingFaceDatasetAdapter:
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_export_cache_identity_tracks_contents(self, tmp_path):
+        data = TensorDict({"obs": torch.arange(5)}, [5])
+        source = TensorStorage(data).as_dataset()
+        adapter = HuggingFaceDatasetAdapter(batch_size=2)
+
+        def increment(row):
+            return {"obs": row["obs"] + 1}
+
+        cache_names = []
+        for index in range(3):
+            if index == 2:
+                data["obs"].add_(10)
+            external = adapter.to_external(source)
+            path = tmp_path / f"export-{index}"
+            external.save_to_disk(path)
+            processed = datasets.load_from_disk(path).map(increment)
+            assert processed[:]["obs"] == (
+                [11, 12, 13, 14, 15] if index == 2 else [1, 2, 3, 4, 5]
+            )
+            cache_names.append(Path(processed.cache_files[0]["filename"]).name)
+
+        assert cache_names[0] == cache_names[1]
+        assert cache_names[1] != cache_names[2]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("batch_size", [1, 4, 32])
+    def test_batched_columns_are_independent(self, batch_size):
+        data = TensorDict(
+            {
+                "observation": torch.arange(120, dtype=torch.int16).reshape(10, 3, 4),
+                ("next", "reward"): torch.arange(10, dtype=torch.float64),
+                ("next", "value"): torch.arange(10, dtype=torch.bfloat16),
+                ("metadata", "task"): [f"task_{index}" for index in range(10)],
+                "done": torch.arange(10) % 2 == 0,
+            },
+            [10],
+        )
+        source = Subset(
+            TensorStorage(data).as_dataset(), [9, 0, 7, 2, 5, 4, 3, 6, 1, 8]
+        )
+        adapter = HuggingFaceDatasetAdapter(batch_size=batch_size)
+        rng_state = torch.random.get_rng_state()
+        external = adapter.to_external(source)
+        assert torch.equal(torch.random.get_rng_state(), rng_state)
+        data.zero_()
+        imported = adapter.from_external(external)
+        for index, value in enumerate(source.indices):
+            assert imported[index]["observation"].dtype is torch.int16
+            assert (
+                imported[index]["observation"].tolist()
+                == torch.arange(value * 12, (value + 1) * 12).reshape(3, 4).tolist()
+            )
+            assert imported[index]["next", "reward"].dtype is torch.float64
+            assert imported[index]["next", "reward"].item() == value
+            assert imported[index]["next", "value"].dtype is torch.float32
+            assert imported[index]["next", "value"].item() == value
+            assert imported[index]["done"].item() == (value % 2 == 0)
+            assert imported[index]["metadata", "task"] == f"task_{value}"
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_rejects_columns_changed_between_batches(self, nested):
+        source = [
+            TensorDict({"a": torch.tensor(0)}, []),
+            TensorDict({"b": torch.tensor(1)}, []),
+        ]
+        if nested:
+            source = [TensorDict({"row": item}, []) for item in source]
+        adapter = HuggingFaceDatasetAdapter(batch_size=1)
+        with pytest.raises(ValueError, match="row 1 has different column keys"):
+            adapter.to_external(source)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_variable_columns_across_batches(self):
+        source = [TensorDict({"obs": torch.arange(index)}, []) for index in range(4)]
+        external = HuggingFaceDatasetAdapter(batch_size=1).to_external(source)
+        assert external[:]["obs"] == [[], [0], [0, 1], [0, 1, 2]]
+        external = HuggingFaceDatasetAdapter(batch_size=1).to_external(
+            [
+                TensorDict({"value": NonTensorData(None)}, []),
+                TensorDict({"value": NonTensorData("present")}, []),
+            ]
+        )
+        assert external[:]["value"] == [None, "present"]
+        external = HuggingFaceDatasetAdapter(batch_size=1).to_external(
+            [TensorDict({"value": 0}, []), TensorDict({"value": 1.5}, [])]
+        )
+        assert external[:]["value"] == [0.0, 1.5]
+
+    @pytest.mark.parametrize("batch_size", [0, -1])
+    def test_invalid_batch_size(self, batch_size):
+        with pytest.raises(ValueError, match="positive"):
+            HuggingFaceDatasetAdapter(batch_size=batch_size)
+
+    def test_missing_dependency(self, monkeypatch):
+        monkeypatch.setattr(huggingface, "_has_datasets", False)
+        with pytest.raises(ImportError, match="requires the `datasets` package"):
+            huggingface.HuggingFaceDatasetAdapter()
+
+        monkeypatch.setattr(huggingface, "_has_datasets", True)
+        monkeypatch.setattr(huggingface, "_has_pyarrow", False)
+        with pytest.raises(ImportError, match="requires the `pyarrow` package"):
+            huggingface.HuggingFaceDatasetAdapter()
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_docstring_examples(self):
+        runner = doctest.DocTestRunner()
+        example = doctest.DocTestParser().get_doctest(
+            HuggingFaceDatasetAdapter.__doc__, {}, "HuggingFaceDatasetAdapter", None, 0
+        )
+        assert runner.run(example).failed == 0
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_storage_parquet_round_trip(self, tmp_path):
+        rows = [
+            TensorDict(
+                {
+                    "observation": torch.tensor(
+                        [index, index + 0.5], dtype=torch.float64
+                    ),
+                    "action": torch.tensor(index, dtype=torch.int16),
+                    "done": torch.tensor(index == 1),
+                    "next": TensorDict(
+                        {"reward": torch.tensor(index / 2, dtype=torch.float32)},
+                        batch_size=[],
+                    ),
+                    "task": NonTensorData("pick" if index == 0 else "place"),
+                },
+                batch_size=[],
+            )
+            for index in range(2)
+        ]
+        storage = ListStorage(2)
+        storage.set(range(2), rows)
+        adapter: ReplayDatasetAdapter[datasets.Dataset] = HuggingFaceDatasetAdapter()
+
+        hf_dataset = adapter.to_external(storage.as_dataset())
+        direct = adapter.from_external(hf_dataset)
+
+        path = tmp_path / "replay.parquet"
+        hf_dataset.to_parquet(path)
+        reloaded = datasets.load_dataset("parquet", data_files=str(path), split="train")
+        imported = adapter.from_external(reloaded)
+
+        assert isinstance(hf_dataset, datasets.Dataset)
+        assert len(imported) == len(rows)
+        for index, expected in enumerate(rows):
+            assert_allclose_td(direct[index], expected)
+            assert_allclose_td(imported[index], expected)
+            assert imported[index]["observation"].dtype is torch.float64
+            assert imported[index]["action"].dtype is torch.int16
+            assert imported[index]["next", "reward"].dtype is torch.float32
+        batch = next(
+            iter(
+                DataLoader(
+                    imported,
+                    batch_size=2,
+                    collate_fn=tensordict_collate,
+                )
+            )
+        )
+        assert batch.batch_size == torch.Size([2])
+        assert list(batch["task"]) == ["pick", "place"]
+        storage[0]["observation"].fill_(99)
+        assert direct[0]["observation"].tolist() == [0, 0.5]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_rejects_batched_items(self):
+        storage = ListStorage(1)
+        storage.set(0, TensorDict({"observation": torch.arange(6).reshape(2, 3)}, [2]))
+        source = storage.as_dataset()
+        with pytest.raises(ValueError, match="unbatched TensorDict"):
+            HuggingFaceDatasetAdapter().to_external(source)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("picklable", [False, True])
+    def test_materializes_current_backing_data(self, tmp_path, picklable):
+        class FileRows(Dataset[TensorDictBase]):
+            def __init__(self, path, picklable):
+                self.path, self.picklable = path, picklable
+
+            def __len__(self):
+                return 2
+
+            def __getitem__(self, index):
+                value = int(self.path.read_text().splitlines()[index])
+                return TensorDict({"obs": torch.tensor(value)}, [])
+
+            def __getstate__(self):
+                if not self.picklable:
+                    raise TypeError("Source does not support serialization.")
+                return self.__dict__
+
+        path = tmp_path / "rows.txt"
+        path.write_text("1\n2\n")
+        source = FileRows(path, picklable)
+        adapter = HuggingFaceDatasetAdapter()
+
+        first = adapter.to_external(source)
+        path.write_text("1\n99\n")
+        second = adapter.to_external(source)
+
+        assert first[:]["obs"] == [1, 2]
+        assert second[:]["obs"] == [1, 99]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_rejects_inconsistent_columns(self, nested):
+        rows = [
+            TensorDict({"a": torch.tensor(0)}, []),
+            TensorDict({"a": torch.tensor(1), "b": torch.tensor(7)}, []),
+        ]
+        if nested:
+            rows = [TensorDict({"row": item}, []) for item in rows]
+        storage = ListStorage(2)
+        storage.set(range(2), rows)
+        adapter = HuggingFaceDatasetAdapter()
+
+        with pytest.raises(ValueError, match="same keys and tensor shapes"):
+            adapter.to_external(storage.as_dataset())
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_empty_and_invalid_inputs(self):
+        storage = ListStorage(1)
+        adapter = HuggingFaceDatasetAdapter()
+        empty = adapter.to_external(storage.as_dataset())
+        assert len(empty) == len(adapter.from_external(empty)) == 0
+        storage.set(0, TensorDict({"obs": torch.tensor(0)}, []))
+        source = storage.as_dataset()
+
+        with pytest.raises(TypeError, match="expects TensorDict items"):
+            adapter.to_external([torch.tensor(0)])
+        with pytest.raises(ValueError, match="nonempty TensorDict"):
+            adapter.to_external([TensorDict({}, [])])
+
+        external = adapter.to_external(source)
+        with pytest.raises(TypeError, match="Select a split"):
+            adapter.from_external(datasets.DatasetDict(train=external))
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_non_numpy_feature(self):
+        external = datasets.Dataset.from_dict(
+            {"price": [Decimal("1.25")]},
+            features=datasets.Features({"price": datasets.Value("decimal128(3, 2)")}),
+        )
+
+        imported = HuggingFaceDatasetAdapter().from_external(external)
+
+        assert imported[0]["price"] == Decimal("1.25")
 
 
 @pytest.mark.slow
