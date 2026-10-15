@@ -10,6 +10,7 @@ from .adapters import ReplayDatasetAdapter, ReplayDatasetExporter, ReplayDataset
 # Import classes that don't have external dependencies
 from .atari_dqn import AtariDQNExperienceReplay
 from .common import BaseDatasetExperienceReplay
+from .huggingface import HuggingFaceDatasetAdapter
 from .lerobot import lerobot_columns_to_tensordict, LeRobotExperienceReplay
 from .utils import load_dataset, register_dataset
 
@@ -50,6 +51,7 @@ except ImportError:
     pass
 
 __all__ = [
+    "HuggingFaceDatasetAdapter",
     "ReplayDatasetAdapter",
     "ReplayDatasetExporter",
     "ReplayDatasetImporter",
