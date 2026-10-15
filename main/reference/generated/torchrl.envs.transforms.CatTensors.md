@@ -1,6 +1,6 @@
 # CatTensors
 
-*class*torchrl.envs.transforms.CatTensors(*in_keys: Sequence[NestedKey] | None = None*, *out_key: NestedKey = 'observation_vector'*, *dim: int = -1*, ***, *del_keys: bool = True*, *unsqueeze_if_oor: bool = False*, *sort: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_tensor.html#CatTensors)
+*class*torchrl.envs.transforms.CatTensors(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'observation_vector'*, *dim: int = -1*, ***, *del_keys: bool = True*, *unsqueeze_if_oor: bool = False*, *sort: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_tensor.html#CatTensors)
 
 Concatenates several keys in a single tensor.
 

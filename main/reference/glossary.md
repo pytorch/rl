@@ -1,6 +1,6 @@
 # Glossary
 
-TorchRL borrows much of its vocabulary from `tensordict` and the broader
+TorchRL borrows much of its vocabulary from [`tensordict`](https://docs.pytorch.org/tensordict/stable/reference/td.html#module-tensordict) and the broader
 RL literature, but a handful of terms appear in error messages and source code
 without a dedicated definition in the API reference. This page lists those
 terms with the minimum context needed to find the relevant code.
@@ -93,7 +93,7 @@ functional (loss)
 
 A [`LossModule`](generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule) is *functional* when it stores
 its actor / critic parameters as a stateless tensordict and invokes the
-networks with [`to_module()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams.to_module) at call time.
+networks with [`to_module()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module) at call time.
 This is what makes soft / target update, `separate_losses=True`, and
 per-parameter optimiser groups possible without deep-copying the
 underlying `nn.Module`. Check `loss.functional` to see which mode a

@@ -1,6 +1,6 @@
 # ActionDiscretizer
 
-*class*torchrl.envs.transforms.ActionDiscretizer(*num_intervals: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *action_key: NestedKey = 'action'*, *out_action_key: NestedKey = None*, *sampling=None*, *categorical: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionDiscretizer)
+*class*torchrl.envs.transforms.ActionDiscretizer(*num_intervals: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action'*, *out_action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = None*, *sampling=None*, *categorical: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionDiscretizer)
 
 A transform to discretize a continuous action space.
 

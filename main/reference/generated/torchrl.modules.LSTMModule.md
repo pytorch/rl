@@ -172,7 +172,7 @@ TensorDict(
  is_shared=False)
 ```
 
-*property*canonical_keys*: list[NestedKey]*
+*property*canonical_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 Return TensorDict keys whose canonical layout matters for this module.
 

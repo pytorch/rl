@@ -67,7 +67,7 @@ rewards are normalized to the range [0, 1].
 - **Logarithm of N**: log(N) (log of parent visits) is calculated using torch.log(torch.clamp(N, min=1.0))
 to prevent issues with N=0 or N between 0 and 1.
 
-__init__(***, *win_count_key: NestedKey = 'win_count'*, *visits_key: NestedKey = 'visits'*, *total_visits_key: NestedKey = 'total_visits'*, *sum_squared_rewards_key: NestedKey = 'sum_squared_rewards'*, *score_key: NestedKey = 'score'*, *exploration_constant: float = 2.0*)[[source]](../../_modules/torchrl/modules/mcts/scores.html#UCB1TunedScore.__init__)
+__init__(***, *win_count_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'win_count'*, *visits_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'visits'*, *total_visits_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'total_visits'*, *sum_squared_rewards_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'sum_squared_rewards'*, *score_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'score'*, *exploration_constant: float = 2.0*)[[source]](../../_modules/torchrl/modules/mcts/scores.html#UCB1TunedScore.__init__)
 
 Initialize internal Module state, shared by both nn.Module and ScriptModule.
 

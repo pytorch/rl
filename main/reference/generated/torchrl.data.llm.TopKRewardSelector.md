@@ -1,6 +1,6 @@
 # TopKRewardSelector
 
-*class*torchrl.data.llm.TopKRewardSelector(*total_dialog_turns: int*, *topk_size: int*, *prompt_key: NestedKey = ('text', 'prompt')*, *rewards_key: NestedKey = ('next', 'reward')*, *done_key: NestedKey = ('next', 'done')*, *verbose: bool = True*)[[source]](../../_modules/torchrl/data/llm/topk.html#TopKRewardSelector)
+*class*torchrl.data.llm.TopKRewardSelector(*total_dialog_turns: int*, *topk_size: int*, *prompt_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = ('text', 'prompt')*, *rewards_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = ('next', 'reward')*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = ('next', 'done')*, *verbose: bool = True*)[[source]](../../_modules/torchrl/data/llm/topk.html#TopKRewardSelector)
 
 A replay-buffer transform that selects the top-k rewards for each prompt.
 

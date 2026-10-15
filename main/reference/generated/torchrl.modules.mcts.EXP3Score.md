@@ -63,7 +63,7 @@ result = exp3(node)
 print(result["score"]) # Output: Tensor with action probabilities
 ```
 
-__init__(***, *gamma: float = 0.1*, *weights_key: NestedKey = 'weights'*, *action_prob_key: NestedKey = 'action_prob'*, *reward_key: NestedKey = 'reward'*, *score_key: NestedKey = 'score'*, *num_actions_key: NestedKey = 'num_actions'*)[[source]](../../_modules/torchrl/modules/mcts/scores.html#EXP3Score.__init__)
+__init__(***, *gamma: float = 0.1*, *weights_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'weights'*, *action_prob_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action_prob'*, *reward_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'reward'*, *score_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'score'*, *num_actions_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'num_actions'*)[[source]](../../_modules/torchrl/modules/mcts/scores.html#EXP3Score.__init__)
 
 Initialize internal Module state, shared by both nn.Module and ScriptModule.
 

@@ -2642,7 +2642,7 @@ Some of the main differences between these paradigms include:</p>
 <li><p><strong>reward</strong> can be per-agent or shared</p></li>
 <li><p><strong>done</strong> (and <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;terminated&quot;</span></code>) can be per-agent or shared.</p></li>
 </ul>
-<p>TorchRL accommodates all these possible paradigms thanks to its <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> data carrier.
+<p>TorchRL accommodates all these possible paradigms thanks to its <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> data carrier.
 Per-agent keys live in nested <strong>group</strong> tensordicts. Each group has an extra agent dimension
 so that data that differs across agents can be stacked. Shared keys stay at the root,
 as in single-agent cases.</p>
@@ -3100,7 +3100,7 @@ transition. In <code class="docutils literal notranslate"><span class="pre">_ste
 do not take <code class="docutils literal notranslate"><span class="pre">env.action_keys</span></code>, <code class="docutils literal notranslate"><span class="pre">env.reward_keys</span></code> or <code class="docutils literal notranslate"><span class="pre">env.done_keys</span></code> as
 configuration arguments. Compose the group policies so that each reads and
 writes its group’s nested keys, then use one loss per group. Configure each loss
-with the individual <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> values accepted by its
+with the individual <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code></a> values accepted by its
 <code class="docutils literal notranslate"><span class="pre">set_keys()</span></code> method. For example, a loss for the red group in the environment
 above can use <code class="docutils literal notranslate"><span class="pre">reward=(&quot;red&quot;,</span> <span class="pre">&quot;reward&quot;)</span></code> together with the root
 <code class="docutils literal notranslate"><span class="pre">done=&quot;done&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">terminated=&quot;terminated&quot;</span></code> keys. The

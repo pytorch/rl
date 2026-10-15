@@ -1,6 +1,6 @@
 # RNDTransform
 
-*class*torchrl.envs.transforms.RNDTransform(*target_network: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*, *predictor_network: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*, *in_keys: list[NestedKey] | None = None*, *out_keys: list[NestedKey] | None = None*, *normalize_obs: bool = True*, *normalize_reward: bool = True*, *obs_clip: float = 5.0*, *reward_clip: float = 5.0*)[[source]](../../_modules/torchrl/envs/transforms/rnd.html#RNDTransform)
+*class*torchrl.envs.transforms.RNDTransform(*target_network: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*, *predictor_network: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*, *in_keys: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *normalize_obs: bool = True*, *normalize_reward: bool = True*, *obs_clip: float = 5.0*, *reward_clip: float = 5.0*)[[source]](../../_modules/torchrl/envs/transforms/rnd.html#RNDTransform)
 
 Random Network Distillation transform that computes an intrinsic reward.
 

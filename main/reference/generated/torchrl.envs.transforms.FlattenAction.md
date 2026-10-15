@@ -1,6 +1,6 @@
 # FlattenAction
 
-*class*torchrl.envs.transforms.FlattenAction(*first_dim: int = -2*, *last_dim: int = -1*, *in_keys_inv: Sequence[NestedKey] | None = None*, *out_keys_inv: Sequence[NestedKey] | None = None*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *allow_positive_dim: bool = False*, ***, *action_shape: Sequence[int] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#FlattenAction)
+*class*torchrl.envs.transforms.FlattenAction(*first_dim: int = -2*, *last_dim: int = -1*, *in_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *allow_positive_dim: bool = False*, ***, *action_shape: Sequence[int] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#FlattenAction)
 
 Flatten adjacent dimensions of an action.
 

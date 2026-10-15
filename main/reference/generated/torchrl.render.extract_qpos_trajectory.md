@@ -1,6 +1,6 @@
 # extract_qpos_trajectory
 
-torchrl.render.extract_qpos_trajectory(*rollout: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *qpos_key: NestedKey | str = 'qpos'*) → list[list[float]][[source]](../../_modules/torchrl/render/mujoco_wasm.html#extract_qpos_trajectory)
+torchrl.render.extract_qpos_trajectory(*rollout: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *qpos_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | str = 'qpos'*) → list[list[float]][[source]](../../_modules/torchrl/render/mujoco_wasm.html#extract_qpos_trajectory)
 
 Extracts a qpos trajectory from a rollout TensorDict.
 

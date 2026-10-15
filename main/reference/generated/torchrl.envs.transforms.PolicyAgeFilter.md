@@ -1,6 +1,6 @@
 # PolicyAgeFilter
 
-*class*torchrl.envs.transforms.PolicyAgeFilter(*current_version: int | Callable[[], int]*, *max_policy_lag: int*, ***, *policy_version_key: NestedKey = 'policy_version'*, *strict: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/rb_transforms.html#PolicyAgeFilter)
+*class*torchrl.envs.transforms.PolicyAgeFilter(*current_version: int | Callable[[], int]*, *max_policy_lag: int*, ***, *policy_version_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'policy_version'*, *strict: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/rb_transforms.html#PolicyAgeFilter)
 
 Filter out data produced by a behavior policy that is too old.
 

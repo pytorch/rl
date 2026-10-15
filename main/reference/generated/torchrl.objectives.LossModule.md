@@ -41,7 +41,7 @@ through `loss_mask_key`. It defaults to `"auto"`, which discovers
 the validity masks TorchRL itself writes (`("collector", "mask")` from
 `SliceSampler` with `pad_output=True`, and
 `"shifted_valid"` from the value estimators); set it to a
-`NestedKey` to name a single mask entry, or to `None`
+[`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) to name a single mask entry, or to `None`
 to reduce over every position:
 
 ```
@@ -183,13 +183,13 @@ constructed loss has no target for. Losses configured with a
 non-default estimator must call `make_value_estimator()` before
 loading, as they would before training.
 
-*property*loss_mask_key*: NestedKey | Literal['auto'] | None*
+*property*loss_mask_key*: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | Literal['auto'] | None*
 
 Which input entry marks the positions that contribute to the loss.
 
 `"auto"` (the default) discovers the validity masks TorchRL writes
 itself - see [`AUTO_LOSS_MASK_KEYS`](torchrl.objectives.AUTO_LOSS_MASK_KEYS.html#torchrl.objectives.AUTO_LOSS_MASK_KEYS). A
-`NestedKey` restricts masking to that single entry;
+[`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) restricts masking to that single entry;
 `None` disables it. To use an entry literally named `"auto"`, pass
 the one-element tuple `("auto",)`.
 

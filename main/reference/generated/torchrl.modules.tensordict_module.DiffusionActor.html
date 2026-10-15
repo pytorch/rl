@@ -2649,7 +2649,7 @@ observations using a fixed DDPM scheduler.  A small MLP is used as the
 score network by default; pass a custom <code class="docutils literal notranslate"><span class="pre">score_network</span></code> to override.</p>
 <p>The strict TensorDict contract is <code class="docutils literal notranslate"><span class="pre">in_keys=[&quot;observation&quot;]</span></code> →
 <code class="docutils literal notranslate"><span class="pre">out_keys=[&quot;action&quot;]</span></code>.</p>
-<p>Respects <code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code>: setting
+<p>Respects <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type" title="(in tensordict v0.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code></a>: setting
 the interaction type to <code class="docutils literal notranslate"><span class="pre">DETERMINISTIC</span></code> starts from an all-zero latent
 and disables stochastic noise injection during the reverse chain. The
 result is repeatable but is not a sample from the Gaussian DDPM prior.</p>

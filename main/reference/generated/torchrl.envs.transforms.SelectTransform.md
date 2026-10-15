@@ -1,6 +1,6 @@
 # SelectTransform
 
-*class*torchrl.envs.transforms.SelectTransform(**selected_keys: NestedKey*, *keep_rewards: bool = True*, *keep_dones: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_keys.html#SelectTransform)
+*class*torchrl.envs.transforms.SelectTransform(**selected_keys: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *keep_rewards: bool = True*, *keep_dones: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_keys.html#SelectTransform)
 
 Select keys from the input tensordict.
 

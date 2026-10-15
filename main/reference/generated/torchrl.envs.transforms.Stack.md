@@ -1,6 +1,6 @@
 # Stack
 
-*class*torchrl.envs.transforms.Stack(*in_keys: Sequence[NestedKey]*, *out_key: NestedKey*, *in_key_inv: NestedKey | None = None*, *out_keys_inv: Sequence[NestedKey] | None = None*, *dim: int = -1*, *allow_positive_dim: bool = False*, ***, *del_keys: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_tensor.html#Stack)
+*class*torchrl.envs.transforms.Stack(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*, *out_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *in_key_inv: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *out_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *dim: int = -1*, *allow_positive_dim: bool = False*, ***, *del_keys: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_tensor.html#Stack)
 
 Stacks tensors and tensordicts.
 

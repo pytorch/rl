@@ -1,10 +1,10 @@
 # ExpandAs
 
-*class*torchrl.envs.transforms.ExpandAs(*in_key: NestedKey*, *ref_key: NestedKey*, *out_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_clip.html#ExpandAs)
+*class*torchrl.envs.transforms.ExpandAs(*in_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *ref_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *out_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_clip.html#ExpandAs)
 
 Expands one entry to the right to match a reference entry shape.
 
-This is a transform wrapper around `tensordict.utils.expand_as_right()`.
+This is a transform wrapper around [`tensordict.utils.expand_as_right()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.utils.expand_as_right.html#tensordict.utils.expand_as_right).
 
 Parameters:
 

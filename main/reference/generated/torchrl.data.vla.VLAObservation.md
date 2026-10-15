@@ -121,7 +121,7 @@ Reconstructs a tensordict from a file written by `consolidate()`.
 The batch sizes and names are as they were when the file was written.
 To write later changes into the file, call
 `consolidate(filename=filename)` again on the consolidated tensordict.
-See `from_consolidated()`.
+See [`from_consolidated()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_consolidated.html#tensordict.from_consolidated).
 
 from_csv(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, ***kwargs*) → Self
 
@@ -189,7 +189,7 @@ resulting TensorDict. Defaults to `False`.
 - **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
 tensordict should have. Defaults to `None` (full batch-size at each level).
 - **as_tensorclass** (*bool**,**optional*) - If `True`, delegates the conversion to the free function
-`from_dataclass()` and returns a tensor-compatible class (`tensorclass()`)
+[`from_dataclass()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass) and returns a tensor-compatible class ([`tensorclass()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.tensorclass.html#tensordict.tensorclass))
 or instance instead of a TensorDict. Defaults to `False`.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
 Defaults to `None`.
@@ -382,7 +382,7 @@ not copies. Submodules become nested tensordicts.
 Note
 
 This method does not lock the result by default (`lock=False`).
-The function `tensordict.from_module()` locks it by default
+The function [`tensordict.from_module()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_module.html#tensordict.from_module) locks it by default
 (`lock=True`).
 
 Parameters:
@@ -1038,8 +1038,8 @@ Creates a lazy stack of tensordicts.
 
 A lazy stack keeps the tensordicts as they are and stacks their values
 only when you read them. The tensordicts can have different keys and
-different feature shapes. See stacking, and
-`tensordict.lazy_stack()` for the arguments.
+different feature shapes. See [Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking), and
+[`tensordict.lazy_stack()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack) for the arguments.
 
 Examples
 
@@ -1060,7 +1060,7 @@ Loads a tensordict that [`save()`](torchrl.checkpoint.Checkpoint.html#torchrl.ch
 `load` is `load_memmap()`: it takes the same arguments,
 including `allow_pickle`, `device` and `mode`. The leaves of the
 result are memory-mapped tensors that read the files. See
-[Saving TensorDict and tensorclass objects](https://docs.pytorch.org/tensordict/stable/saving.html#saving) and the example of [`save()`](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save).
+[Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving) and the example of [`save()`](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save).
 
 Parameters:
 
@@ -1077,7 +1077,7 @@ Parameters:
 saved tensordict should be fetched, or the path to a memmap
 archive file written through
 `save(..., archive=True)` / a `".tdz"` prefix (or packed
-with `pack_memmap()`). Archives are
+with [`pack_memmap()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.pack_memmap.html#tensordict.pack_memmap)). Archives are
 memory-mapped once and every leaf is exposed as a zero-copy
 view into the mapping: only the pages of the leaves that are
 actually accessed are read from disk. Unlike directory-backed
@@ -1135,9 +1135,9 @@ payloads (i.e. archives written by tensordict without
 leaves. In-place writes do not update the per-entry CRC-32
 stored by the zip format; `load_memmap()` ignores
 checksums, but call
-`refresh_archive_checksums()` before handing
+[`refresh_archive_checksums()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums) before handing
 a modified archive to tools that verify them (`unzip`,
-`unpack_memmap()`, ...).
+[`unpack_memmap()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap), ...).
 - **num_threads** (*int**,**optional*) - number of threads used to decompress
 the leaves of a compressed archive (deflate entries are
 inflated in parallel, which scales nearly linearly). Without
@@ -1220,7 +1220,7 @@ Attempts to make a dense stack of tensordicts, and falls back on lazy stack when
 The result is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) if the tensordicts
 have the same keys and shapes, and a
 [`LazyStackedTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) otherwise. See
-stacking, and `tensordict.maybe_dense_stack()` for the
+[Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking), and [`tensordict.maybe_dense_stack()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack) for the
 arguments.
 
 Examples
@@ -1245,7 +1245,7 @@ This call is equivalent to calling [`torch.stack()`](https://docs.pytorch.org/do
 The tensordicts must have the same batch size and the same keys.
 Otherwise, the call raises `RuntimeError`. To stack tensordicts with
 different keys or shapes, use `lazy_stack()`. See
-stacking.
+[Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking).
 
 Parameters:
 

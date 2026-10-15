@@ -1,6 +1,6 @@
 # RandomCropTensorDict
 
-*class*torchrl.envs.transforms.RandomCropTensorDict(*sub_seq_len: int*, *sample_dim: int = -1*, *mask_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_misc.html#RandomCropTensorDict)
+*class*torchrl.envs.transforms.RandomCropTensorDict(*sub_seq_len: int*, *sample_dim: int = -1*, *mask_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_misc.html#RandomCropTensorDict)
 
 A trajectory sub-sampler for ReplayBuffer and modules.
 

@@ -40,7 +40,7 @@ checkpoint.load(
 Replay buffers use their `dump` and `load` implementations, including the
 configured storage checkpointer and compression. Other TorchRL and PyTorch
 objects normally use `state_dict` and `load_state_dict`. Their tensor state
-is stored with `tensordict.save()` by default, while a JSON schema preserves
+is stored with [`tensordict.save()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.save.html#tensordict.save) by default, while a JSON schema preserves
 the state-dict structure without pickle. JSON-compatible configuration,
 metrics, and metadata are also stored without pickle.
 

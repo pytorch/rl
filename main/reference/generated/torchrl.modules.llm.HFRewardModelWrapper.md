@@ -27,14 +27,14 @@ an output with a `logits` attribute of shape `[B, 1]` or `[B]`.
 
 Keyword Arguments:
 
-- **token_key** (`NestedKey`, optional) - key from which
+- **token_key** ([`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey), optional) - key from which
 `input_ids` are read. Defaults to `("tokens", "full")`,
 matching the `Tokens` layout
 used by TorchRL LLM wrappers.
-- **attention_mask_key** (`NestedKey` or `None`, optional) - key from which the attention mask is read. Pass `None` to omit
+- **attention_mask_key** ([`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) or `None`, optional) - key from which the attention mask is read. Pass `None` to omit
 the attention mask (model must support this). Defaults to
 `("masks", "all_attention_mask")`.
-- **reward_key** (`NestedKey`, optional) - key under which
+- **reward_key** ([`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey), optional) - key under which
 the scalar reward tensor (shape `[B]`) is written. Defaults to
 `"reward"`.
 - **inference_mode** (*bool**,**optional*) - if `True`, the model forward pass is

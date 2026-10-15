@@ -1,6 +1,6 @@
 # Transform
 
-*class*torchrl.envs.transforms.Transform(*in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *in_keys_inv: Sequence[NestedKey] | None = None*, *out_keys_inv: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_base.html#Transform)
+*class*torchrl.envs.transforms.Transform(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *in_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_base.html#Transform)
 
 Base class for environment transforms, which modify or create new data in a tensordict.
 

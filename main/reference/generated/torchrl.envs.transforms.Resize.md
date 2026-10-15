@@ -1,6 +1,6 @@
 # Resize
 
-*class*torchrl.envs.transforms.Resize(*w: int*, *h: int | None = None*, *interpolation: str = 'bilinear'*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#Resize)
+*class*torchrl.envs.transforms.Resize(*w: int*, *h: int | None = None*, *interpolation: str = 'bilinear'*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#Resize)
 
 Resizes a pixel observation.
 

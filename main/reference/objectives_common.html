@@ -2654,7 +2654,7 @@ to <a class="reference internal" href="generated/torchrl.objectives.LossModule.h
 finds, so a batch from <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> with
 <code class="docutils literal notranslate"><span class="pre">pad_output=True</span></code> is handled without any configuration. On data carrying
 none of those entries the reduction is unchanged.</p></li>
-<li><p>a <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> restricts masking to that single entry.</p></li>
+<li><p>a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code></a> restricts masking to that single entry.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> disables masking.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">loss</span> <span class="o">=</span> <span class="n">PPOLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">critic</span><span class="p">)</span>

@@ -426,7 +426,7 @@ Updates a TensorDict with 1-values according to the specs.
 
 Shapes are expected to be compatible with the specs.
 
-pop(*key: NestedKey*, *default: Any = _NoDefault.ZERO*) → Any[[source]](../../_modules/torchrl/data/tensor_specs.html#Composite.pop)
+pop(*key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *default: Any = _NoDefault.ZERO*) → Any[[source]](../../_modules/torchrl/data/tensor_specs.html#Composite.pop)
 
 Removes and returns the value associated with the specified key from the composite spec.
 
@@ -524,7 +524,7 @@ Returns a random tensor in the space defined by the spec.
 
 See `rand()` for details.
 
-separates(**keys: NestedKey*, *default: Any = None*) → Composite[[source]](../../_modules/torchrl/data/tensor_specs.html#Composite.separates)
+separates(**keys: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *default: Any = None*) → Composite[[source]](../../_modules/torchrl/data/tensor_specs.html#Composite.separates)
 
 Splits the composite spec by extracting specified keys and their associated values into a new composite spec.
 

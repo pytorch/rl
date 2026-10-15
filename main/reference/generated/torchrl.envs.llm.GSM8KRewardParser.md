@@ -1,6 +1,6 @@
 # GSM8KRewardParser
 
-*class*torchrl.envs.llm.GSM8KRewardParser(*tokenizer=None*, *in_keys: list[NestedKey] | None = None*, *out_keys: list[NestedKey] | None = None*, *eos_token: str | None = None*, *set_done_if_answer: bool = True*, *input_mode: Literal['history', 'text', 'tokens'] | None = None*, *format_reward: float = 0.1*, *correct_reward: float = 1.0*)[[source]](../../_modules/torchrl/envs/llm/reward/gsm8k.html#GSM8KRewardParser)
+*class*torchrl.envs.llm.GSM8KRewardParser(*tokenizer=None*, *in_keys: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *eos_token: str | None = None*, *set_done_if_answer: bool = True*, *input_mode: Literal['history', 'text', 'tokens'] | None = None*, *format_reward: float = 0.1*, *correct_reward: float = 1.0*)[[source]](../../_modules/torchrl/envs/llm/reward/gsm8k.html#GSM8KRewardParser)
 
 Reward parser for GSM8KEnv or make_gsm8k_env.
 

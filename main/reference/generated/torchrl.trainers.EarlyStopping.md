@@ -1,6 +1,6 @@
 # EarlyStopping
 
-*class*torchrl.trainers.EarlyStopping(***, *monitor: NestedKey = 'r_evaluation'*, *mode: Literal['min', 'max'] = 'max'*, *min_delta: float = 0.0*, *patience: int = 100000*, *wait_for: int = 1000000*, *check_finite: bool = True*)[[source]](../../_modules/torchrl/trainers/trainers.html#EarlyStopping)
+*class*torchrl.trainers.EarlyStopping(***, *monitor: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'r_evaluation'*, *mode: Literal['min', 'max'] = 'max'*, *min_delta: float = 0.0*, *patience: int = 100000*, *wait_for: int = 1000000*, *check_finite: bool = True*)[[source]](../../_modules/torchrl/trainers/trainers.html#EarlyStopping)
 
 Early stopping hook for [`Trainer`](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer).
 

@@ -5,7 +5,7 @@ to download the full example code.
 
 # TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
 
-**Author**: TorchRL contributors
+**Author**: [Jay Prajapati](https://github.com/coder-jayp), [Vincent Moens](https://github.com/vmoens)
 
 This tutorial demonstrates how to bridge TorchRL and Hugging Face `trl`
 using the adapter classes documented in [TRL Interoperability](../reference/llms.html#trl-interop-section):
@@ -22,7 +22,9 @@ and bridge it to the Hugging Face `datasets` interface required by `trl`.
 - How to key-filter the yielded samples and move tensors to a target device.
 - How to wrap an HF reward model as a `TensorDictModuleBase` and plug it
 directly into a TorchRL GRPO / PPO rollout.
-- How to chain both adapters in a complete round-trip test.
+- How to compose both adapters in a local, executable example.
+- Where preference labeling and `trl` reward-model training fit into a
+larger application, and which parts TorchRL's adapters cover.
 
 ## Imports and setup
 
@@ -35,6 +37,7 @@ import torch
 from tensordict import TensorDict
 
 from torchrl.data import ListStorage, ReplayBuffer
+from torchrl.modules.llm import HFRewardModelWrapper, TorchRLBufferDataset
 ```
 
 # Part 1 - TorchRL -> TRL: TorchRLBufferDataset
@@ -79,8 +82,6 @@ plain Python dicts - the exact format expected by `DataCollatorWithPadding`
 and trl trainers.
 
 ```
-from torchrl.modules.llm import TorchRLBufferDataset
-
 dataset = TorchRLBufferDataset(rb, batch_size=BATCH_SIZE, num_batches=1)
 ```
 
@@ -178,10 +179,6 @@ assert "masks.all_attention_mask" in nested_sample
 The second direction: consume an HF reward model inside a TorchRL loop.
 [`HFRewardModelWrapper`](../reference/generated/torchrl.modules.llm.HFRewardModelWrapper.html#torchrl.modules.llm.HFRewardModelWrapper) adapts any HF
 `AutoModelForSequenceClassification`-style model to the TensorDict API.
-
-```
-from torchrl.modules.llm import HFRewardModelWrapper
-```
 
 ## Step 1: define a stand-in reward model
 
@@ -286,7 +283,7 @@ result2 = reward_fn_custom(td2)
 assert result2.get(("reward", "value")).shape == torch.Size([B])
 ```
 
-# Part 3 - Round-trip: buffer -> dataset -> reward wrapper
+# Part 3 - Composing the adapters locally
 
 We now chain both adapters:
 
@@ -343,18 +340,130 @@ result_rt = reward_fn_rt(td_rt)
 assert result_rt["reward"].shape == torch.Size([8])
 ```
 
+# Part 4 - Where preference data fits
+
+Preference-model training adds two application-specific stages around the
+adapters demonstrated above:
+
+1. Generate candidate responses and label or rank them as preference pairs.
+2. Store the labeled pairs in a TorchRL
+[`ReplayBuffer`](../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer), then expose the buffer to
+`trl.RewardTrainer` through
+[`TorchRLBufferDataset`](../reference/generated/torchrl.modules.llm.TorchRLBufferDataset.html#torchrl.modules.llm.TorchRLBufferDataset).
+3. After training, score new rollout tensors by wrapping the resulting model
+with [`HFRewardModelWrapper`](../reference/generated/torchrl.modules.llm.HFRewardModelWrapper.html#torchrl.modules.llm.HFRewardModelWrapper), using the
+canonical TorchRL `("tokens", "full")` /
+`("masks", "all_attention_mask")` key layout produced by a suitably
+configured [`TransformersWrapper`](../reference/generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper).
+
+This section demonstrates the replay-buffer schema and the adapter boundary.
+It does not run preference labeling or `trl` training: those stages depend
+on the application's evaluator, model, and training configuration.
+
+## Step 1: fill the buffer with preference pairs
+
+An [`LLMCollector`](../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector) yields rollout TensorDicts;
+it does not choose a preferred response or produce `chosen` and
+`rejected` fields by itself. A human or automated evaluator must compare
+candidate responses and convert them into preference pairs before they are
+added to this buffer. The collector itself is configured with
+`dialog_turns_per_batch`, for example:
+
+```
+from torchrl.collectors.llm import LLMCollector
+collector = LLMCollector(env, policy=policy, dialog_turns_per_batch=16)
+```
+
+Here we start after that application-specific labeling stage and use
+synthetic pairs so the example remains offline and deterministic in scope.
+
+```
+N_PREFERENCES = 32
+preference_rb = ReplayBuffer(storage=ListStorage(max_size=N_PREFERENCES), batch_size=8)
+
+for i in range(N_PREFERENCES):
+ # Each sample preserves the full conversational context:
+ # the prompt (user's question) plus the two candidate responses.
+ preference_rb.add(
+ TensorDict(
+ {
+ # Prompt is kept so the reward model can condition on context.
+ "prompt": f"Explain RL concept #{i}.",
+ # chosen / rejected are the two candidate responses.
+ "chosen": f"The chosen answer for concept #{i}.",
+ "rejected": f"The rejected answer for concept #{i}.",
+ },
+ batch_size=[],
+ )
+ )
+
+assert len(preference_rb) == N_PREFERENCES
+```
+
+## Step 2: bridge to a trl trainer via TorchRLBufferDataset
+
+We expose `prompt`, `chosen`, and `rejected`, the conversational
+preference format accepted by `trl.RewardTrainer`. The prompt is not
+discarded; it is the context the reward model uses to judge response
+quality. `trl.GRPOTrainer` has a different contract: its training dataset
+requires a `prompt` column and generates candidate completions online.
+
+```
+preference_dataset = TorchRLBufferDataset(
+ preference_rb,
+ batch_size=8,
+ keys=["prompt", "chosen", "rejected"],
+ num_batches=1,
+)
+
+preference_sample = next(iter(preference_dataset))
+assert set(preference_sample) == {"prompt", "chosen", "rejected"}
+```
+
+With the optional `datasets` and `trl` dependencies installed, call
+`.as_hf_dataset()` to get an unbounded `IterableDataset` suitable for
+`trl.RewardTrainer`. `reward_model` and `reward_config` below are
+ordinary `trl` inputs whose construction is outside this interoperability
+tutorial:
+
+```
+from trl import RewardTrainer
+
+hf_ds = TorchRLBufferDataset(
+ preference_rb,
+ batch_size=32,
+ keys=["prompt", "chosen", "rejected"],
+ num_batches=None,
+).as_hf_dataset()
+trainer = RewardTrainer(
+ model=reward_model,
+ args=reward_config,
+ train_dataset=hf_ds,
+)
+trainer.train()
+```
+
+```
+# The trained model returned by that stage can then replace
+# ``ToyRewardModel`` in Part 2. That earlier example demonstrates the scoring
+# boundary independently; the toy model is not trained from
+# ``preference_dataset`` and its scores have no learned meaning.
+```
+
 ## Conclusion
 
 In this tutorial you have seen how to:
 
 - Wrap a TorchRL [`ReplayBuffer`](../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) as a
 `torch.utils.data.IterableDataset` consumable by `trl` trainers.
-- Filter keys, handle nested `NestedKey` tuples, and
+- Filter keys, handle nested [`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) tuples, and
 move tensors to a specific device, all without any custom collators.
 - Adapt any HuggingFace reward model to the TensorDict API with
 [`HFRewardModelWrapper`](../reference/generated/torchrl.modules.llm.HFRewardModelWrapper.html#torchrl.modules.llm.HFRewardModelWrapper), controlling gradient
 flow and output key names at construction time.
-- Chain the two adapters in a complete round-trip pipeline.
+- Compose the two adapters in a local TorchRL example.
+- Expose labeled preference pairs to `trl.RewardTrainer` while keeping the
+application-specific labeling and training stages explicit.
 
 ## Further reading
 
@@ -366,7 +475,7 @@ generate rollout data for a TorchRL replay buffer.
 - [`GRPOLoss`](../reference/generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss) - GRPO training objective that
 pairs naturally with [`HFRewardModelWrapper`](../reference/generated/torchrl.modules.llm.HFRewardModelWrapper.html#torchrl.modules.llm.HFRewardModelWrapper).
 
-**Total running time of the script:** (0 minutes 0.014 seconds)
+**Total running time of the script:** (0 minutes 0.017 seconds)
 
 [`Download Jupyter notebook: trl_interop.ipynb`](../_downloads/fec1854d700353a6eedacea49f9886d1/trl_interop.ipynb)
 

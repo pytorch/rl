@@ -1,6 +1,6 @@
 # MultiAction
 
-*class*torchrl.envs.transforms.MultiAction(***, *dim: int = 1*, *stack_rewards: bool = True*, *stack_observations: bool = False*, *action_key: NestedKey | None = None*, *chunk_key: NestedKey | None = None*, *reward_aggregation: Literal['last', 'stack', 'sum', 'mean'] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#MultiAction)
+*class*torchrl.envs.transforms.MultiAction(***, *dim: int = 1*, *stack_rewards: bool = True*, *stack_observations: bool = False*, *action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *chunk_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *reward_aggregation: Literal['last', 'stack', 'sum', 'mean'] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#MultiAction)
 
 A transform to execute multiple actions in the parent environment.
 
@@ -86,7 +86,7 @@ path and, attached to an env, executes only the first action of each
 predicted chunk (re-planning at every step) instead of stepping the
 base env once per action.
 
-*classmethod*from_vla(***, *action_key: NestedKey = 'action'*, ***kwargs*) → MultiAction[[source]](../../_modules/torchrl/envs/transforms/_action.html#MultiAction.from_vla)
+*classmethod*from_vla(***, *action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action'*, ***kwargs*) → MultiAction[[source]](../../_modules/torchrl/envs/transforms/_action.html#MultiAction.from_vla)
 
 Build a `MultiAction` that consumes the default VLA chunk key.
 

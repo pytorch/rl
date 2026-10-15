@@ -1,6 +1,6 @@
 # MicroDuckTaskSampler
 
-*class*torchrl.envs.MicroDuckTaskSampler(*weights: Sequence[float] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, ***, *task_ids: Sequence[int] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *task_id_key: NestedKey = 'task_id'*, *seed: int | None = None*)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckTaskSampler)
+*class*torchrl.envs.MicroDuckTaskSampler(*weights: Sequence[float] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, ***, *task_ids: Sequence[int] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *task_id_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'task_id'*, *seed: int | None = None*)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckTaskSampler)
 
 Write a [`MicroDuckEnv`](torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) `task_id` per env at reset from a weighted mixture.
 
@@ -289,7 +289,7 @@ To print customized extra information, you should re-implement
 this method in your own modules. Both single-line and multi-line
 strings are acceptable.
 
-*classmethod*fixed(*task_ids: Sequence[int] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *task_id_key: NestedKey = 'task_id'*) → MicroDuckTaskSampler[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckTaskSampler.fixed)
+*classmethod*fixed(*task_ids: Sequence[int] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *task_id_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'task_id'*) → MicroDuckTaskSampler[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckTaskSampler.fixed)
 
 One fixed task per env: env `i` runs `task_ids[i]` at every reset.
 

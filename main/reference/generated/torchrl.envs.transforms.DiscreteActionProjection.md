@@ -1,6 +1,6 @@
 # DiscreteActionProjection
 
-*class*torchrl.envs.transforms.DiscreteActionProjection(*num_actions_effective: int*, *max_actions: int*, *action_key: NestedKey = 'action'*, *include_forward: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#DiscreteActionProjection)
+*class*torchrl.envs.transforms.DiscreteActionProjection(*num_actions_effective: int*, *max_actions: int*, *action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action'*, *include_forward: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#DiscreteActionProjection)
 
 Projects discrete actions from a high dimensional space to a low dimensional space.
 

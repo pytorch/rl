@@ -387,7 +387,7 @@ OneHot(
  domain=discrete)
 ```
 
-type_check(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *key: NestedKey = None*) → None
+type_check(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = None*) → None
 
 Checks the input value `dtype` against the `TensorSpec` `dtype` and raises an exception if they don't match.
 

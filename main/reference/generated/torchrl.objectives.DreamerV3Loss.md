@@ -206,6 +206,6 @@ Returns:
 Scalar loss and metric entries, plus a posterior TensorDict under
 the configured `replay_context` key.
 
-*property*in_keys*: list[NestedKey]*
+*property*in_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 World-model inputs, reset marker and real transition targets.

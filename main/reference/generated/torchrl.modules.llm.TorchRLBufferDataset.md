@@ -1,6 +1,6 @@
 # TorchRLBufferDataset
 
-*class*torchrl.modules.llm.TorchRLBufferDataset(*replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*, *batch_size: int*, ***, *keys: list[NestedKey] | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *num_batches: int | None = 1*)[[source]](../../_modules/torchrl/modules/llm/trl_interop.html#TorchRLBufferDataset)
+*class*torchrl.modules.llm.TorchRLBufferDataset(*replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*, *batch_size: int*, ***, *keys: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *num_batches: int | None = 1*)[[source]](../../_modules/torchrl/modules/llm/trl_interop.html#TorchRLBufferDataset)
 
 An [`torch.utils.data.IterableDataset`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset) backed by a TorchRL [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer).
 
@@ -32,7 +32,7 @@ sample (no leading batch dimension).
 
 Keyword Arguments:
 
-- **keys** (list of `NestedKey`, optional) - if provided,
+- **keys** (list of [`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey), optional) - if provided,
 only these keys are included in the yielded dicts. Nested keys
 are serialised as `"key0.key1"` strings so they remain
 compatible with HuggingFace collators. Defaults to `None`

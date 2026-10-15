@@ -1,6 +1,6 @@
 # MCAdvantageSelector
 
-*class*torchrl.objectives.llm.MCAdvantageSelector(*strategy: Literal['first', 'uniform', 'balanced'] = 'balanced'*, ***, *max_combinations: int = 100000*, *in_keys: list[NestedKey] | None = None*)[[source]](../../_modules/torchrl/objectives/llm/grpo.html#MCAdvantageSelector)
+*class*torchrl.objectives.llm.MCAdvantageSelector(*strategy: Literal['first', 'uniform', 'balanced'] = 'balanced'*, ***, *max_combinations: int = 100000*, *in_keys: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/objectives/llm/grpo.html#MCAdvantageSelector)
 
 Select trajectories from an oversampled Monte-Carlo advantage group.
 

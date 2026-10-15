@@ -232,7 +232,7 @@ non-blocking transfers, and the declared response keys are copied back and
 scattered into the response slots with one copy per leaf. A single CUDA event
 per pass waits for the response copy instead of a device-wide synchronize.
 The batched pass applies to stacking collate functions (the default,
-`lazy_stack()`, `maybe_dense_stack()` and
+[`lazy_stack()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack), [`maybe_dense_stack()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack) and
 [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack)); a custom `collate_fn` keeps the per-request path.
 
 ### Structured Configuration

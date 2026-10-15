@@ -261,23 +261,6 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. only:: html
 
-  .. image:: /tutorials/images/thumb/sphx_glr_trl_interop_thumb.png
-    :alt:
-
-  :doc:`/tutorials/trl_interop`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Author: TorchRL contributors">
-
-.. only:: html
-
   .. image:: /tutorials/images/thumb/sphx_glr_microduck_thumb.gif
     :alt:
 
@@ -320,6 +303,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Memory-Efficient RL Training</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Jay Prajapati, Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_trl_interop_thumb.png
+    :alt:
+
+  :doc:`/tutorials/trl_interop`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together</div>
     </div>
 
 
@@ -568,10 +568,10 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/multi_task
    /tutorials/vla
    /tutorials/checkpointing
-   /tutorials/trl_interop
    /tutorials/microduck
    /tutorials/dqn_with_rnn
    /tutorials/memory_efficient_rl
+   /tutorials/trl_interop
    /tutorials/recurrent_sequence_training
    /tutorials/multiagent_ppo
    /tutorials/torchrl_demo

@@ -1,6 +1,6 @@
 # KLComputation
 
-*class*torchrl.envs.llm.transforms.KLComputation(*gen_log_probs_full_key: NestedKey = ('log_probs', 'full')*, *ref_log_probs_full_key: NestedKey = ('ref_log_probs', 'full')*, ***, *kl_key: NestedKey = 'kl_penalty'*, *add_to_reward: bool = True*, *coeff: float = 1.0*, *padding_side: str = 'left'*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLComputation)
+*class*torchrl.envs.llm.transforms.KLComputation(*gen_log_probs_full_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = ('log_probs', 'full')*, *ref_log_probs_full_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = ('ref_log_probs', 'full')*, ***, *kl_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'kl_penalty'*, *add_to_reward: bool = True*, *coeff: float = 1.0*, *padding_side: str = 'left'*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLComputation)
 
 A transform to compute KL divergence between two log-prob tensors and optionally add it to the reward.
 

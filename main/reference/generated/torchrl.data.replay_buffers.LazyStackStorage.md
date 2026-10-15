@@ -12,7 +12,7 @@ Tensors of heterogeneous shapes can also be stored within the storage and stacke
 Because the storage is represented as a list, the number of tensors to store in memory will grow linearly with
 the size of the buffer.
 
-If possible, nested tensors can also be created via [`densify()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.densify)
+If possible, nested tensors can also be created via [`densify()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify)
 (see [`nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)).
 
 Parameters:

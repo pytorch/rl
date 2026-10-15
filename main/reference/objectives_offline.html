@@ -2669,7 +2669,7 @@ the critic target update with <code class="docutils literal notranslate"><span c
 is used. Sum the three loss entries, backpropagate once, step the optimizer,
 then call the updater, following the standard TorchRL training sequence.</p>
 <p>Observation inputs follow the policies’ and critics’ <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>, including
-nested keys. Wrap either policy in a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>
+nested keys. Wrap either policy in a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>
 to prepend an encoder that reads multiple observation keys. Each policy’s
 encoder receives gradients only from its own objective.</p>
 <p>Inference passes the one-step policy directly to TorchRL collectors.

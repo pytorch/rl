@@ -1,6 +1,6 @@
 # GrayScale
 
-*class*torchrl.envs.transforms.GrayScale(*in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#GrayScale)
+*class*torchrl.envs.transforms.GrayScale(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#GrayScale)
 
 Turns a pixel observation to grayscale.
 

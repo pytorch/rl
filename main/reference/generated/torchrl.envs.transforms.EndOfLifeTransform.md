@@ -1,6 +1,6 @@
 # EndOfLifeTransform
 
-*class*torchrl.envs.transforms.EndOfLifeTransform(*eol_key: NestedKey = 'end-of-life'*, *lives_key: NestedKey = 'lives'*, *done_key: NestedKey = 'done'*, *eol_attribute='unwrapped.ale.lives'*)[[source]](../../_modules/torchrl/envs/transforms/gym_transforms.html#EndOfLifeTransform)
+*class*torchrl.envs.transforms.EndOfLifeTransform(*eol_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'end-of-life'*, *lives_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'lives'*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'done'*, *eol_attribute='unwrapped.ale.lives'*)[[source]](../../_modules/torchrl/envs/transforms/gym_transforms.html#EndOfLifeTransform)
 
 Registers the end-of-life signal from a Gym env with a lives method.
 

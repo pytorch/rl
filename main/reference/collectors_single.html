@@ -2666,7 +2666,7 @@ advanced use and document the implementation returned by each selection.</p>
 <p>Pass <code class="docutils literal notranslate"><span class="pre">trajs_per_batch=N</span></code> to any collector to receive batches of exactly <em>N</em>
 complete, zero-padded trajectories instead of fixed-frame batches.
 Trajectories that span multiple internal collection steps are automatically
-reassembled. Each yielded <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> has shape
+reassembled. Each yielded <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> has shape
 <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">max_traj_len)</span></code> and includes a <code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;mask&quot;)</span></code> boolean tensor
 marking valid time steps.</p>
 <p><code class="docutils literal notranslate"><span class="pre">frames_per_batch</span></code> still controls how frequently the environment is polled
@@ -2856,7 +2856,7 @@ about 64 environment steps later. Pass <code class="docutils literal notranslate
 it completes, or another value to trade delivery latency against driver work; up
 to <code class="docutils literal notranslate"><span class="pre">transition_chunk_size</span> <span class="pre">-</span> <span class="pre">1</span></code> transitions per environment remain in the worker
 while collection is paused or stopped. Chunked batches are dense
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instances whose <code class="docutils literal notranslate"><span class="pre">env_index</span></code> is a tensor.</p>
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instances whose <code class="docutils literal notranslate"><span class="pre">env_index</span></code> is a tensor.</p>
 </section>
 <section id="scaling-collector-across-local-processes">
 <h2>Scaling <code class="docutils literal notranslate"><span class="pre">Collector</span></code> across local processes<a class="headerlink" href="#scaling-collector-across-local-processes" title="Link to this heading">#</a></h2>

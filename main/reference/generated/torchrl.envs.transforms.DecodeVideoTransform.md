@@ -1,6 +1,6 @@
 # DecodeVideoTransform
 
-*class*torchrl.envs.transforms.DecodeVideoTransform(***, *in_keys: Sequence[NestedKey]*, *out_keys: Sequence[NestedKey] | None = None*, *device: Any = None*, *dtype: Any = None*)[[source]](../../_modules/torchrl/envs/transforms/_video.html#DecodeVideoTransform)
+*class*torchrl.envs.transforms.DecodeVideoTransform(***, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *device: Any = None*, *dtype: Any = None*)[[source]](../../_modules/torchrl/envs/transforms/_video.html#DecodeVideoTransform)
 
 Decodes [`VideoClipRef`](torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef) leaves to dense frame tensors.
 

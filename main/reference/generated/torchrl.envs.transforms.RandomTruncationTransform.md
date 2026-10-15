@@ -1,6 +1,6 @@
 # RandomTruncationTransform
 
-*class*torchrl.envs.transforms.RandomTruncationTransform(*min_horizon: int*, *max_horizon: int*, *prob: float = 0.0*, *first_episode_prob: float | None = None*, ***, *step_count_key: NestedKey = 'step_count'*, *truncated_key: NestedKey = 'truncated'*, *done_key: NestedKey = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#RandomTruncationTransform)
+*class*torchrl.envs.transforms.RandomTruncationTransform(*min_horizon: int*, *max_horizon: int*, *prob: float = 0.0*, *first_episode_prob: float | None = None*, ***, *step_count_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'step_count'*, *truncated_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'truncated'*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#RandomTruncationTransform)
 
 Randomly truncate episodes to decorrelate synchronized batched envs.
 
@@ -25,7 +25,7 @@ Note
 
 This transform must be placed **after** `StepCounter`
 in the transform chain. It reads the same step-count
-`NestedKey` that the validator accepts - a key
+[`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) that the validator accepts - a key
 whose last component equals `step_count_key` (default
 `"step_count"`), not only a root-level `"step_count"`. Truncation
 flags are written next to that counter (e.g. `("agent", "step_count")`
@@ -56,7 +56,7 @@ Keyword Arguments:
 by `StepCounter`. A string is matched against
 the last component of any nested key (so `"step_count"` finds
 `("agent", "step_count")`). A tuple is used as an exact
-`NestedKey`. Must match
+[`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey). Must match
 `StepCounter`'s `step_count_key` when that
 is customized. Defaults to `"step_count"`.
 - **truncated_key** (*NestedKey**,**optional*) - key where the truncation flag is

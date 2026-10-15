@@ -72,11 +72,6 @@ Vision-Language-Action (VLA) policies with TorchRL
 [Unified checkpointing in TorchRL](checkpointing.html)
 
 Unified checkpointing in TorchRL
-![](../_images/sphx_glr_trl_interop_thumb.png)
-
-[TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](trl_interop.html)
-
-TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
 ![](../_images/sphx_glr_microduck_thumb.gif)
 
 [MicroDuck: tasks as data, rewards as a registry, one policy for all of them](microduck.html)
@@ -92,6 +87,11 @@ Recurrent DQN: Training recurrent policies
 [Memory-Efficient RL Training](memory_efficient_rl.html)
 
 Memory-Efficient RL Training
+![](../_images/sphx_glr_trl_interop_thumb.png)
+
+[TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](trl_interop.html)
+
+TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
 ![](../_images/sphx_glr_recurrent_sequence_training_thumb.png)
 
 [Recurrent training on sequence batches](recurrent_sequence_training.html)

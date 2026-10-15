@@ -1,6 +1,6 @@
 # DTypeCastTransform
 
-*class*torchrl.envs.transforms.DTypeCastTransform(*dtype_in: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*, *dtype_out: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *in_keys_inv: Sequence[NestedKey] | None = None*, *out_keys_inv: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_device.html#DTypeCastTransform)
+*class*torchrl.envs.transforms.DTypeCastTransform(*dtype_in: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*, *dtype_out: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *in_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_device.html#DTypeCastTransform)
 
 Casts one dtype to another for selected keys.
 

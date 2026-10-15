@@ -1,6 +1,6 @@
 # DoneTransform
 
-*class*torchrl.envs.transforms.DoneTransform(*in_keys: Sequence[NestedKey] | NestedKey | None = None*, *out_keys: Sequence[NestedKey] | NestedKey | None = None*, ***, *reward_key: NestedKey | None = None*, *done_keys: Sequence[NestedKey] | NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_clip.html#DoneTransform)
+*class*torchrl.envs.transforms.DoneTransform(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, ***, *reward_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *done_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_clip.html#DoneTransform)
 
 Expands done flags to match the reward shape.
 

@@ -1,6 +1,6 @@
 # RewardScaling
 
-*class*torchrl.envs.transforms.RewardScaling(*loc: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *scale: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *standard_normal: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/_normalization.html#RewardScaling)
+*class*torchrl.envs.transforms.RewardScaling(*loc: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *scale: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *standard_normal: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/_normalization.html#RewardScaling)
 
 Affine transform of the reward.
 

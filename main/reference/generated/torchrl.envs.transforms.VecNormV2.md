@@ -1,6 +1,6 @@
 # VecNormV2
 
-*class*torchrl.envs.transforms.VecNormV2(*in_keys: Sequence[NestedKey]*, *out_keys: Sequence[NestedKey] | None = None*, ***, *lock: Lock = None*, *stateful: bool = True*, *decay: float = 0.9999*, *eps: float = 0.0001*, *shared_data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *reduce_batch_dims: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2)
+*class*torchrl.envs.transforms.VecNormV2(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, ***, *lock: Lock = None*, *stateful: bool = True*, *decay: float = 0.9999*, *eps: float = 0.0001*, *shared_data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *reduce_batch_dims: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2)
 
 A class for normalizing vectorized observations and rewards in reinforcement learning environments.
 

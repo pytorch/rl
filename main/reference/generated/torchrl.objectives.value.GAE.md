@@ -155,7 +155,7 @@ default_keys
 
 alias of `_AcceptedKeys`
 
-*classmethod*for_recurrent(***, *gamma: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *lmbda: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *value_network: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)*, *average_gae: bool = True*, *shifted: bool = False*, *deactivate_vmap: bool = True*, *group_key: NestedKey | None = None*, *valid: NestedKey | None = None*, ***kwargs: Any*) → GAE[[source]](../../_modules/torchrl/objectives/value/advantages.html#GAE.for_recurrent)
+*classmethod*for_recurrent(***, *gamma: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *lmbda: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *value_network: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)*, *average_gae: bool = True*, *shifted: bool = False*, *deactivate_vmap: bool = True*, *group_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *valid: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, ***kwargs: Any*) → GAE[[source]](../../_modules/torchrl/objectives/value/advantages.html#GAE.for_recurrent)
 
 Construct GAE with correctness-first recurrent-network defaults.
 

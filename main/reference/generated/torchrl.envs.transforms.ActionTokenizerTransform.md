@@ -1,6 +1,6 @@
 # ActionTokenizerTransform
 
-*class*torchrl.envs.transforms.ActionTokenizerTransform(*tokenizer: [ActionTokenizerBase](torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase)*, ***, *in_key: NestedKey = 'action'*, *out_key: NestedKey = ('vla_action', 'tokens')*, *mode: Literal['encode', 'decode'] = 'encode'*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionTokenizerTransform)
+*class*torchrl.envs.transforms.ActionTokenizerTransform(*tokenizer: [ActionTokenizerBase](torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase)*, ***, *in_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action'*, *out_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = ('vla_action', 'tokens')*, *mode: Literal['encode', 'decode'] = 'encode'*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionTokenizerTransform)
 
 Encode and decode actions with an [`ActionTokenizerBase`](torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase).
 

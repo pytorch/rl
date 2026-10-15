@@ -1,6 +1,6 @@
 # ObservationNorm
 
-*class*torchrl.envs.transforms.ObservationNorm(*loc: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *scale: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *in_keys_inv: Sequence[NestedKey] | None = None*, *out_keys_inv: Sequence[NestedKey] | None = None*, *standard_normal: bool = False*, *eps: float | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_normalization.html#ObservationNorm)
+*class*torchrl.envs.transforms.ObservationNorm(*loc: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *scale: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *in_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *standard_normal: bool = False*, *eps: float | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_normalization.html#ObservationNorm)
 
 Observation affine transformation layer.
 
@@ -66,7 +66,7 @@ The normalization stats can be automatically computed:
 tensor([-1.3752e+01, -6.5087e-03, 2.9294e-03], dtype=torch.float32) tensor([14.9636, 2.5608, 0.6408], dtype=torch.float32)
 ```
 
-init_stats(*num_iter: int*, *reduce_dim: int | tuple[int] = 0*, *cat_dim: int | None = None*, *key: NestedKey | None = None*, *keep_dims: tuple[int] | None = None*) → None[[source]](../../_modules/torchrl/envs/transforms/_normalization.html#ObservationNorm.init_stats)
+init_stats(*num_iter: int*, *reduce_dim: int | tuple[int] = 0*, *cat_dim: int | None = None*, *key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *keep_dims: tuple[int] | None = None*) → None[[source]](../../_modules/torchrl/envs/transforms/_normalization.html#ObservationNorm.init_stats)
 
 Initializes the loc and scale stats of the parent environment.
 

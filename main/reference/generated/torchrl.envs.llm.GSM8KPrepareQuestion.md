@@ -1,6 +1,6 @@
 # GSM8KPrepareQuestion
 
-*class*torchrl.envs.llm.GSM8KPrepareQuestion(*in_keys: list[NestedKey] | None = None*, *out_keys: list[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/llm/datasets/gsm8k.html#GSM8KPrepareQuestion)
+*class*torchrl.envs.llm.GSM8KPrepareQuestion(*in_keys: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/llm/datasets/gsm8k.html#GSM8KPrepareQuestion)
 
 A transform to prepare the prompt when using GSM8k within an LLMEnv.
 

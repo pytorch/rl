@@ -297,7 +297,7 @@ evaluating, instead of materializing the whole buffer content.
 [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory) is a tensorclass: slicing and indexing
 return [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory) instances, and query results of
 different lengths can be assembled into a single ragged batch with
-`lazy_stack()`.
+[`lazy_stack()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack).
 
 | [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory)(data, *, batch_size[, device, names]) | A trajectory-first view over a contiguous slice of transitions. |
 | --- | --- |

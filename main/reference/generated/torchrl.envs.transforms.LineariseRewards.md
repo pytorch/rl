@@ -1,6 +1,6 @@
 # LineariseRewards
 
-*class*torchrl.envs.transforms.LineariseRewards(*in_keys: Sequence[NestedKey]*, *out_keys: Sequence[NestedKey] | None = None*, ***, *weights: Sequence[float] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#LineariseRewards)
+*class*torchrl.envs.transforms.LineariseRewards(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, ***, *weights: Sequence[float] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#LineariseRewards)
 
 Transforms a multi-objective reward signal to a single-objective one via a weighted sum.
 

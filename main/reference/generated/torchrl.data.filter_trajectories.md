@@ -1,6 +1,6 @@
 # filter_trajectories
 
-torchrl.data.filter_trajectories(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *predicate: Callable[[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)], bool] | None = None*, ***, *trajectory_key: NestedKey | None = None*) → list[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)][[source]](../../_modules/torchrl/data/replay_buffers/query.html#filter_trajectories)
+torchrl.data.filter_trajectories(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *predicate: Callable[[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)], bool] | None = None*, ***, *trajectory_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*) → list[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)][[source]](../../_modules/torchrl/data/replay_buffers/query.html#filter_trajectories)
 
 Split `data` into trajectories and keep those matching `predicate`.
 

@@ -347,7 +347,7 @@ Updates a TensorDict with 1-values according to the specs.
 
 Shapes are expected to be compatible with the specs.
 
-pop(*key: NestedKey*, *default: Any = _NoDefault.ZERO*) → Any
+pop(*key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *default: Any = _NoDefault.ZERO*) → Any
 
 Removes and returns the value associated with the specified key from the composite spec.
 
@@ -445,7 +445,7 @@ Returns a random tensor in the space defined by the spec.
 
 See `rand()` for details.
 
-separates(**keys: NestedKey*, *default: Any = None*) → [Composite](torchrl.data.Composite.html#torchrl.data.Composite)
+separates(**keys: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *default: Any = None*) → [Composite](torchrl.data.Composite.html#torchrl.data.Composite)
 
 Splits the composite spec by extracting specified keys and their associated values into a new composite spec.
 
@@ -506,7 +506,7 @@ Returns:
 
 a np.ndarray.
 
-type_check(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *selected_keys: NestedKey | Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/data/tensor_specs.html#StackedComposite.type_check)
+type_check(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *selected_keys: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/data/tensor_specs.html#StackedComposite.type_check)
 
 Checks the input value `dtype` against the `TensorSpec` `dtype` and raises an exception if they don't match.
 

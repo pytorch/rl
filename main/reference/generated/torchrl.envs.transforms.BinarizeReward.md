@@ -1,6 +1,6 @@
 # BinarizeReward
 
-*class*torchrl.envs.transforms.BinarizeReward(*in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#BinarizeReward)
+*class*torchrl.envs.transforms.BinarizeReward(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#BinarizeReward)
 
 Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively.
 

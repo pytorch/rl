@@ -9,7 +9,7 @@ If the distribution implements `sample_and_log_prob` or
 computed from the same latent draw as the sample. Otherwise, this function
 falls back to separate sampling and scoring. Composite distributions are
 handled component by component and respect
-`composite_lp_aggregate()`.
+[`composite_lp_aggregate()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate).
 
 Parameters:
 

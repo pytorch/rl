@@ -1,6 +1,6 @@
 # TrajCounter
 
-*class*torchrl.envs.transforms.TrajCounter(*out_key: NestedKey = 'traj_count'*, ***, *repeats: int | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#TrajCounter)
+*class*torchrl.envs.transforms.TrajCounter(*out_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'traj_count'*, ***, *repeats: int | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#TrajCounter)
 
 Global trajectory counter transform.
 

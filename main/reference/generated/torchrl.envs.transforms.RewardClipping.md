@@ -1,6 +1,6 @@
 # RewardClipping
 
-*class*torchrl.envs.transforms.RewardClipping(*clamp_min: float | None = None*, *clamp_max: float | None = None*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#RewardClipping)
+*class*torchrl.envs.transforms.RewardClipping(*clamp_min: float | None = None*, *clamp_max: float | None = None*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#RewardClipping)
 
 Clips the reward between clamp_min and clamp_max.
 

@@ -1,6 +1,6 @@
 # lerobot_columns_to_tensordict
 
-*class*torchrl.data.datasets.lerobot_columns_to_tensordict(*columns: dict[str, Any]*, ***, *key_map: dict[str, NestedKey] | None = None*)[[source]](../../_modules/torchrl/data/datasets/lerobot.html#lerobot_columns_to_tensordict)
+*class*torchrl.data.datasets.lerobot_columns_to_tensordict(*columns: dict[str, Any]*, ***, *key_map: dict[str, [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/data/datasets/lerobot.html#lerobot_columns_to_tensordict)
 
 Convert a LeRobot-style columnar dict into a canonical VLA TensorDict.
 

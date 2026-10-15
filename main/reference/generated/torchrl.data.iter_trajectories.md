@@ -1,6 +1,6 @@
 # iter_trajectories
 
-torchrl.data.iter_trajectories(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *trajectory_key: NestedKey | None = None*) → Iterator[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)][[source]](../../_modules/torchrl/data/replay_buffers/query.html#iter_trajectories)
+torchrl.data.iter_trajectories(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *trajectory_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*) → Iterator[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)][[source]](../../_modules/torchrl/data/replay_buffers/query.html#iter_trajectories)
 
 Iterate over the trajectories stored in a flat batch of transitions.
 

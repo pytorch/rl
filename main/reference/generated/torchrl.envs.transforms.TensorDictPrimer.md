@@ -1,6 +1,6 @@
 # TensorDictPrimer
 
-*class*torchrl.envs.transforms.TensorDictPrimer(*primers: dict | [Composite](torchrl.data.Composite.html#torchrl.data.Composite) | None = None*, *random: bool | None = None*, *default_value: float | Callable | dict[NestedKey, float] | dict[NestedKey, Callable] | None = None*, *reset_key: NestedKey | None = None*, *expand_specs: bool | None = None*, *single_default_value: bool = False*, *call_before_env_reset: bool = False*, ***kwargs*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#TensorDictPrimer)
+*class*torchrl.envs.transforms.TensorDictPrimer(*primers: dict | [Composite](torchrl.data.Composite.html#torchrl.data.Composite) | None = None*, *random: bool | None = None*, *default_value: float | Callable | dict[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey), float] | dict[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey), Callable] | None = None*, *reset_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *expand_specs: bool | None = None*, *single_default_value: bool = False*, *call_before_env_reset: bool = False*, ***kwargs*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#TensorDictPrimer)
 
 A primer for TensorDict initialization at reset time.
 

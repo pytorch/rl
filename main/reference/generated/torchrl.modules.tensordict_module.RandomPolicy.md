@@ -1,6 +1,6 @@
 # RandomPolicy
 
-*class*torchrl.modules.tensordict_module.RandomPolicy(*action_spec: [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec) | None = None*, *action_key: NestedKey = 'action'*)[[source]](../../_modules/torchrl/modules/tensordict_module/exploration.html#RandomPolicy)
+*class*torchrl.modules.tensordict_module.RandomPolicy(*action_spec: [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec) | None = None*, *action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action'*)[[source]](../../_modules/torchrl/modules/tensordict_module/exploration.html#RandomPolicy)
 
 A random policy for data collectors.
 

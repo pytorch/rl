@@ -1,6 +1,6 @@
 # Hash
 
-*class*torchrl.envs.transforms.Hash(*in_keys: Sequence[NestedKey]*, *out_keys: Sequence[NestedKey]*, *in_keys_inv: Sequence[NestedKey] = None*, *out_keys_inv: Sequence[NestedKey] = None*, ***, *hash_fn: Callable = None*, *seed: Any | None = None*, *use_raw_nontensor: bool = False*, *repertoire: tuple[tuple[int], Any] = None*)[[source]](../../_modules/torchrl/envs/transforms/_tensor.html#Hash)
+*class*torchrl.envs.transforms.Hash(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*, *in_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] = None*, *out_keys_inv: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] = None*, ***, *hash_fn: Callable = None*, *seed: Any | None = None*, *use_raw_nontensor: bool = False*, *repertoire: tuple[tuple[int], Any] = None*)[[source]](../../_modules/torchrl/envs/transforms/_tensor.html#Hash)
 
 Adds a hash value to a tensordict.
 

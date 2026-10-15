@@ -1,6 +1,6 @@
 # CenterCrop
 
-*class*torchrl.envs.transforms.CenterCrop(*w: int*, *h: int | None = None*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#CenterCrop)
+*class*torchrl.envs.transforms.CenterCrop(*w: int*, *h: int | None = None*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#CenterCrop)
 
 Crops the center of an image.
 

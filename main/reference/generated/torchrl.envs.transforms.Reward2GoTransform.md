@@ -1,6 +1,6 @@
 # Reward2GoTransform
 
-*class*torchrl.envs.transforms.Reward2GoTransform(*gamma: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = 1.0*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *done_key: NestedKey | None = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#Reward2GoTransform)
+*class*torchrl.envs.transforms.Reward2GoTransform(*gamma: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = 1.0*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#Reward2GoTransform)
 
 Calculates the reward to go based on the episode reward and a discount factor.
 

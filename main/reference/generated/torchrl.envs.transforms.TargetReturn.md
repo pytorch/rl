@@ -1,6 +1,6 @@
 # TargetReturn
 
-*class*torchrl.envs.transforms.TargetReturn(*target_return: float*, *mode: str = 'reduce'*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *reset_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#TargetReturn)
+*class*torchrl.envs.transforms.TargetReturn(*target_return: float*, *mode: str = 'reduce'*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *reset_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#TargetReturn)
 
 Sets a target return for the agent to achieve in the environment.
 

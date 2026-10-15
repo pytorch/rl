@@ -1,6 +1,6 @@
 # CatFrames
 
-*class*torchrl.envs.transforms.CatFrames(*N: int*, *dim: int*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *padding='same'*, *padding_value=0*, *as_inverse=False*, *reset_key: NestedKey | None = None*, *done_key: NestedKey | None = None*, *future: bool = False*, *mask_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#CatFrames)
+*class*torchrl.envs.transforms.CatFrames(*N: int*, *dim: int*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *padding='same'*, *padding_value=0*, *as_inverse=False*, *reset_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *future: bool = False*, *mask_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#CatFrames)
 
 Concatenates successive observation frames into a single tensor.
 

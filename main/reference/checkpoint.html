@@ -2655,7 +2655,7 @@ remote-storage stack implicitly.</p>
 <p>Replay buffers use their <code class="docutils literal notranslate"><span class="pre">dump</span></code> and <code class="docutils literal notranslate"><span class="pre">load</span></code> implementations, including the
 configured storage checkpointer and compression. Other TorchRL and PyTorch
 objects normally use <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> and <code class="docutils literal notranslate"><span class="pre">load_state_dict</span></code>. Their tensor state
-is stored with <code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.save()</span></code> by default, while a JSON schema preserves
+is stored with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.save.html#tensordict.save" title="(in tensordict v0.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.save()</span></code></a> by default, while a JSON schema preserves
 the state-dict structure without pickle. JSON-compatible configuration,
 metrics, and metadata are also stored without pickle.</p>
 <p>Set <code class="docutils literal notranslate"><span class="pre">save_components={&quot;policy&quot;,</span> <span class="pre">&quot;optimizer&quot;,</span> <span class="pre">&quot;trainer_state&quot;}</span></code> on a
@@ -2676,7 +2676,7 @@ AOTInductor, or another runtime. That path is inference-only: it drops the
 optimizer, replay buffer, collector, exploration schedule, and target
 networks. Use <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">Checkpoint</span></code></a> when the goal is to continue training.</p>
 <p>Reconstruct the same objects first (same module classes, same
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> wiring, same replay-buffer storage
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> wiring, same replay-buffer storage
 type), register those live objects, then save or load. <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">Checkpoint</span></code></a>
 does not rebuild an architecture from the file. What it persists is each
 component’s <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> or <code class="docutils literal notranslate"><span class="pre">dump</span></code> payload – the same mapping
@@ -2688,7 +2688,7 @@ pieces below are independent, and omitting any of them is why a
 weights-only dump cannot restart training.</p>
 <p><strong>Training setup</strong></p>
 <ul class="simple">
-<li><p><strong>Training model.</strong> The <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> (or
+<li><p><strong>Training model.</strong> The <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> (or
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>) being optimized. Save that module. The
 adapter writes its <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>; you do not need a wrapper type that
 exists only for serialization.</p></li>
@@ -2748,7 +2748,7 @@ a guarantee of exact trajectory reproducibility across a resume.</p>
 <p><a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.convert_to_functional" title="torchrl.objectives.LossModule.convert_to_functional"><code class="xref py py-meth docutils literal notranslate"><span class="pre">convert_to_functional()</span></code></a> wraps the
 module you passed in. For <code class="docutils literal notranslate"><span class="pre">DQNLoss(value_network=policy)</span></code>:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">loss.value_network</span></code> is that same <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">loss.value_network</span></code> is that same <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">loss.value_network_params</span></code> holds its parameters;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">loss.target_value_network_params</span></code> is a detached copy used as the
 target.</p></li>
@@ -2805,7 +2805,7 @@ distinct snapshot.</p>
 objects to restore. Unrequested payloads, including a large replay
 buffer, stay on disk. <code class="docutils literal notranslate"><span class="pre">map_location</span></code> is forwarded to the state-dict
 adapter, the same way it is for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>.</p>
-<p>To persist only the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> – still a
+<p>To persist only the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> – still a
 <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>, not a pickle of the Python object – register that
 module alone:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">policy_only</span> <span class="o">=</span> <span class="n">Checkpoint</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>

@@ -88,7 +88,7 @@ result = puct(node)
 print(result["score"]) # Output: Tensor with PUCT scores
 ```
 
-__init__(***, *c: float*, *win_count_key: NestedKey = 'win_count'*, *visits_key: NestedKey = 'visits'*, *total_visits_key: NestedKey = 'total_visits'*, *prior_prob_key: NestedKey = 'prior_prob'*, *score_key: NestedKey = 'score'*)[[source]](../../_modules/torchrl/modules/mcts/scores.html#PUCTScore.__init__)
+__init__(***, *c: float*, *win_count_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'win_count'*, *visits_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'visits'*, *total_visits_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'total_visits'*, *prior_prob_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'prior_prob'*, *score_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'score'*)[[source]](../../_modules/torchrl/modules/mcts/scores.html#PUCTScore.__init__)
 
 Initialize internal Module state, shared by both nn.Module and ScriptModule.
 

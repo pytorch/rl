@@ -1,6 +1,6 @@
 # Timer
 
-*class*torchrl.envs.transforms.Timer(*out_keys: Sequence[NestedKey] = None*, *time_key: str = 'time'*)[[source]](../../_modules/torchrl/envs/transforms/_timer.html#Timer)
+*class*torchrl.envs.transforms.Timer(*out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] = None*, *time_key: str = 'time'*)[[source]](../../_modules/torchrl/envs/transforms/_timer.html#Timer)
 
 A transform that measures the time intervals between inv and call operations in an environment.
 

@@ -1,6 +1,6 @@
 # CrossCriticGroupSpec
 
-*class*torchrl.modules.CrossCriticGroupSpec(*obs_dim: int*, *n_agents: int*, *obs_key: NestedKey*, *value_key: NestedKey*)[[source]](../../_modules/torchrl/modules/models/cross_group_critic.html#CrossCriticGroupSpec)
+*class*torchrl.modules.CrossCriticGroupSpec(*obs_dim: int*, *n_agents: int*, *obs_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *value_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*)[[source]](../../_modules/torchrl/modules/models/cross_group_critic.html#CrossCriticGroupSpec)
 
 Specification for one agent group used by [`CrossGroupCritic`](torchrl.modules.CrossGroupCritic.html#torchrl.modules.CrossGroupCritic).
 

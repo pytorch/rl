@@ -51,7 +51,7 @@ forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable
 
 Return the independent weighted model-loss components.
 
-*property*in_keys*: list[NestedKey]*
+*property*in_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 Return the canonical current and next transition keys.
 
@@ -69,6 +69,6 @@ Returns:
 The weighted model loss and detached latent/model metadata for the
 subsequent actor phase.
 
-*property*out_keys*: list[NestedKey]*
+*property*out_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 Return the scalar loss and diagnostic keys written by `forward`.

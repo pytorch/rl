@@ -116,7 +116,8 @@ and navigate to the previous ones whenever you want to learn more!
 - [TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](tutorials/trl_interop.html)
 - [Part 1 - TorchRL -> TRL: TorchRLBufferDataset](tutorials/trl_interop.html#part-1-torchrl-trl-torchrlbufferdataset)
 - [Part 2 - TRL -> TorchRL: HFRewardModelWrapper](tutorials/trl_interop.html#part-2-trl-torchrl-hfrewardmodelwrapper)
-- [Part 3 - Round-trip: buffer -> dataset -> reward wrapper](tutorials/trl_interop.html#part-3-round-trip-buffer-dataset-reward-wrapper)
+- [Part 3 - Composing the adapters locally](tutorials/trl_interop.html#part-3-composing-the-adapters-locally)
+- [Part 4 - Where preference data fits](tutorials/trl_interop.html#part-4-where-preference-data-fits)
 
 # References
 

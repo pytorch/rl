@@ -18,7 +18,7 @@ to [`LossModule.loss_mask_key`](generated/torchrl.objectives.LossModule.html#tor
 finds, so a batch from `SliceSampler` with
 `pad_output=True` is handled without any configuration. On data carrying
 none of those entries the reduction is unchanged.
-- a `NestedKey` restricts masking to that single entry.
+- a [`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) restricts masking to that single entry.
 - `None` disables masking.
 
 ```

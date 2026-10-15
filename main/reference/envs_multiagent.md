@@ -484,7 +484,7 @@ Collectors and replay buffers transport these nested keys automatically; they
 do not take `env.action_keys`, `env.reward_keys` or `env.done_keys` as
 configuration arguments. Compose the group policies so that each reads and
 writes its group's nested keys, then use one loss per group. Configure each loss
-with the individual `NestedKey` values accepted by its
+with the individual [`NestedKey`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) values accepted by its
 `set_keys()` method. For example, a loss for the red group in the environment
 above can use `reward=("red", "reward")` together with the root
 `done="done"` and `terminated="terminated"` keys. The

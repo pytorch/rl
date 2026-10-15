@@ -11,7 +11,7 @@ score network by default; pass a custom `score_network` to override.
 The strict TensorDict contract is `in_keys=["observation"]` →
 `out_keys=["action"]`.
 
-Respects `interaction_type()`: setting
+Respects [`interaction_type()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type): setting
 the interaction type to `DETERMINISTIC` starts from an all-zero latent
 and disables stochastic noise injection during the reverse chain. The
 result is repeatable but is not a sample from the Gaussian DDPM prior.

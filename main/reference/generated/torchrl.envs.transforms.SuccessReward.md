@@ -1,6 +1,6 @@
 # SuccessReward
 
-*class*torchrl.envs.transforms.SuccessReward(*success_key: NestedKey = 'success'*, *reward_key: NestedKey = 'reward'*, ***, *scale: float = 1.0*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#SuccessReward)
+*class*torchrl.envs.transforms.SuccessReward(*success_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'success'*, *reward_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'reward'*, ***, *scale: float = 1.0*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#SuccessReward)
 
 Sparse reward from a binary success signal.
 

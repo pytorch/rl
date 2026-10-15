@@ -1,6 +1,6 @@
 # Sequence
 
-*class*torchrl.data.Sequence(*length: int*, *episode_boundary: Literal['pad', 'stop', 'include_reset'] = 'pad'*, *done_key: NestedKey | None = ('next', 'done')*, *burn_in: int = 0*, *bootstrap: int = 0*, *dilation: int = 1*)[[source]](../../_modules/torchrl/data/replay_buffers/sample_units.html#Sequence)
+*class*torchrl.data.Sequence(*length: int*, *episode_boundary: Literal['pad', 'stop', 'include_reset'] = 'pad'*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = ('next', 'done')*, *burn_in: int = 0*, *bootstrap: int = 0*, *dilation: int = 1*)[[source]](../../_modules/torchrl/data/replay_buffers/sample_units.html#Sequence)
 
 Expands anchors into a window of records around each anchor.
 

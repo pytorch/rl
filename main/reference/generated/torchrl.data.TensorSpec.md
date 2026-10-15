@@ -315,7 +315,7 @@ Returns:
 
 a np.ndarray.
 
-type_check(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *key: NestedKey = None*) → None[[source]](../../_modules/torchrl/data/tensor_specs.html#TensorSpec.type_check)
+type_check(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = None*) → None[[source]](../../_modules/torchrl/data/tensor_specs.html#TensorSpec.type_check)
 
 Checks the input value `dtype` against the `TensorSpec` `dtype` and raises an exception if they don't match.
 

@@ -72,7 +72,7 @@ Note
 When a sample is drawn, the
 `ProbabilisticTensorDictModule` instance will
 first look for the interaction mode dictated by the
-`interaction_type()`
+[`interaction_type()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type)
 global function. If this returns None (its default value), then the
 default_interaction_type of the ProbabilisticTDModule
 instance will be used. Note that
@@ -217,7 +217,7 @@ random(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/
 
 Samples a random element in the target space, irrespective of any input.
 
-If multiple output keys are present, only the first will be written in the input `tensordict`.
+If multiple output keys are present, only the first will be written in the input [`tensordict`](https://docs.pytorch.org/tensordict/stable/reference/td.html#module-tensordict).
 
 Parameters:
 

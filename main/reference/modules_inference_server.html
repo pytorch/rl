@@ -2736,7 +2736,7 @@ threads in the same process:</p>
 <p>CUDA policies can remove Python dispatch and kernel-launch overhead by setting
 <code class="docutils literal notranslate"><span class="pre">static_batch_size</span></code> together with an explicit CUDA <code class="docutils literal notranslate"><span class="pre">policy_device</span></code>. The
 server clones the last real request into any pad rows, replays a
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.CudaGraphModule</span></code></a> at the fixed size, and discards padded
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.CudaGraphModule</span></code></a> at the fixed size, and discards padded
 outputs before returning an owned copy to each actor. The static size must be
 at least <code class="docutils literal notranslate"><span class="pre">max_batch_size</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
@@ -2884,7 +2884,7 @@ non-blocking transfers, and the declared response keys are copied back and
 scattered into the response slots with one copy per leaf. A single CUDA event
 per pass waits for the response copy instead of a device-wide synchronize.
 The batched pass applies to stacking collate functions (the default,
-<code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code>, <code class="xref py py-func docutils literal notranslate"><span class="pre">maybe_dense_stack()</span></code> and
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="(in tensordict v0.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack" title="(in tensordict v0.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">maybe_dense_stack()</span></code></a> and
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a>); a custom <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> keeps the per-request path.</p>
 </section>
 <section id="structured-configuration">

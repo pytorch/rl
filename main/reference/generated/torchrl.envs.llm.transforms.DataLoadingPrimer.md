@@ -7,7 +7,7 @@ A primer that loads data from a dataloader and converts it into a tensordict usi
 Parameters:
 
 **dataloader** (*Iterable**[**Dict**[**str**,**Any**]**]*) - The dataloader to load data from.
-During collection, we will attempt to convert it into a tensordict using `from_dict()` or a
+During collection, we will attempt to convert it into a tensordict using [`from_dict()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_dict.html#tensordict.from_dict) or a
 similar function.
 It is assumed that the elements retrieved from the dataloader come in batches along the first dimension
 of every tensor, unless dataloader.batch_size=0.

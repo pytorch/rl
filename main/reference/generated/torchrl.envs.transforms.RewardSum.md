@@ -1,6 +1,6 @@
 # RewardSum
 
-*class*torchrl.envs.transforms.RewardSum(*in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *reset_keys: Sequence[NestedKey] | None = None*, ***, *reward_spec: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#RewardSum)
+*class*torchrl.envs.transforms.RewardSum(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *reset_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, ***, *reward_spec: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#RewardSum)
 
 Tracks episode cumulative rewards.
 

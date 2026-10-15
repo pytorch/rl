@@ -1,6 +1,6 @@
 # Crop
 
-*class*torchrl.envs.transforms.Crop(*w: int*, *h: int | None = None*, *top: int = 0*, *left: int = 0*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#Crop)
+*class*torchrl.envs.transforms.Crop(*w: int*, *h: int | None = None*, *top: int = 0*, *left: int = 0*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#Crop)
 
 Crops the input image at the specified location and output size.
 

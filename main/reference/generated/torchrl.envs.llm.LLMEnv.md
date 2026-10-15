@@ -70,7 +70,7 @@ from_dataloader()[[source]](../../_modules/torchrl/envs/llm/envs.html#LLMEnv.fro
 
 Creates an LLMEnv instance from a dataloader.
 
-*property*action_key*: NestedKey*
+*property*action_key*: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*
 
 The action key of an environment.
 
@@ -78,7 +78,7 @@ By default, this will be "action".
 
 If there is more than one action key in the environment, this function will raise an exception.
 
-*property*action_keys*: list[NestedKey]*
+*property*action_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 The action keys of an environment.
 
@@ -292,7 +292,7 @@ Sequential(
 )
 ```
 
-auto_specs_(*policy: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)]*, ***, *tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *action_key: NestedKey | list[NestedKey] = 'action'*, *done_key: NestedKey | list[NestedKey] | None = None*, *observation_key: NestedKey | list[NestedKey] = 'observation'*, *reward_key: NestedKey | list[NestedKey] = 'reward'*)
+auto_specs_(*policy: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)]*, ***, *tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] = 'action'*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *observation_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] = 'observation'*, *reward_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] = 'reward'*)
 
 Automatically sets the specifications (specs) of the environment based on a random rollout using a given policy.
 
@@ -579,7 +579,7 @@ By default, this will be "done".
 
 If there is more than one done key in the environment, this function will raise an exception.
 
-*property*done_keys*: list[NestedKey]*
+*property*done_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 The done keys of an environment.
 
@@ -1480,7 +1480,7 @@ Example:
 >>> print(param.size())
 ```
 
-*property*observation_keys*: list[NestedKey]*
+*property*observation_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 The observation keys of an environment.
 
@@ -2200,7 +2200,7 @@ Note
 reset should not be overwritten by [`EnvBase`](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) subclasses. The method to
 modify is `_reset()`.
 
-*property*reset_keys*: list[NestedKey]*
+*property*reset_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 Returns a list of reset keys.
 
@@ -2219,7 +2219,7 @@ By default, this will be "reward".
 
 If there is more than one reward key in the environment, this function will raise an exception.
 
-*property*reward_keys*: list[NestedKey]*
+*property*reward_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 The reward keys of an environment.
 
@@ -2771,7 +2771,7 @@ Example:
 ['bias', 'weight']
 ```
 
-*property*state_keys*: list[NestedKey]*
+*property*state_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 The state keys of an environment.
 

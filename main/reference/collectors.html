@@ -2801,7 +2801,7 @@ collector, env, and policy hot paths — see <a class="reference internal" href=
 <h2>Collection hooks<a class="headerlink" href="#collection-hooks" title="Link to this heading">#</a></h2>
 <p>Collectors accept optional hooks for per-rollout side effects:
 <code class="docutils literal notranslate"><span class="pre">pre_collect_hook</span></code> is called before a rollout starts, and
-<code class="docutils literal notranslate"><span class="pre">post_collect_hook</span></code> is called with the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a>
+<code class="docutils literal notranslate"><span class="pre">post_collect_hook</span></code> is called with the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a>
 batch that will be yielded by iteration.  Hook return values are ignored, and
 exceptions raised by hooks propagate to the caller and stop collection.</p>
 <p>Hooks are intended for instrumentation and worker-local side effects, such as

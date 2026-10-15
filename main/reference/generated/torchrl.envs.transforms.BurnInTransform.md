@@ -1,6 +1,6 @@
 # BurnInTransform
 
-*class*torchrl.envs.transforms.BurnInTransform(*modules: Sequence[[TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)]*, *burn_in: int*, *out_keys: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#BurnInTransform)
+*class*torchrl.envs.transforms.BurnInTransform(*modules: Sequence[[TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)]*, *burn_in: int*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#BurnInTransform)
 
 Transform to partially burn-in data sequences.
 

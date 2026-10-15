@@ -59,7 +59,7 @@ dispatches immediately.
 - **timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - seconds to wait for new work before
 dispatching a partial batch. Default: `0.01`.
 - **collate_fn** (*Callable**,**optional*) - function used to stack a list of
-TensorDicts into a batch. Default: `lazy_stack()`.
+TensorDicts into a batch. Default: [`lazy_stack()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack).
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device to move batches to
 before calling the model. This is kept as an alias for
 `policy_device` for backward compatibility. `None` means no

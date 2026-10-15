@@ -1,6 +1,6 @@
 # NextStateReconstructor
 
-*class*torchrl.envs.transforms.NextStateReconstructor(*keys: Sequence[NestedKey] = ('observation',)*, ***, *traj_key: NestedKey | None = ('collector', 'traj_ids')*, *done_key: NestedKey | None = ('next', 'done')*, *step_count_key: NestedKey | None = None*, *fill_value: float = nan*, *strict: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/rb_transforms.html#NextStateReconstructor)
+*class*torchrl.envs.transforms.NextStateReconstructor(*keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] = ('observation',)*, ***, *traj_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = ('collector', 'traj_ids')*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = ('next', 'done')*, *step_count_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *fill_value: float = nan*, *strict: bool = True*)[[source]](../../_modules/torchrl/envs/transforms/rb_transforms.html#NextStateReconstructor)
 
 Re-hydrate `("next", obs)` keys at sampling time by shifting along the batch.
 

@@ -1,6 +1,6 @@
 # ActionMask
 
-*class*torchrl.envs.transforms.ActionMask(*action_key: NestedKey = 'action'*, *mask_key: NestedKey = 'action_mask'*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionMask)
+*class*torchrl.envs.transforms.ActionMask(*action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action'*, *mask_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action_mask'*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionMask)
 
 An adaptive action masker.
 

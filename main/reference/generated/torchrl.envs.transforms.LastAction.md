@@ -1,6 +1,6 @@
 # LastAction
 
-*class*torchrl.envs.transforms.LastAction(*in_keys: Sequence[NestedKey] | NestedKey | None = None*, *out_keys: Sequence[NestedKey] | NestedKey | None = None*, ***, *default: Literal['zeros', 'nan'] | float | int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) = 'zeros'*, *reset_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#LastAction)
+*class*torchrl.envs.transforms.LastAction(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*, ***, *default: Literal['zeros', 'nan'] | float | int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) = 'zeros'*, *reset_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#LastAction)
 
 Copies the last action into the next observation.
 

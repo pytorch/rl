@@ -346,7 +346,7 @@ to_one_hot_spec() → [MultiOneHot](torchrl.data.MultiOneHot.html#torchrl.data.M
 
 Converts the spec to the equivalent one-hot spec.
 
-type_check(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *key: NestedKey = None*) → None
+type_check(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = None*) → None
 
 Checks the input value `dtype` against the `TensorSpec` `dtype` and raises an exception if they don't match.
 

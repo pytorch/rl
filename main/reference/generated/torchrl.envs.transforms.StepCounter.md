@@ -80,13 +80,13 @@ tensor([[1],
  [5]])
 ```
 
-*property*all_done_keys*: list[NestedKey]*
+*property*all_done_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 Returns done keys for ALL reset keys (including nested ones).
 
 Used for propagating done to nested agent-level keys in MARL envs.
 
-*property*all_truncated_keys*: list[NestedKey]*
+*property*all_truncated_keys*: list[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)]*
 
 Returns truncated keys for ALL reset keys (including nested ones).
 

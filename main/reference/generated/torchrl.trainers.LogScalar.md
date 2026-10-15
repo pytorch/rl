@@ -1,6 +1,6 @@
 # LogScalar
 
-*class*torchrl.trainers.LogScalar(*key: NestedKey = ('next', 'reward')*, *logname: str | None = None*, *log_pbar: bool = False*, *include_std: bool = True*, *reduction: str = 'mean'*)[[source]](../../_modules/torchrl/trainers/trainers.html#LogScalar)
+*class*torchrl.trainers.LogScalar(*key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = ('next', 'reward')*, *logname: str | None = None*, *log_pbar: bool = False*, *include_std: bool = True*, *reduction: str = 'mean'*)[[source]](../../_modules/torchrl/trainers/trainers.html#LogScalar)
 
 Generic scalar logger hook for any tensor values in the batch.
 

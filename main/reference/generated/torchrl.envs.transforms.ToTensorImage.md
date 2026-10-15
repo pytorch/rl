@@ -1,6 +1,6 @@
 # ToTensorImage
 
-*class*torchrl.envs.transforms.ToTensorImage(*from_int: bool | None = None*, *unsqueeze: bool = False*, *dtype: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, ***, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *shape_tolerant: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#ToTensorImage)
+*class*torchrl.envs.transforms.ToTensorImage(*from_int: bool | None = None*, *unsqueeze: bool = False*, *dtype: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, ***, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *shape_tolerant: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#ToTensorImage)
 
 Transforms a numpy-like image (W x H x C) to a pytorch image (C x W x H).
 

@@ -142,7 +142,7 @@ registered hooks while the latter silently ignores them.
 
 The keys that the module reads from the input tensordict.
 
-*property*init_key*: NestedKey*
+*property*init_key*: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*
 
 The indicator of the initial step for a given element of the batch.
 

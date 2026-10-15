@@ -1,6 +1,6 @@
 # TimeMaxPool
 
-*class*torchrl.envs.transforms.TimeMaxPool(*in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *T: int = 1*, *reset_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_misc.html#TimeMaxPool)
+*class*torchrl.envs.transforms.TimeMaxPool(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *T: int = 1*, *reset_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_misc.html#TimeMaxPool)
 
 Take the maximum value in each position over the last T observations.
 

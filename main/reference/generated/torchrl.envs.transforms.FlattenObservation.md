@@ -1,6 +1,6 @@
 # FlattenObservation
 
-*class*torchrl.envs.transforms.FlattenObservation(*first_dim: int*, *last_dim: int*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *allow_positive_dim: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#FlattenObservation)
+*class*torchrl.envs.transforms.FlattenObservation(*first_dim: int*, *last_dim: int*, *in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *out_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, *allow_positive_dim: bool = False*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#FlattenObservation)
 
 Flatten adjacent dimensions of a tensor.
 

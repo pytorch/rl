@@ -1,6 +1,6 @@
 # ActionChunkTransform
 
-*class*torchrl.envs.transforms.ActionChunkTransform(*chunk_size: int*, ***, *action_key: NestedKey = 'action'*, *chunk_key: NestedKey = ('vla_action', 'chunk')*, *pad_key: NestedKey = 'action_is_pad'*, *time_dim: int = -2*, *done_key: NestedKey | None = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionChunkTransform)
+*class*torchrl.envs.transforms.ActionChunkTransform(*chunk_size: int*, ***, *action_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action'*, *chunk_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = ('vla_action', 'chunk')*, *pad_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) = 'action_is_pad'*, *time_dim: int = -2*, *done_key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey) | None = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionChunkTransform)
 
 Build fixed-length action chunks from a trajectory window.
 

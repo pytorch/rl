@@ -1,6 +1,6 @@
 # NextObservationDelta
 
-*class*torchrl.envs.transforms.NextObservationDelta(*in_keys: Sequence[NestedKey] | None = None*, ***, *delta_dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) = torch.float16*, *restore_dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | Literal['root'] = 'root'*, *drop_delta: bool = True*, *excluded_dtypes: tuple[[dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype), ...] = (torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64, torch.bool)*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#NextObservationDelta)
+*class*torchrl.envs.transforms.NextObservationDelta(*in_keys: Sequence[[NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)] | None = None*, ***, *delta_dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) = torch.float16*, *restore_dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | Literal['root'] = 'root'*, *drop_delta: bool = True*, *excluded_dtypes: tuple[[dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype), ...] = (torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64, torch.bool)*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#NextObservationDelta)
 
 Stores `("next", obs)` as a low-precision delta in a sibling key.
 

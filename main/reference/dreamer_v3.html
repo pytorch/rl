@@ -2726,7 +2726,7 @@ replaces a fixed survival assumption when weighting returns and losses.</p></td>
 </div>
 <p>For acting in a real environment, compose the encoder,
 <a class="reference internal" href="generated/torchrl.modules.RSSMStateEstimatorV3.html#torchrl.modules.RSSMStateEstimatorV3" title="torchrl.modules.RSSMStateEstimatorV3"><code class="xref py py-class docutils literal notranslate"><span class="pre">RSSMStateEstimatorV3</span></code></a> and actor with
-<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>. The estimator resets recurrent
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>. The estimator resets recurrent
 context per stream and samples only the observation-conditioned posterior.
 The collector carries its state, belief and action into the next step.
 For discrete actions, <code class="xref py py-class docutils literal notranslate"><span class="pre">DreamerV3DiscreteActor</span></code> provides

@@ -319,8 +319,8 @@ for task_id, name in enumerate(tasks.name[:2]):
 ```
 
 ```
-standing per-task: mean=+0.000 std=0.995 | pooled: mean=-0.178 std=1.017
-tracking+0.20 per-task: mean=+0.000 std=0.995 | pooled: mean=+0.178 std=0.955
+standing per-task: mean=-0.000 std=0.995 | pooled: mean=-0.141 std=1.006
+tracking+0.20 per-task: mean=+0.000 std=0.995 | pooled: mean=+0.141 std=0.979
 ```
 
 The example's `ppo.per_task_advantage` option is exactly
@@ -384,7 +384,7 @@ diag_env.close()
 ```
 
 ```
-heading term per step: 0.0015320081729441881 | total reward: 0.02838006615638733
+heading term per step: 0.0026570074260234833 | total reward: 0.06847114861011505
 ```
 
 ## Training end to end
@@ -428,7 +428,7 @@ for every field and preset.
 - `examples/microduck/README.md` for the training recipe and the results
 of the multi-task runs.
 
-**Total running time of the script:** (0 minutes 8.333 seconds)
+**Total running time of the script:** (0 minutes 8.192 seconds)
 
 [`Download Jupyter notebook: microduck.ipynb`](../_downloads/87abf301cfa889a7c2c1c1bbc88875ef/microduck.ipynb)
 
