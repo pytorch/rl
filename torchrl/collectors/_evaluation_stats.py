@@ -117,8 +117,9 @@ def paired_comparison(
     """Compare two sets of paired samples, e.g. two policies evaluated on the same seeds.
 
     Sample ``i`` of ``first`` and ``second`` must come from the same
-    conditions, as with :meth:`~torchrl.collectors.Evaluator.evaluate` called
-    with the same ``seed`` and ``episode_sampling="per_env"``.
+    conditions, as with
+    :meth:`~torchrl.collectors.Evaluator.evaluate_episodes` called with the
+    same ``seed``.
 
     Args:
         first (torch.Tensor): the samples of the first candidate.

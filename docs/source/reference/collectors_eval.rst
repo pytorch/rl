@@ -214,17 +214,19 @@ Comparing policies
 ------------------
 
 To compare policies, environments (for instance the same task in two
-simulators) or perturbations, evaluate each combination with
-``episode_sampling="per_env"``, ``return_episodes=True`` and a fixed set of
-seeds, then reduce the per-episode returns with :func:`bootstrap_estimate` and
-:func:`paired_comparison`.
+simulators) or perturbations, call :meth:`~Evaluator.evaluate_episodes` on
+each combination with a fixed set of seeds, then reduce the per-episode returns
+with :func:`bootstrap_estimate` and :func:`paired_comparison`.
 
-``episode_sampling="per_env"`` makes every rollout contribute exactly one
-episode per sub-environment. The default (``"first_done"``) keeps the first
-episodes to finish, which over-samples sub-environments with short episodes
-when more episodes than sub-environments are requested. Passing the same
-``seed`` to :meth:`~Evaluator.evaluate` starts every policy from the same
-states, so per-episode results are paired across policies.
+:meth:`~Evaluator.evaluate_episodes` makes every rollout contribute exactly one
+episode per sub-environment. :meth:`~Evaluator.evaluate` defaults to
+``episode_sampling="first_done"``, which keeps the first episodes to finish:
+short episodes are over-represented whenever more episodes than
+sub-environments are requested, even when all sub-environments are identical,
+and different tasks per sub-environment make the bias larger. Passing the same
+``seed`` reseeds the environment and the torch RNG before every rollout, so each
+episode starts from the same state whatever the policy and the results are
+paired episode by episode.
 
 .. code-block:: python
 
@@ -238,20 +240,14 @@ states, so per-episode results are paired across policies.
     returns = {}
     for env_name, make_env in envs.items():
         for policy_name, policy in policies.items():
-            evaluator = Evaluator(
-                make_env(),
-                policy,
-                num_trajectories=10,
-                max_steps=1000,
-                episode_sampling="per_env",
-                return_episodes=True,
-            )
+            evaluator = Evaluator(make_env(), policy, num_trajectories=10, max_steps=1000)
             returns[env_name, policy_name] = torch.cat(
                 [
-                    evaluator.evaluate(seed=seed)["eval/episodes"]["episode_reward"]
+                    evaluator.evaluate_episodes(seed=seed)["episode_reward"]
                     for seed in seeds
                 ]
             )
+            evaluator.shutdown()
 
     for env_name in envs:
         summary = bootstrap_estimate(returns[env_name, "ppo"], statistic="iqm")
@@ -263,6 +259,10 @@ states, so per-episode results are paired across policies.
                 f"{env_name}/ppo_beats_sac": versus["probability_of_improvement"],
             }
         )
+
+The episodes also carry ``"truncated"`` (the episode hit ``max_steps`` or the
+environment's own time limit) and ``"env_index"`` (the sub-environment that
+ran it), to filter or group them before reducing.
 
 Perturbations follow the same pattern: make them part of the environment
 factory (for instance ``lambda: make_env().append_transform(FrameSkipTransform(2))``).

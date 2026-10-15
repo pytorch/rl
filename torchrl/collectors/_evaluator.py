@@ -79,6 +79,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
+from types import SimpleNamespace
 from typing import Any, Literal
 
 import torch
@@ -242,18 +243,14 @@ class Evaluator:
             :meth:`evaluate`, :meth:`poll`, and :meth:`wait`.
         episode_sampling (str): How episodes are gathered from a batched
             environment. ``"first_done"`` (default) keeps the first
-            ``num_trajectories`` episodes to finish, which over-samples
-            sub-environments with short episodes when ``num_trajectories``
-            exceeds the number of sub-environments. ``"per_env"`` rolls the
-            environment out with ``break_when_all_done=True`` so that each
-            rollout yields exactly one episode per sub-environment; it
-            requires the ``"thread"`` backend without
-            ``weight_sync_schemes`` and an integer ``max_steps``.
-        return_episodes (bool): Add a ``"<prefix>/episodes"`` entry holding a
-            :class:`~tensordict.TensorDict` of batch size
-            ``[num_episodes]`` with ``"episode_reward"`` and
-            ``"episode_length"``. Not supported by the ``"ray"`` backend.
-            Default: ``False``.
+            ``num_trajectories`` episodes to finish, which biases the sample
+            towards short episodes, even with identical sub-environments.
+            ``"per_env"`` rolls the environment out with
+            ``break_when_all_done=True`` so that each rollout yields exactly
+            one episode per sub-environment; it requires the ``"thread"``
+            backend without ``weight_sync_schemes`` and an integer
+            ``max_steps``. :meth:`evaluate_episodes` always samples
+            ``"per_env"``. Default: ``"first_done"``.
         busy_policy (str): Behaviour when :meth:`trigger_eval` is called
             while another async evaluation is still pending. ``"skip"``
             returns ``False`` without scheduling a new request (default).
@@ -322,7 +319,6 @@ class Evaluator:
         dump_video: bool = True,
         on_result: Callable[[TensorDictBase], None] | None = None,
         episode_sampling: Literal["first_done", "per_env"] = "first_done",
-        return_episodes: bool = False,
         busy_policy: str = "skip",
         # Backend selection
         backend: str = "thread",
@@ -357,9 +353,6 @@ class Evaluator:
                 "episode_sampling='per_env' requires backend='thread', no "
                 "weight_sync_schemes and an integer max_steps."
             )
-        if return_episodes and backend == "ray":
-            raise ValueError("return_episodes is not supported by the 'ray' backend.")
-        self._episode_sampling = episode_sampling
         self._async_lock = threading.Lock()
         self._async_trigger = threading.Event()
         self._ready_result = threading.Event()
@@ -417,7 +410,6 @@ class Evaluator:
                 auto_process_weight_sync=auto_process_weight_sync,
                 init_fn=init_fn,
                 per_env=episode_sampling == "per_env",
-                return_episodes=return_episodes,
             )
         elif backend == "ray":
             self._backend = _RayEvalBackend(
@@ -444,7 +436,6 @@ class Evaluator:
         step: int | None = None,
         *,
         weights_dict: dict[str, TensorDictBase | nn.Module] | None = None,
-        seed: int | None = None,
     ) -> dict[str, Any]:
         """Run a blocking evaluation rollout.
 
@@ -463,24 +454,93 @@ class Evaluator:
                 When provided, *weights* is treated as
                 ``weights_dict["policy"]`` if ``"policy"`` is not already
                 in the dict.
-            seed: Seed passed to :meth:`~torchrl.envs.EnvBase.set_seed` and
-                to a forked torch RNG (CPU and CUDA) for this evaluation, so
-                that evaluations with the same seed start from the same
-                states and the caller's RNG state is left untouched.
-                Requires ``episode_sampling="per_env"``.
 
         Returns:
             dict with at least ``"<prefix>/reward"`` and
             ``"<prefix>/episode_length"`` keys.
         """
-        if seed is not None and self._episode_sampling != "per_env":
-            raise ValueError("evaluate(seed=...) requires episode_sampling='per_env'.")
         prepared = self._prepare_weights_dict(weights, weights_dict)
         step = self._next_step(step)
-        raw = self._backend.run_sync(prepared, step, seed=seed)
+        raw = self._backend.run_sync(prepared, step)
         result = self._finalize(raw)
         self._invoke_on_result(result)
         return result
+
+    def evaluate_episodes(
+        self,
+        weights: TensorDictBase | nn.Module | None = None,
+        step: int | None = None,
+        *,
+        weights_dict: dict[str, TensorDictBase | nn.Module] | None = None,
+        seed: int | None = None,
+    ) -> TensorDictBase:
+        """Run a blocking evaluation and return one entry per episode.
+
+        Episodes are always sampled ``"per_env"`` (see ``episode_sampling``):
+        each rollout of the environment contributes exactly one episode per
+        sub-environment until ``num_trajectories`` episodes are gathered.
+        Unlike :meth:`evaluate`, this does not advance the internal step
+        counter and does not call ``on_result``. Requires the ``"thread"``
+        backend without ``weight_sync_schemes`` and an integer ``max_steps``.
+
+        Args:
+            weights (TensorDictBase or nn.Module, optional): Policy weights to
+                load before the rollouts. See :meth:`evaluate`. Defaults to
+                ``None`` (current weights).
+            step (int, optional): Step at which the video of a
+                :class:`~torchrl.record.VideoRecorder` on the env is logged.
+                Defaults to ``None`` (the recorder's own counter).
+
+        Keyword Args:
+            weights_dict (dict, optional): Multi-model weights dict. See
+                :meth:`evaluate`. Defaults to ``None``.
+            seed (int, optional): Before each rollout, the torch RNG (CPU and
+                CUDA) is seeded and :meth:`~torchrl.envs.EnvBase.set_seed` is
+                called with a seed derived from ``seed`` and the rollout
+                index only, so two evaluations with the same ``seed`` start
+                each episode from the same state whatever the policy, and
+                their results are paired episode by episode. The caller's
+                RNG state is restored afterwards. Defaults to ``None`` (RNGs
+                are left untouched).
+
+        Returns:
+            a :class:`~tensordict.TensorDict` of batch size
+            ``[num_trajectories]`` on the env device, with entries
+            ``"episode_reward"`` (the final ``("next", "episode_reward")`` of
+            a :class:`~torchrl.envs.transforms.RewardSum` when present,
+            otherwise the sum of rewards), ``"episode_length"`` (int64),
+            ``"truncated"`` (bool, ``True`` when the episode reached
+            ``max_steps`` without a done or the env flagged it as truncated)
+            and ``"env_index"`` (int64, the flat index of the sub-environment
+            that ran the episode).
+
+        Examples:
+            >>> from torchrl.collectors import Evaluator, paired_comparison
+            >>> from torchrl.envs import GymEnv, SerialEnv
+            >>> from torchrl.modules import RandomPolicy
+            >>> env = SerialEnv(4, lambda: GymEnv("Pendulum-v1"))
+            >>> evaluator = Evaluator(
+            ...     env, RandomPolicy(env.action_spec), num_trajectories=6, max_steps=50
+            ... )
+            >>> episodes = evaluator.evaluate_episodes(seed=0)
+            >>> episodes["env_index"], episodes["truncated"].all()
+            (tensor([0, 1, 2, 3, 0, 1]), tensor(True))
+            >>> again = evaluator.evaluate_episodes(seed=0)
+            >>> paired_comparison(again["episode_reward"], episodes["episode_reward"])[
+            ...     "estimate"
+            ... ]
+            tensor(0.)
+            >>> evaluator.shutdown()
+        """
+        if self.pending:
+            raise RuntimeError(
+                "evaluate_episodes() cannot run while an async evaluation is pending."
+            )
+        prepared = self._prepare_weights_dict(weights, weights_dict)
+        episodes = self._backend.run_episodes(prepared, seed)
+        if self._dump_video:
+            self._backend.dump_env_video(step=step)
+        return episodes
 
     # ------------------------------------------------------------------
     # Asynchronous API
@@ -727,8 +787,6 @@ class Evaluator:
             out[f"{prefix}/video"] = raw["frames"]
         if "_step" in raw:
             out[f"{prefix}/step"] = raw["_step"]
-        if "episodes" in raw:
-            out[f"{prefix}/episodes"] = raw["episodes"]
         # Custom metrics (already prefixed by backend or metrics_fn)
         for k, v in raw.items():
             if k.startswith("custom/"):
@@ -736,8 +794,8 @@ class Evaluator:
         return out
 
     @staticmethod
-    def _to_result_tensor(value: Any) -> torch.Tensor | TensorDictBase:
-        if isinstance(value, (torch.Tensor, TensorDictBase)):
+    def _to_result_tensor(value: Any) -> torch.Tensor:
+        if isinstance(value, torch.Tensor):
             return value.detach().cpu()
         return torch.as_tensor(value)
 
@@ -765,13 +823,18 @@ class _EvalBackend(abc.ABC):
 
     @abc.abstractmethod
     def run_sync(
-        self,
-        weights_dict: dict[str, TensorDictBase] | None,
-        step: int,
-        seed: int | None = None,
+        self, weights_dict: dict[str, TensorDictBase] | None, step: int
     ) -> dict[str, Any]:
         """Run a blocking evaluation and return raw results."""
         ...
+
+    def run_episodes(
+        self, weights_dict: dict[str, TensorDictBase] | None, seed: int | None
+    ) -> TensorDictBase:
+        """Run a blocking per-env evaluation and return one entry per episode."""
+        raise NotImplementedError(
+            "evaluate_episodes() is only supported by the 'thread' backend."
+        )
 
     @abc.abstractmethod
     def submit(self, weights_dict: dict[str, TensorDictBase] | None, step: int) -> None:
@@ -821,7 +884,6 @@ def _extract_metrics_from_trajectories(
     metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
     eval_time: float | None = None,
     on_missing_traj_info: Callable[[], None] | None = None,
-    return_episodes: bool = False,
 ) -> dict[str, Any]:
     """Extract evaluation metrics from a trajectory batch produced by a collector.
 
@@ -913,12 +975,6 @@ def _extract_metrics_from_trajectories(
     if eval_time is not None and eval_time > 0:
         metrics["fps"] = total_frames / eval_time
     metrics["frame_count"] = total_frames
-    if return_episodes:
-        metrics["episodes"] = TensorDict(
-            episode_reward=torch.tensor(episode_rewards),
-            episode_length=torch.tensor(episode_lengths, dtype=torch.int64),
-            batch_size=[num_episodes],
-        )
 
     if metrics_fn is not None:
         custom = metrics_fn(traj_batch)
@@ -936,6 +992,34 @@ def _env_has_step_count(env: EnvBase) -> bool:
         if "step_count" in key:
             return True
     return False
+
+
+def _episodes_from_padded_trajectories(
+    traj_batch: TensorDictBase, reward_keys: NestedKey, done_keys: NestedKey
+) -> TensorDictBase:
+    """Reduce a padded ``[num_episodes, max_steps]`` batch to one entry per episode."""
+    mask = traj_batch.get(("collector", "mask"))
+    episode_length = mask.sum(-1)
+    final = traj_batch[
+        torch.arange(traj_batch.shape[0], device=mask.device), episode_length - 1
+    ]
+    episode_reward = final.get(_EPISODE_REWARD_KEY, None)
+    if episode_reward is None:
+        reward = traj_batch.get(reward_keys)
+        valid = mask.reshape(*mask.shape, *(1,) * (reward.ndim - mask.ndim))
+        episode_reward = torch.where(valid, reward, 0).sum(1)
+    truncated = ~final.get(done_keys)
+    if isinstance(done_keys, tuple) and done_keys[-1] == "done":
+        env_truncated = final.get((*done_keys[:-1], "truncated"), None)
+        if env_truncated is not None:
+            truncated = truncated | env_truncated
+    return TensorDict(
+        episode_reward=episode_reward.squeeze(-1),
+        episode_length=episode_length,
+        truncated=truncated.squeeze(-1),
+        env_index=final.get(("collector", "env_index")),
+        batch_size=traj_batch.shape[:1],
+    )
 
 
 def _resolve_collector_cls(cls_or_name: type | str | None):
@@ -1060,7 +1144,6 @@ class _ThreadEvalBackend(_EvalBackend):
         auto_process_weight_sync: bool = False,
         init_fn: Callable[[], None] | None = None,
         per_env: bool = False,
-        return_episodes: bool = False,
     ) -> None:
         if policy is not None and policy_factory is not None:
             raise ValueError("Provide either `policy` or `policy_factory`, not both.")
@@ -1126,7 +1209,6 @@ class _ThreadEvalBackend(_EvalBackend):
         self._done_keys = done_keys
         self._metrics_fn = metrics_fn
         self._per_env = per_env
-        self._return_episodes = return_episodes
 
         # Collector (created lazily)
         self._collector = None
@@ -1148,14 +1230,36 @@ class _ThreadEvalBackend(_EvalBackend):
     # ---- sync ----
 
     def run_sync(
-        self,
-        weights_dict: dict[str, TensorDictBase] | None,
-        step: int,
-        seed: int | None = None,
+        self, weights_dict: dict[str, TensorDictBase] | None, step: int
     ) -> dict[str, Any]:
-        metrics = self._run_eval(weights_dict, seed)
+        metrics = self._run_eval(weights_dict)
         metrics["_step"] = step
         return metrics
+
+    def run_episodes(
+        self, weights_dict: dict[str, TensorDictBase] | None, seed: int | None
+    ) -> TensorDictBase:
+        if self._use_multi_collector or self._max_steps is None:
+            raise ValueError(
+                "evaluate_episodes() requires backend='thread', no "
+                "weight_sync_schemes and an integer max_steps."
+            )
+        self._ensure_env_and_policy()
+        self._load_weights(weights_dict, direct=True)
+        if isinstance(self._policy, nn.Module):
+            self._policy.eval()
+        rng = (
+            contextlib.nullcontext()
+            if seed is None
+            else torch.random.fork_rng(devices=range(torch.cuda.device_count()))
+        )
+        with rng, set_exploration_type(self._exploration_type), torch.no_grad():
+            traj_batch = self._rollout_per_env(seed)
+        if isinstance(self._policy, nn.Module):
+            self._policy.train()
+        return _episodes_from_padded_trajectories(
+            traj_batch, self._reward_keys, self._done_keys
+        )
 
     # ---- async ----
 
@@ -1319,8 +1423,36 @@ class _ThreadEvalBackend(_EvalBackend):
             self._collector_iter = None
         self._weight_sync_schemes = {"policy": MultiProcessWeightSyncScheme()}
 
+    def _load_weights(
+        self, weights_dict: dict[str, TensorDictBase] | None, direct: bool = False
+    ) -> None:
+        """Load weights into the collector, or into the env and policy rolled out directly."""
+        if not weights_dict:
+            return
+        if self._use_multi_collector:
+            # Multi-process: use scheme-based sync via the collector
+            self._collector.update_policy_weights_(weights_dict=weights_dict)
+            return
+        # Same process: copy weights into the registered parameters and
+        # buffers. Calling TensorDict.to_module() with plain tensors would
+        # replace nn.Parameters with tensors and make state_dict() empty.
+        strategy = WeightStrategy(extract_as="tensordict")
+        for model_id, w in weights_dict.items():
+            if model_id == "policy":
+                strategy.apply_weights(self._policy, w.to(self._device))
+            else:
+                from torchrl.weight_update.utils import _resolve_model
+
+                owner = (
+                    SimpleNamespace(env=self._env, policy=self._policy)
+                    if direct
+                    else self._collector
+                )
+                target = _resolve_model(owner, model_id)
+                strategy.apply_weights(target, w.to(self._device))
+
     def _run_eval(
-        self, weights_dict: dict[str, TensorDictBase] | None, seed: int | None = None
+        self, weights_dict: dict[str, TensorDictBase] | None
     ) -> dict[str, Any]:
         """Run evaluation using the internal collector."""
         if weights_dict:
@@ -1329,32 +1461,13 @@ class _ThreadEvalBackend(_EvalBackend):
             self._ensure_env_and_policy()
         else:
             self._ensure_collector()
-
-        if weights_dict:
-            if self._use_multi_collector:
-                # Multi-process: use scheme-based sync via the collector
-                self._collector.update_policy_weights_(weights_dict=weights_dict)
-            else:
-                # Same process: copy weights into the registered parameters and
-                # buffers. Calling TensorDict.to_module() with plain tensors would
-                # replace nn.Parameters with tensors and make state_dict() empty.
-                strategy = WeightStrategy(extract_as="tensordict")
-                for model_id, w in weights_dict.items():
-                    if model_id == "policy":
-                        strategy.apply_weights(self._policy, w.to(self._device))
-                    else:
-                        from torchrl.weight_update.utils import _resolve_model
-
-                        target = _resolve_model(self._collector, model_id)
-                        strategy.apply_weights(target, w.to(self._device))
+        self._load_weights(weights_dict, direct=self._per_env)
 
         if not self._use_multi_collector and isinstance(self._policy, nn.Module):
             self._policy.eval()
 
         eval_start = time.perf_counter()
-        with self._seeded(seed), set_exploration_type(
-            self._exploration_type
-        ), torch.no_grad():
+        with set_exploration_type(self._exploration_type), torch.no_grad():
             if self._per_env:
                 traj_batch = self._rollout_per_env()
             elif self._use_multi_collector:
@@ -1379,23 +1492,15 @@ class _ThreadEvalBackend(_EvalBackend):
             self._metrics_fn,
             eval_time=time.perf_counter() - eval_start,
             on_missing_traj_info=self._warn_missing_traj_info,
-            return_episodes=self._return_episodes,
         )
 
-    @contextlib.contextmanager
-    def _seeded(self, seed: int | None):
-        if seed is None:
-            yield
-            return
-        with torch.random.fork_rng(devices=range(torch.cuda.device_count())):
-            torch.manual_seed(seed)
-            self._env.set_seed(seed)
-            yield
-
-    def _rollout_per_env(self) -> TensorDictBase:
+    def _rollout_per_env(self, seed: int | None = None) -> TensorDictBase:
         rollouts = []
         num_episodes = 0
         while num_episodes < self._num_trajectories:
+            if seed is not None:
+                torch.manual_seed(seed)
+                seed = self._env.set_seed(seed)
             rollout = self._env.rollout(
                 self._max_steps, self._policy, break_when_all_done=True
             )
@@ -1403,6 +1508,11 @@ class _ThreadEvalBackend(_EvalBackend):
             done = rollout.get(self._done_keys).to(torch.int64)
             in_episode = (done.cumsum(1) == done).reshape(*rollout.shape, -1).any(-1)
             rollout.set(("collector", "mask"), in_episode)
+            env_index = torch.arange(rollout.shape[0], device=rollout.device)
+            rollout.set(
+                ("collector", "env_index"),
+                env_index.unsqueeze(-1).expand(rollout.shape),
+            )
             rollouts.append(pad(rollout, [0, 0, 0, self._max_steps - rollout.shape[1]]))
             num_episodes += rollout.shape[0]
         return torch.cat(rollouts)[: self._num_trajectories]
@@ -1427,8 +1537,12 @@ class _ThreadEvalBackend(_EvalBackend):
         collector's own env: the collector may wrap the user env (e.g. to add
         a ``StepCounter``), cloning its transforms, so the recorder that
         accumulated frames is the collector-side one, not the transform of
-        the env handed to the evaluator.
+        the env handed to the evaluator. Per-env rollouts run on the env
+        handed to the evaluator, so its recorders are dumped instead.
         """
+        if self._per_env:
+            self.dump_env_video(step=step)
+            return
         if self._collector is None:
             return
         if self._use_multi_collector:
@@ -1438,6 +1552,12 @@ class _ThreadEvalBackend(_EvalBackend):
             )
             return
         self._collector._dump_env_transform(step=step)
+
+    def dump_env_video(self, step: int | None = None) -> None:
+        """Dump the recorders of the env rolled out without a collector."""
+        dump = getattr(getattr(self._env, "transform", None), "dump", None)
+        if callable(dump):
+            dump(step=step)
 
 
 # ======================================================================
@@ -1486,10 +1606,7 @@ class _RayEvalBackend(_EvalBackend):
         self._pending_flag = False
 
     def run_sync(
-        self,
-        weights_dict: dict[str, TensorDictBase] | None,
-        step: int,
-        seed: int | None = None,
+        self, weights_dict: dict[str, TensorDictBase] | None, step: int
     ) -> dict[str, Any]:
         weights = weights_dict.get("policy") if weights_dict else None
         self._worker.submit(
