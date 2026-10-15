@@ -168,7 +168,11 @@ class SamplerEnsembleConfig(SamplerConfig):
 
 @dataclass
 class PrioritizedSliceSamplerConfig(SamplerConfig):
-    """Configuration for prioritized slice sampling from replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler`.
+
+    ``eps`` and ``reduction`` match the constructor defaults (``1e-8`` and
+    ``"max"``). ``use_gpu`` is not a constructor argument.
+    """
 
     num_slices: int | None = None
     slice_len: int | None = None
@@ -183,36 +187,40 @@ class PrioritizedSliceSamplerConfig(SamplerConfig):
     strict_length: bool = True
     compile: Any = False
     span: Any = False
-    use_gpu: Any = False
     max_capacity: int | None = None
     alpha: float | None = None
     beta: float | None = None
-    eps: float | None = None
-    reduction: str | None = None
+    eps: float = 1e-8
+    reduction: str = "max"
     _target_: str = "torchrl.data.replay_buffers.PrioritizedSliceSampler"
 
 
 @dataclass
 class SliceSamplerWithoutReplacementConfig(SamplerConfig):
-    """Hydra configuration for :class:`~torchrl.data.SliceSamplerWithoutReplacement`."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`.
+
+    Every kwarg accepted by ``SliceSamplerWithoutReplacement.__init__`` is
+    exposed as a field here with the same default. ``cache_values`` is
+    hardcoded by the class and ``span`` is not accepted.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.SliceSamplerWithoutReplacement"
     num_slices: int | None = None
     slice_len: int | None = None
+    drop_last: bool = False
     end_key: Any = None
     end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
-    cache_values: bool = False
     truncated_key: Any = ("next", "truncated")
     init_key: Any = "is_init"
     strict_length: bool = True
     output_layout: _SliceOutputLayout = "flat"
     slice_end_key: Any = ("collector", "slice_end")
     time_dim_name: str | None = "time"
+    shuffle: bool = True
     compile: Any = False
-    span: Any = False
     use_gpu: Any = False
 
 
@@ -264,13 +272,17 @@ class StreamingSliceSamplerConfig(SamplerConfig):
 
 @dataclass
 class PrioritizedSamplerConfig(SamplerConfig):
-    """Configuration for prioritized sampling from replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.PrioritizedSampler`.
+
+    ``eps`` and ``reduction`` match the constructor defaults (``1e-8`` and
+    ``"max"``).
+    """
 
     max_capacity: int | None = None
     alpha: float | None = None
     beta: float | None = None
-    eps: float | None = None
-    reduction: str | None = None
+    eps: float = 1e-8
+    reduction: str = "max"
     _target_: str = "torchrl.data.replay_buffers.PrioritizedSampler"
 
 
@@ -337,13 +349,16 @@ class StorageConfig(ConfigBase):
 
 @dataclass
 class TensorStorageConfig(StorageConfig):
-    """Configuration for tensor-based storage in replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.TensorStorage`.
+
+    ``device`` and ``ndim`` match the constructor defaults (``"cpu"`` and ``1``).
+    """
 
     _target_: str = "torchrl.data.replay_buffers.TensorStorage"
     max_size: int | None = None
     storage: Any = None
-    device: Any = None
-    ndim: int | None = None
+    device: Any = "cpu"
+    ndim: int = 1
     compilable: bool = False
 
     def __post_init__(self) -> None:

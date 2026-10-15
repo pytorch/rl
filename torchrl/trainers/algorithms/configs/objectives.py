@@ -257,6 +257,11 @@ class PPOLossConfig(LossConfig):
     :class:`~torchrl.objectives.PPOLoss` (``loss_type='ppo'``). Every kwarg
     accepted by any of those classes is exposed here; only the kwargs relevant
     to the selected ``loss_type`` are forwarded.
+
+    ``advantage_key``, ``value_target_key`` and ``value_key`` are not
+    constructor arguments. When not ``None``, the factory applies them with
+    :meth:`~torchrl.objectives.LossModule.set_keys` for every ``loss_type``.
+    ``None`` keeps the class default.
     """
 
     actor_network: Any = None
@@ -302,6 +307,11 @@ class PPOLossConfig(LossConfig):
 def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
     loss_type = kwargs.pop("loss_type", "clip")
     gamma = kwargs.pop("gamma", None)
+    # PPOLoss rejects these constructor keys. Apply non-null overrides with
+    # set_keys for every loss_type; None keeps the class default.
+    advantage_key = _normalize_hydra_key(kwargs.pop("advantage_key", None))
+    value_target_key = _normalize_hydra_key(kwargs.pop("value_target_key", None))
+    value_key = _normalize_hydra_key(kwargs.pop("value_key", None))
     # Instantiate the advantage normaliser if it is a config object
     advantage_norm = kwargs.get("advantage_norm")
     if advantage_norm is not None and hasattr(advantage_norm, "_target_"):
@@ -312,9 +322,6 @@ def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
     kl_only = {"dtarg", "beta", "increment", "decrement", "samples_mc_kl"}
     ppo_only = {
         "log_explained_variance",
-        "advantage_key",
-        "value_target_key",
-        "value_key",
         "functional",
         "actor",
         "critic",
@@ -340,6 +347,15 @@ def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
         raise ValueError(f"Invalid loss type: {loss_type}")
     if gamma is not None:
         loss.make_value_estimator(gamma=gamma)
+    keys = {}
+    if advantage_key is not None:
+        keys["advantage"] = advantage_key
+    if value_target_key is not None:
+        keys["value_target"] = value_target_key
+    if value_key is not None:
+        keys["value"] = value_key
+    if keys:
+        loss.set_keys(**keys)
     return loss
 
 
@@ -520,9 +536,22 @@ class HardUpdateConfig(TargetNetUpdaterConfig):
 def _make_gae(*args, **kwargs) -> GAE:
     group_key = _normalize_hydra_key(kwargs.pop("group_key", None))
     valid_key = _normalize_hydra_key(kwargs.pop("valid_key", None))
+    # GAE rejects these constructor keys. Apply non-null overrides with set_keys.
+    advantage_key = _normalize_hydra_key(kwargs.pop("advantage_key", None))
+    value_target_key = _normalize_hydra_key(kwargs.pop("value_target_key", None))
+    value_key = _normalize_hydra_key(kwargs.pop("value_key", None))
     gae = GAE(*args, group_key=group_key, **kwargs)
+    keys = {}
+    if advantage_key is not None:
+        keys["advantage"] = advantage_key
+    if value_target_key is not None:
+        keys["value_target"] = value_target_key
+    if value_key is not None:
+        keys["value"] = value_key
     if valid_key is not None:
-        gae.set_keys(valid=valid_key)
+        keys["valid"] = valid_key
+    if keys:
+        gae.set_keys(**keys)
     return gae
 
 
@@ -530,9 +559,11 @@ def _make_gae(*args, **kwargs) -> GAE:
 class GAEConfig(LossConfig):
     """Hydra configuration for :class:`~torchrl.objectives.value.GAE`.
 
-    Every kwarg accepted by ``GAE.__init__`` is exposed as a field here. The
-    ``valid_key`` field is applied through
-    :meth:`~torchrl.objectives.value.GAE.set_keys` by the factory.
+    Every kwarg accepted by ``GAE.__init__`` is exposed as a field here.
+    ``advantage_key``, ``value_target_key``, ``value_key`` and ``valid_key``
+    are applied through :meth:`~torchrl.objectives.value.GAE.set_keys` when
+    not ``None``. The constructor rejects the first three. ``None`` keeps
+    the class default.
     """
 
     gamma: float | None = None

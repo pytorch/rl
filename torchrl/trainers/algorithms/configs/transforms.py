@@ -232,14 +232,18 @@ class RewardClippingConfig(TransformConfig):
 
 @dataclass
 class RewardScalingConfig(TransformConfig):
-    """Configuration for RewardScaling transform."""
+    """Hydra configuration for :class:`~torchrl.envs.transforms.RewardScaling`.
+
+    Every kwarg accepted by ``RewardScaling.__init__`` is exposed as a field
+    here. ``loc`` and ``scale`` are required by the constructor and default
+    to ``0.0`` and ``1.0`` in this config.
+    """
 
     loc: float = 0.0
     scale: float = 1.0
     in_keys: list[str] | None = None
     out_keys: list[str] | None = None
     standard_normal: bool = False
-    eps: float = 1e-8
     _target_: str = "torchrl.envs.transforms.transforms.RewardScaling"
 
     def __post_init__(self) -> None:
@@ -249,12 +253,15 @@ class RewardScalingConfig(TransformConfig):
 
 @dataclass
 class VecNormConfig(TransformConfig):
-    """Configuration for VecNorm transform."""
+    """Hydra configuration for :class:`~torchrl.envs.transforms.VecNorm`.
+
+    ``decay`` and ``eps`` match ``VecNorm.__init__`` (``0.9999`` and ``1e-4``).
+    """
 
     in_keys: list[str] | None = None
     out_keys: list[str] | None = None
-    decay: float = 0.99
-    eps: float = 1e-8
+    decay: float = 0.9999
+    eps: float = 1e-4
     _target_: str = "torchrl.envs.transforms.transforms.VecNorm"
 
     def __post_init__(self) -> None:
@@ -473,11 +480,20 @@ class CatTensorsConfig(TransformConfig):
 
 @dataclass
 class StackConfig(TransformConfig):
-    """Configuration for Stack transform."""
+    """Hydra configuration for :class:`~torchrl.envs.transforms.Stack`.
 
-    dim: int = 0
+    Every kwarg accepted by ``Stack.__init__`` is exposed as a field here
+    with the same default. ``out_key`` is required (``MISSING``), so Hydra
+    does not pass ``None``.
+    """
+
     in_keys: list[str] | None = None
-    out_keys: list[str] | None = None
+    out_key: Any = MISSING
+    in_key_inv: Any = None
+    out_keys_inv: list[Any] | None = None
+    dim: int = -1
+    allow_positive_dim: bool = False
+    del_keys: bool = True
     _target_: str = "torchrl.envs.transforms.transforms.Stack"
 
     def __post_init__(self) -> None:
@@ -645,11 +661,16 @@ class RenameTransformConfig(TransformConfig):
 
 @dataclass
 class Reward2GoTransformConfig(TransformConfig):
-    """Configuration for Reward2GoTransform."""
+    """Hydra configuration for :class:`~torchrl.envs.transforms.Reward2GoTransform`.
 
-    gamma: float = 0.99
+    Every kwarg accepted by ``Reward2GoTransform.__init__`` is exposed as a
+    field here with the same default.
+    """
+
+    gamma: float = 1.0
     in_keys: list[str] | None = None
     out_keys: list[str] | None = None
+    done_key: Any = "done"
     _target_: str = "torchrl.envs.transforms.transforms.Reward2GoTransform"
 
     def __post_init__(self) -> None:
@@ -912,12 +933,15 @@ class VIPRewardTransformConfig(TransformConfig):
 
 @dataclass
 class VecNormV2Config(TransformConfig):
-    """Configuration for VecNormV2 transform."""
+    """Hydra configuration for :class:`~torchrl.envs.transforms.VecNormV2`.
+
+    ``decay`` and ``eps`` match ``VecNormV2.__init__`` (``0.9999`` and ``1e-4``).
+    """
 
     in_keys: list[str] | None = None
     out_keys: list[str] | None = None
-    decay: float = 0.99
-    eps: float = 1e-8
+    decay: float = 0.9999
+    eps: float = 1e-4
     _target_: str = "torchrl.envs.transforms.vecnorm.VecNormV2"
 
     def __post_init__(self) -> None:
