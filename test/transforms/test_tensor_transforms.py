@@ -25,6 +25,8 @@ from torchrl.envs import (
     CatTensors,
     Compose,
     DoubleToFloat,
+    RewardScaling,
+    RewardSum,
     SerialEnv,
     SqueezeTransform,
     Stack,
@@ -51,6 +53,45 @@ from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     MultiAgentCountingEnv,
 )
+
+
+def _stack_agents_env(with_reward_sum: str | None, in_key_inv: bool = True):
+    """Two-agent env whose per-agent reward is 1 per step, stacked under ``stacked_agents``.
+
+    ``with_reward_sum`` is ``"before"`` or ``"after"`` the ``Stack``, or ``None``.
+    """
+    agents = [("agents", f"agent_{i}") for i in range(2)]
+    scaling = RewardScaling(
+        loc=1.0, scale=1.0, in_keys=[(*agent, "reward") for agent in agents]
+    )
+    stack = Stack(
+        in_keys=agents,
+        out_key="stacked_agents",
+        **(
+            {"in_key_inv": "stacked_agents", "out_keys_inv": agents}
+            if in_key_inv
+            else {}
+        ),
+    )
+    transforms = [scaling, stack]
+    if with_reward_sum == "before":
+        transforms.insert(
+            1,
+            RewardSum(
+                in_keys=[(*agent, "reward") for agent in agents],
+                out_keys=[(*agent, "episode_reward") for agent in agents],
+            ),
+        )
+    elif with_reward_sum == "after":
+        transforms.append(
+            RewardSum(
+                in_keys=[("stacked_agents", "reward")],
+                out_keys=[("stacked_agents", "episode_reward")],
+            )
+        )
+    return TransformedEnv(
+        MultiAgentCountingEnv(n_agents=2, max_steps=5), Compose(*transforms)
+    )
 
 
 class TestStack(TransformBase):
@@ -438,6 +479,27 @@ class TestStack(TransformBase):
         )
         td = t.inv(td)
         assert (td == td_orig).all()
+
+    def test_stateful_transform_before_stack(self):
+        # A RewardSum placed before Stack keeps its state under the per-agent keys
+        # and Stack carries it along: the episode reward accumulates over the
+        # 6 steps of an episode and is reset when the episode is done.
+        env = _stack_agents_env("before")
+        td = env.rollout(14, break_when_any_done=False)
+        expected = (torch.arange(14) % 6 + 1).view(14, 1, 1).expand(14, 2, 1)
+        torch.testing.assert_close(
+            td["next", "stacked_agents", "episode_reward"], expected.float()
+        )
+
+    def test_stateful_transform_after_stack_raises(self):
+        # Stack.inv removes the stacked entry before the transforms' _step is
+        # called, so a RewardSum storing its state under it would be silently
+        # reset at every step. The wiring is rejected instead.
+        with pytest.raises(ValueError, match="stacked_agents"):
+            _stack_agents_env("after").input_spec
+        # A Stack that is not inverted never removes anything
+        env = _stack_agents_env("after", in_key_inv=False)
+        assert ("stacked_agents", "episode_reward") in env.state_spec.keys(True, True)
 
 
 class TestCatTensors(TransformBase):

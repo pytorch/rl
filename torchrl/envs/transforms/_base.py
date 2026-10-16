@@ -19,7 +19,7 @@ import torch
 
 from tensordict import is_leaf_nontensor, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import dispatch
-from tensordict.utils import NestedKey
+from tensordict.utils import _unravel_key_to_tuple, NestedKey
 from torch import nn
 from torch.utils._pytree import tree_map
 
@@ -99,6 +99,13 @@ __all__ = [
     "Transform",
     "TransformedEnv",
 ]
+
+
+def _key_is_under(key: NestedKey, prefix: NestedKey) -> bool:
+    """Returns ``True`` if ``key`` is ``prefix`` or one of its nested entries."""
+    key = _unravel_key_to_tuple(key)
+    prefix = _unravel_key_to_tuple(prefix)
+    return key[: len(prefix)] == prefix
 
 
 def _apply_to_composite(function):
@@ -617,6 +624,33 @@ class Transform(nn.Module):
             elif not self.missing_tolerance:
                 raise KeyError(f"'{out_key}' not found in tensordict {tensordict}")
         return tensordict
+
+    def _inv_drops_key(self, key: NestedKey) -> bool:
+        """Declare whether :meth:`_inv_call` removes ``key`` from the data seen by later transforms.
+
+        This declaration lets a transform advertise a restriction on how it can be composed
+
+        :meth:`TransformedEnv._step` inverts the input data through the whole
+        chain and hands the result to the :meth:`_step` of every transform. A
+        transform whose inverse removes, or renames away, an entry therefore
+        hides it from the transforms placed after it. This is harmless for
+        stateless transforms, but a stateful one (e.g.
+        :class:`~torchrl.envs.RewardSum`) that registers its state under such an
+        entry would read it as missing at every step.
+
+        Override this method to return ``True`` for the keys the inverse pass
+        removes: Such that users (such as :class:`Compose`) can refuse to build a 
+        chain where a transform registering a new state entry under one of these 
+        keys comes after this transform.
+
+        Args:
+            key (NestedKey): an entry of the input (state) spec of the
+                transformed environment.
+
+        Returns:
+            ``True`` if the inverse pass drops ``key``. Defaults to ``False``.
+        """
+        return False
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1830,13 +1864,37 @@ class Compose(Transform):
         # last then the first.
         # To know what the action spec is to the 'outside world' (ie, to the policy) we must take
         # the action spec from the env, map it using t0 then t1 (going from in to out).
-        for t in self.transforms:
+        for i, t in enumerate(self.transforms):
+            state_keys = self._state_keys(input_spec)
             input_spec = t.transform_input_spec(input_spec)
             if not isinstance(input_spec, Composite):
                 raise TypeError(
                     f"Expected Compose but got {type(input_spec)} with transform {t}"
                 )
+            # A state entry registered by ``t`` is read from the data at time t
+            # in ``_step``. If the inverse of a previous transform removed it,
+            # ``t`` would silently read it as missing at every step.
+            for key in self._state_keys(input_spec) - state_keys:
+                for previous in self.transforms[:i]:
+                    if previous._inv_drops_key(key):
+                        raise ValueError(
+                            f"{t} registers the state entry {key}, which the inverse "
+                            f"pass of the preceding transform {previous} removes before "
+                            f"{t}._step reads it, so its state would be lost at every "
+                            f"step. Place {t} before {previous} in the Compose and "
+                            f"build its keys from the keys of the base environment."
+                        )
         return input_spec
+
+    @staticmethod
+    def _state_keys(input_spec: Composite) -> set[tuple[str, ...]]:
+        state_spec = input_spec.get("full_state_spec", None)
+        if state_spec is None:
+            return set()
+        return {_unravel_key_to_tuple(key) for key in state_spec.keys(True, True)}
+
+    def _inv_drops_key(self, key: NestedKey) -> bool:
+        return any(t._inv_drops_key(key) for t in self.transforms)
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         # To understand why we don't invert, look up at transform_input_spec
