@@ -5,7 +5,10 @@ unset PYTORCH_VERSION
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
 export DEBIAN_FRONTEND=noninteractive
-apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc libosmesa6-dev cmake
+apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc libosmesa6-dev cmake software-properties-common gpg-agent
+add-apt-repository -y ppa:ubuntu-toolchain-r/test
+apt-get update && apt-get install -y gcc-11 g++-11
+export CC=gcc-11 CXX=g++-11
 
 set -e
 set -v

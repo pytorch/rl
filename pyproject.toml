@@ -38,13 +38,13 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.13.0",
+    "torch>=2.13.0a0",
     "pyvers>=0.2.3",
     "hoptorch>=0.1.4",
     "numpy",
     "packaging",
     "cloudpickle",
-    "tensordict>=0.14.2,<0.15.0",
+    "tensordict>=0.15.0,<0.16.0",
 ]
 
 [dependency-groups]
