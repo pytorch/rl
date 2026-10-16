@@ -44,10 +44,12 @@ else
 fi
 
 
-# MuJoCo physics backends -- pinned for compatibility with mujoco-torch 0.2.0:
-# mujoco>=3.8 removed the mjENBL_MULTICCD enum that mujoco-torch 0.2.0 references.
+# MuJoCo physics backends. mujoco-torch 0.2.0 fails under torch.compile on
+# current torch, so it is installed from a main commit that includes
+# vmoens/mujoco-torch#85.
 pip install mujoco==3.7.0 mujoco-mjx==3.7.0 'jax[cuda12]>=0.7.0,<0.11' --progress-bar off
-pip install mujoco-torch==0.2.0 --no-deps --progress-bar off
+MUJOCO_TORCH_REF=2676d912bc5972fa9d1ceec21ddaea932f20840d
+pip install "git+https://github.com/vmoens/mujoco-torch.git@${MUJOCO_TORCH_REF}" --no-deps --progress-bar off
 pip install mujoco-menagerie --progress-bar off
 
 # install tensordict
