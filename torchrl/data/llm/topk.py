@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 from typing import Any
 
 import torch
-from tensordict import NestedKey, TensorDictBase
+from tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.transforms import Transform
 
@@ -121,8 +121,15 @@ class TopKRewardSelector(Transform):
                     torchrl_logger.info(f"Getting top-k rewards for {prompt=}")
                 # Cat is the most robust way to combine the trajs
                 tds = torch.cat(list(self.queues[prompt]), -1)
-                # Collect rewards
-                reward = tds.get(self.rewards_key, as_nested_tensor=True)
+                # Collect rewards: a nested tensor from a lazy stack of
+                # trajectories, a regular tensor from a regular TensorDict.
+                # From tensordict 0.17, as_nested_tensor=True returns a nested
+                # tensor for a regular TensorDict too, so it is only passed to
+                # lazy stacks.
+                if isinstance(tds, LazyStackedTensorDict):
+                    reward = tds.get(self.rewards_key, as_nested_tensor=True)
+                else:
+                    reward = tds.get(self.rewards_key)
                 reward = self._aggregate_rewards(reward)
                 # Check if all rewards are equal
                 if (reward == reward[0]).all():
@@ -174,7 +181,8 @@ class TopKRewardSelector(Transform):
     def _aggregate_rewards(self, reward: torch.Tensor) -> torch.Tensor:
         """Aggregate the rewards across the dialog turns.
 
-        `reward` is expected to be a nested tensor.
+        `reward` is a nested tensor when the trajectories are lazily stacked,
+        and a regular tensor otherwise.
 
         The default implementation is to take the mean of the rewards across the dialog turns.
         """
