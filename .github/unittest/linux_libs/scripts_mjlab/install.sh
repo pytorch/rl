@@ -25,13 +25,13 @@ if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install torch --index-url https://download.pytorch.org/whl/cpu -U
   else
-      pip3 install torch --index-url https://download.pytorch.org/whl/cu128
+      pip3 install torch --index-url https://download.pytorch.org/whl/cu130
   fi
 else
   printf "Failed to install pytorch"
@@ -41,7 +41,7 @@ fi
 # Install mjlab after PyTorch so its torch>=2.7 dependency is satisfied by the
 # CI-selected wheel rather than pulling a second torch build from PyPI.
 pip install "mjlab>=1.4.0" --progress-bar off
-pip install git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt) --progress-bar off
+pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
 
 python -c "import torch; import tensordict; import mjlab"
 

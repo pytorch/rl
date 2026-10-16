@@ -26,13 +26,13 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       runner: mt-l-x86aavx2-45-167-a10g-4
       repository: pytorch/rl
-      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.8.1-cudnn-devel-ubuntu24.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda13.0.3-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90

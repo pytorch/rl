@@ -21,18 +21,18 @@ fi
 
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with cu128"
+printf "Installing PyTorch with cu130"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install torch --index-url https://download.pytorch.org/whl/cpu -U
   else
-      pip3 install torch --index-url https://download.pytorch.org/whl/cu128 -U
+      pip3 install torch --index-url https://download.pytorch.org/whl/cu130 -U
   fi
 else
   printf "Failed to install pytorch"
@@ -40,7 +40,7 @@ else
 fi
 
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
+  pip3 install git+https://github.com/pytorch/tensordict.git
 else
   pip3 install tensordict
 fi

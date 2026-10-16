@@ -58,7 +58,8 @@ if [[ -f "${ISAACLAB_PYTHON}" ]]; then
     echo "* Installing tensordict from source (no-deps to avoid packaging conflicts)..."
     if [[ "$RELEASE" == 0 ]]; then
         "${ISAACLAB_PYTHON}" -p -m pip install "pybind11[global]" --disable-pip-version-check
-        "${ISAACLAB_PYTHON}" -p -m pip install git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt) --no-deps --disable-pip-version-check
+        TENSORDICT_REF_BEFORE_TORCH_2_13=037156fbf7c73daf70b648c15824bb01fa0aac79
+        "${ISAACLAB_PYTHON}" -p -m pip install "git+https://github.com/pytorch/tensordict.git@${TENSORDICT_REF_BEFORE_TORCH_2_13}" --no-deps --disable-pip-version-check
         # Install only the missing dependencies that won't conflict
         "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle 'orjson; python_version < "3.13"' "pyvers>=0.2.3" --no-deps --disable-pip-version-check
     else
