@@ -266,6 +266,7 @@ class TransitiveQLossConfig(LossConfig):
     alpha: float = 1.0
     actor_action: str = "mode"
     _target_: str = "torchrl.objectives.TransitiveQLoss"
+    _convert_: str = "object"
 
 
 @dataclass

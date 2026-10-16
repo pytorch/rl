@@ -2596,6 +2596,10 @@ class TestLossConfigs:
             ProbabilisticActor,
         )
         from torchrl.objectives import TransitiveQLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TensorDictModuleConfig,
+        )
         from torchrl.trainers.algorithms.configs.objectives import TransitiveQLossConfig
 
         actor = ProbabilisticActor(
@@ -2614,15 +2618,14 @@ class TestLossConfigs:
             in_keys=["loc", "scale"],
             distribution_class=IndependentNormal,
         )
-        critic = TensorDictModule(
-            MLP(in_features=8, out_features=1, num_cells=[8]),
+        critic = TensorDictModuleConfig(
+            module=MLPConfig(in_features=8, out_features=1, num_cells=[8]),
             in_keys=["observation", "goal", "action"],
             out_keys=["state_action_value"],
         )
         cfg = TransitiveQLossConfig(
             actor_network=actor,
-            qvalue_network=critic,
-            num_qvalue_nets=3,
+            qvalue_network=[critic, critic],
             discount=0.9,
             expectile=0.6,
         )
@@ -2630,7 +2633,9 @@ class TestLossConfigs:
         assert type(loss) is TransitiveQLoss
         assert loss.discount == 0.9
         assert loss.expectile == 0.6
-        assert loss.qvalue_network_params.batch_size == torch.Size([3])
+        weights = loss.qvalue_network_params["module", "0", "weight"]
+        assert weights.shape[0] == 2
+        assert not torch.equal(weights[0], weights[1])
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_dqn_loss_config(self):

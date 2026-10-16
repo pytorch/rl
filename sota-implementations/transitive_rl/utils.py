@@ -132,7 +132,6 @@ def load_dataset(cfg: DictConfig) -> tuple[TensorDict, gym.Env]:
 def make_replay_buffer(cfg: DictConfig, device: torch.device):
     """Return the replay buffer, the evaluation env and the policy-goal dimension."""
     data, raw_env = load_dataset(cfg)
-    data = data.to(device)
     replay = TensorDictReplayBuffer(
         storage=LazyTensorStorage(data.numel(), device=device),
         batch_size=cfg.optim.batch_size,

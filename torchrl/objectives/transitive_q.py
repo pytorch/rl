@@ -69,7 +69,9 @@ class TransitiveQLoss(LossModule):
     Anchors whose :attr:`~torchrl.objectives.LossModule.loss_mask_key` entry
     is ``False`` are left out of every term. It defaults to the
     ``"validity_mask"`` written by
-    :class:`~torchrl.data.replay_buffers.SubgoalTriplet`.
+    :class:`~torchrl.data.replay_buffers.SubgoalTriplet`. The loss assumes
+    uniform anchor sampling: it neither applies prioritized-replay importance
+    weights nor writes a priority entry.
 
     Args:
         actor_network (TensorDictModule): a probabilistic actor reading the
