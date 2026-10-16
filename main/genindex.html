@@ -3348,6 +3348,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.BODY_VELOCITY_START">BODY_VELOCITY_START (torchrl.envs.MicroDuckEnv attribute)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate">bootstrap_estimate (class in torchrl.collectors)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Bounded.html#torchrl.data.Bounded">Bounded (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.BraxEnv.html#torchrl.envs.BraxEnv">BraxEnv() (in module torchrl.envs)</a>
@@ -7031,6 +7033,8 @@ document.write(`
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate">evaluate() (torchrl.collectors.Evaluator method)</a>
+</li>
+      <li><a href="reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate_episodes">evaluate_episodes() (torchrl.collectors.Evaluator method)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator">Evaluator (class in torchrl.collectors)</a>
 </li>
@@ -15348,12 +15352,12 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor">OnlineDTActor (class in torchrl.modules)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss">OnlineDTLoss (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer">OnPolicyTrainer (class in torchrl.trainers.algorithms)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig">OnPolicyTrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction.open_gripper">open_gripper() (torchrl.envs.transforms.RobotMacroAction class method)</a>
@@ -15443,19 +15447,13 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.objectives.ACTLoss.html#torchrl.objectives.ACTLoss.out_keys">(torchrl.objectives.ACTLoss property)</a>
 </li>
-        <li><a href="reference/generated/torchrl.objectives.BCLoss.html#torchrl.objectives.BCLoss.out_keys">(torchrl.objectives.BCLoss property)</a>
-</li>
         <li><a href="reference/generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss.out_keys">(torchrl.objectives.ClipPPOLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss.out_keys">(torchrl.objectives.CQLLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.out_keys">(torchrl.objectives.CrossQLoss property)</a>
 </li>
-        <li><a href="reference/generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss.out_keys">(torchrl.objectives.DDPGLoss property)</a>
-</li>
         <li><a href="reference/generated/torchrl.objectives.DiffusionBCLoss.html#torchrl.objectives.DiffusionBCLoss.out_keys">(torchrl.objectives.DiffusionBCLoss property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss.out_keys">(torchrl.objectives.DQNLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.DTLoss.html#torchrl.objectives.DTLoss.out_keys">(torchrl.objectives.DTLoss property)</a>
 </li>
@@ -15707,6 +15705,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.modules.llm.RemoteTransformersWrapper.html#torchrl.modules.llm.RemoteTransformersWrapper.pad_output">pad_output (torchrl.modules.llm.RemoteTransformersWrapper property)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.padding_value">padding_value (torchrl.modules.MaskedCategorical property)</a>
+</li>
+      <li><a href="reference/generated/torchrl.collectors.paired_comparison.html#torchrl.collectors.paired_comparison">paired_comparison (class in torchrl.collectors)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.helpers.parallel_env_constructor.html#torchrl.trainers.helpers.parallel_env_constructor">parallel_env_constructor() (in module torchrl.trainers.helpers)</a>
 </li>
@@ -15960,10 +15960,10 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector.policy">policy (torchrl.collectors.AsyncBatchedCollector property)</a>
 </li>
-      <li><a href="reference/glossary.html#term-policy_device"><strong>policy_device</strong></a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/glossary.html#term-policy_device"><strong>policy_device</strong></a>
+</li>
       <li><a href="reference/generated/torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss.policy_operator">policy_operator() (torchrl.objectives.FQLLoss method)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.TdMpc2Planner.html#torchrl.modules.TdMpc2Planner.policy_prior">policy_prior (torchrl.modules.TdMpc2Planner property)</a>

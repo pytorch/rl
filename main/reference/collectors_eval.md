@@ -196,7 +196,65 @@ def on_eval(result):
 evaluator = Evaluator(env, policy, max_steps=1000, on_result=on_eval)
 ```
 
+## Comparing policies
+
+To compare policies, environments (for instance the same task in two
+simulators) or perturbations, call [`evaluate_episodes()`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate_episodes) on
+each combination with a fixed set of seeds, then reduce the per-episode returns
+with [`bootstrap_estimate()`](generated/torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate) and [`paired_comparison()`](generated/torchrl.collectors.paired_comparison.html#torchrl.collectors.paired_comparison).
+
+[`evaluate_episodes()`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate_episodes) makes every rollout contribute exactly one
+episode per sub-environment. [`evaluate()`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate) defaults to
+`episode_sampling="first_done"`, which keeps the first episodes to finish:
+short episodes are over-represented whenever more episodes than
+sub-environments are requested, even when all sub-environments are identical,
+and different tasks per sub-environment make the bias larger. Passing the same
+`seed` reseeds the environment and the torch RNG before every rollout, so each
+episode starts from the same state whatever the policy and the results are
+paired episode by episode.
+
+```
+import torch
+from torchrl.collectors import Evaluator, bootstrap_estimate, paired_comparison
+
+policies = {"ppo": ppo_policy, "sac": sac_policy}
+envs = {"gymnasium": make_gym_env, "mujoco": make_mujoco_env}
+seeds = range(5)
+
+returns = {}
+for env_name, make_env in envs.items():
+ for policy_name, policy in policies.items():
+ evaluator = Evaluator(make_env(), policy, num_trajectories=10, max_steps=1000)
+ returns[env_name, policy_name] = torch.cat(
+ [
+ evaluator.evaluate_episodes(seed=seed)["episode_reward"]
+ for seed in seeds
+ ]
+ )
+ evaluator.shutdown()
+
+for env_name in envs:
+ summary = bootstrap_estimate(returns[env_name, "ppo"], statistic="iqm")
+ versus = paired_comparison(returns[env_name, "ppo"], returns[env_name, "sac"])
+ logger.log_metrics(
+ {
+ f"{env_name}/ppo/iqm": summary["estimate"],
+ f"{env_name}/ppo_minus_sac": versus["estimate"],
+ f"{env_name}/ppo_beats_sac": versus["probability_of_improvement"],
+ }
+ )
+```
+
+The episodes also carry `"truncated"` (the episode hit `max_steps` or the
+environment's own time limit) and `"env_index"` (the sub-environment that
+ran it), to filter or group them before reducing.
+
+Perturbations follow the same pattern: make them part of the environment
+factory (for instance `lambda: make_env().append_transform(FrameSkipTransform(2))`).
+
 ## API Reference
 
 | [`Evaluator`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator)(env[, policy, policy_factory, ...]) | Unified sync / async evaluator with pluggable backend. |
 | --- | --- |
+| [`bootstrap_estimate`](generated/torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate)(values[, dim, statistic, ...]) | Reduce `values` along `dim` to an estimate with a percentile bootstrap interval. |
+| [`paired_comparison`](generated/torchrl.collectors.paired_comparison.html#torchrl.collectors.paired_comparison)(first, second[, dim, ...]) | Compare two sets of paired samples, e.g. two policies evaluated on the same seeds. |

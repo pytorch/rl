@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.collectors
+
+
+paired_comparison
+=================
+
+.. autoclass:: paired_comparison
+    :members:
+    :inherited-members:

@@ -250,6 +250,7 @@ name a concrete implementation.
 - [Result callbacks](collectors_eval.html#result-callbacks)
 - [Backends](collectors_eval.html#backends)
 - [Custom metrics and callbacks](collectors_eval.html#custom-metrics-and-callbacks)
+- [Comparing policies](collectors_eval.html#comparing-policies)
 - [API Reference](collectors_eval.html#api-reference)
 - [Distributed Collectors](collectors_distributed.html)
 

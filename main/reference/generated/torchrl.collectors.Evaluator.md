@@ -1,6 +1,6 @@
 # Evaluator
 
-*class*torchrl.collectors.Evaluator(*env: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) | Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | Callable | None = None*, ***, *policy_factory: Callable[[...], Callable] | None = None*, *num_trajectories: int = 10*, *max_steps: int | None = None*, *frames_per_batch: int | None = None*, *collector_cls: type | str | None = None*, *collector_kwargs: dict | None = None*, *weight_sync_schemes: dict[str, Any] | None = None*, *log_prefix: str = 'eval'*, *reward_keys: str | tuple[str, ...] = ('next', 'reward')*, *done_keys: str | tuple[str, ...] = ('next', 'done')*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.DETERMINISTIC*, *metrics_fn: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], dict[str, float]] | None = None*, *dump_video: bool = True*, *on_result: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *busy_policy: str = 'skip'*, *backend: str = 'thread'*, *init_fn: Callable[[], None] | None = None*, *num_gpus: int = 1*, *ray_kwargs: dict | None = None*)[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator)
+*class*torchrl.collectors.Evaluator(*env: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) | Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | Callable | None = None*, ***, *policy_factory: Callable[[...], Callable] | None = None*, *num_trajectories: int = 10*, *max_steps: int | None = None*, *frames_per_batch: int | None = None*, *collector_cls: type | str | None = None*, *collector_kwargs: dict | None = None*, *weight_sync_schemes: dict[str, Any] | None = None*, *log_prefix: str = 'eval'*, *reward_keys: str | tuple[str, ...] = ('next', 'reward')*, *done_keys: str | tuple[str, ...] = ('next', 'done')*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.DETERMINISTIC*, *metrics_fn: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], dict[str, float]] | None = None*, *dump_video: bool = True*, *on_result: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *episode_sampling: Literal['first_done', 'per_env'] = 'first_done'*, *busy_policy: str = 'skip'*, *backend: str = 'thread'*, *init_fn: Callable[[], None] | None = None*, *num_gpus: int = 1*, *ray_kwargs: dict | None = None*)[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator)
 
 Unified sync / async evaluator with pluggable backend.
 
@@ -149,6 +149,16 @@ Default: `True`.
 completed evaluation. The callback receives a flat tensordict
 with the same prefixed metric names returned by
 `evaluate()`, `poll()`, and `wait()`.
+- **episode_sampling** (*str*) - How episodes are gathered from a batched
+environment. `"first_done"` (default) keeps the first
+`num_trajectories` episodes to finish, which biases the sample
+towards short episodes, even with identical sub-environments.
+`"per_env"` rolls the environment out with
+`break_when_all_done=True` so that each rollout yields exactly
+one episode per sub-environment; it requires the `"thread"`
+backend without `weight_sync_schemes` and an integer
+`max_steps`. `evaluate_episodes()` always samples
+`"per_env"`. Default: `"first_done"`.
 - **busy_policy** (*str*) -
 
 Behaviour when `trigger_eval()` is called
@@ -228,6 +238,77 @@ Returns:
 
 dict with at least `"<prefix>/reward"` and
 `"<prefix>/episode_length"` keys.
+
+evaluate_episodes(*weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None = None*, *step: int | None = None*, ***, *weights_dict: dict[str, [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)] | None = None*, *seed: int | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator.evaluate_episodes)
+
+Run a blocking evaluation and return one entry per episode.
+
+Episodes are always sampled `"per_env"` (see `episode_sampling`):
+each rollout of the environment contributes exactly one episode per
+sub-environment until `num_trajectories` episodes are gathered.
+Unlike `evaluate()`, this does not advance the internal step
+counter and does not call `on_result` or `metrics_fn`. When the
+env has a device, the policy may live on another one: data is moved
+between them at each step. The policy's train/eval mode is restored
+afterwards, also when a rollout raises. Requires the `"thread"`
+backend without `weight_sync_schemes` and an integer `max_steps`.
+
+Parameters:
+
+- **weights** (*TensorDictBase**or**nn.Module**,**optional*) - Policy weights to
+load before the rollouts. See `evaluate()`. Defaults to
+`None` (current weights).
+- **step** (*int**,**optional*) - Step at which the video of a
+[`VideoRecorder`](torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder) on the env is logged.
+Defaults to `None` (the recorder's own counter).
+
+Keyword Arguments:
+
+- **weights_dict** (*dict**,**optional*) - Multi-model weights dict. See
+`evaluate()`. Defaults to `None`.
+- **seed** (*int**,**optional*) - Before each rollout, the torch RNG (CPU and
+the current accelerator, e.g. CUDA or MPS) is seeded and
+[`set_seed()`](torchrl.envs.EnvBase.html#id3) is called with a seed
+derived from `seed` and the rollout index only, so two
+evaluations with the same `seed` start each episode from the
+same state whatever the policy, and their results are paired
+episode by episode. The caller's
+torch RNG state is restored afterwards, while the environment
+keeps the seeds it was given. Defaults to `None` (RNGs are
+left untouched).
+
+Returns:
+
+a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) of batch size
+`[num_trajectories]` on the env device, with entries
+`"episode_reward"` (the final `("next", "episode_reward")` of
+a [`RewardSum`](torchrl.envs.transforms.RewardSum.html#torchrl.envs.transforms.RewardSum) when present,
+otherwise the sum of rewards), `"episode_length"` (int64),
+`"truncated"` (bool, `True` when the episode reached
+`max_steps` without a done or the env flagged it as truncated)
+and `"env_index"` (int64, the flat index of the sub-environment
+that ran the episode).
+
+Examples
+
+```
+>>> from torchrl.collectors import Evaluator, paired_comparison
+>>> from torchrl.envs import GymEnv, SerialEnv
+>>> from torchrl.modules import RandomPolicy
+>>> env = SerialEnv(4, lambda: GymEnv("Pendulum-v1"))
+>>> evaluator = Evaluator(
+... env, RandomPolicy(env.action_spec), num_trajectories=6, max_steps=50
+... )
+>>> episodes = evaluator.evaluate_episodes(seed=0)
+>>> episodes["env_index"], episodes["truncated"].all()
+(tensor([0, 1, 2, 3, 0, 1]), tensor(True))
+>>> again = evaluator.evaluate_episodes(seed=0)
+>>> paired_comparison(again["episode_reward"], episodes["episode_reward"])[
+... "estimate"
+... ]
+tensor(0.)
+>>> evaluator.shutdown()
+```
 
 *static*extract_weights(*policy: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator.extract_weights)
 

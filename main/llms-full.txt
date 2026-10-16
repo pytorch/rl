@@ -1132,6 +1132,7 @@ name a concrete implementation.
 - [Result callbacks](collectors_eval.html#result-callbacks)
 - [Backends](collectors_eval.html#backends)
 - [Custom metrics and callbacks](collectors_eval.html#custom-metrics-and-callbacks)
+- [Comparing policies](collectors_eval.html#comparing-policies)
 - [API Reference](collectors_eval.html#api-reference)
 - [Distributed Collectors](collectors_distributed.html)
 
@@ -1627,10 +1628,68 @@ def on_eval(result):
 evaluator = Evaluator(env, policy, max_steps=1000, on_result=on_eval)
 ```
 
+## Comparing policies
+
+To compare policies, environments (for instance the same task in two
+simulators) or perturbations, call [`evaluate_episodes()`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate_episodes) on
+each combination with a fixed set of seeds, then reduce the per-episode returns
+with [`bootstrap_estimate()`](generated/torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate) and [`paired_comparison()`](generated/torchrl.collectors.paired_comparison.html#torchrl.collectors.paired_comparison).
+
+[`evaluate_episodes()`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate_episodes) makes every rollout contribute exactly one
+episode per sub-environment. [`evaluate()`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate) defaults to
+`episode_sampling="first_done"`, which keeps the first episodes to finish:
+short episodes are over-represented whenever more episodes than
+sub-environments are requested, even when all sub-environments are identical,
+and different tasks per sub-environment make the bias larger. Passing the same
+`seed` reseeds the environment and the torch RNG before every rollout, so each
+episode starts from the same state whatever the policy and the results are
+paired episode by episode.
+
+```
+import torch
+from torchrl.collectors import Evaluator, bootstrap_estimate, paired_comparison
+
+policies = {"ppo": ppo_policy, "sac": sac_policy}
+envs = {"gymnasium": make_gym_env, "mujoco": make_mujoco_env}
+seeds = range(5)
+
+returns = {}
+for env_name, make_env in envs.items():
+ for policy_name, policy in policies.items():
+ evaluator = Evaluator(make_env(), policy, num_trajectories=10, max_steps=1000)
+ returns[env_name, policy_name] = torch.cat(
+ [
+ evaluator.evaluate_episodes(seed=seed)["episode_reward"]
+ for seed in seeds
+ ]
+ )
+ evaluator.shutdown()
+
+for env_name in envs:
+ summary = bootstrap_estimate(returns[env_name, "ppo"], statistic="iqm")
+ versus = paired_comparison(returns[env_name, "ppo"], returns[env_name, "sac"])
+ logger.log_metrics(
+ {
+ f"{env_name}/ppo/iqm": summary["estimate"],
+ f"{env_name}/ppo_minus_sac": versus["estimate"],
+ f"{env_name}/ppo_beats_sac": versus["probability_of_improvement"],
+ }
+ )
+```
+
+The episodes also carry `"truncated"` (the episode hit `max_steps` or the
+environment's own time limit) and `"env_index"` (the sub-environment that
+ran it), to filter or group them before reducing.
+
+Perturbations follow the same pattern: make them part of the environment
+factory (for instance `lambda: make_env().append_transform(FrameSkipTransform(2))`).
+
 ## API Reference
 
 | [`Evaluator`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator)(env[, policy, policy_factory, ...]) | Unified sync / async evaluator with pluggable backend. |
 | --- | --- |
+| [`bootstrap_estimate`](generated/torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate)(values[, dim, statistic, ...]) | Reduce `values` along `dim` to an estimate with a percentile bootstrap interval. |
+| [`paired_comparison`](generated/torchrl.collectors.paired_comparison.html#torchrl.collectors.paired_comparison)(first, second[, dim, ...]) | Compare two sets of paired samples, e.g. two policies evaluated on the same seeds. |
 
 ---
 
@@ -14259,7 +14318,7 @@ Raises:
 
 # Evaluator
 
-*class*torchrl.collectors.Evaluator(*env: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) | Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | Callable | None = None*, ***, *policy_factory: Callable[[...], Callable] | None = None*, *num_trajectories: int = 10*, *max_steps: int | None = None*, *frames_per_batch: int | None = None*, *collector_cls: type | str | None = None*, *collector_kwargs: dict | None = None*, *weight_sync_schemes: dict[str, Any] | None = None*, *log_prefix: str = 'eval'*, *reward_keys: str | tuple[str, ...] = ('next', 'reward')*, *done_keys: str | tuple[str, ...] = ('next', 'done')*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.DETERMINISTIC*, *metrics_fn: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], dict[str, float]] | None = None*, *dump_video: bool = True*, *on_result: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *busy_policy: str = 'skip'*, *backend: str = 'thread'*, *init_fn: Callable[[], None] | None = None*, *num_gpus: int = 1*, *ray_kwargs: dict | None = None*)[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator)
+*class*torchrl.collectors.Evaluator(*env: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) | Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | Callable | None = None*, ***, *policy_factory: Callable[[...], Callable] | None = None*, *num_trajectories: int = 10*, *max_steps: int | None = None*, *frames_per_batch: int | None = None*, *collector_cls: type | str | None = None*, *collector_kwargs: dict | None = None*, *weight_sync_schemes: dict[str, Any] | None = None*, *log_prefix: str = 'eval'*, *reward_keys: str | tuple[str, ...] = ('next', 'reward')*, *done_keys: str | tuple[str, ...] = ('next', 'done')*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.DETERMINISTIC*, *metrics_fn: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], dict[str, float]] | None = None*, *dump_video: bool = True*, *on_result: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *episode_sampling: Literal['first_done', 'per_env'] = 'first_done'*, *busy_policy: str = 'skip'*, *backend: str = 'thread'*, *init_fn: Callable[[], None] | None = None*, *num_gpus: int = 1*, *ray_kwargs: dict | None = None*)[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator)
 
 Unified sync / async evaluator with pluggable backend.
 
@@ -14408,6 +14467,16 @@ Default: `True`.
 completed evaluation. The callback receives a flat tensordict
 with the same prefixed metric names returned by
 `evaluate()`, `poll()`, and `wait()`.
+- **episode_sampling** (*str*) - How episodes are gathered from a batched
+environment. `"first_done"` (default) keeps the first
+`num_trajectories` episodes to finish, which biases the sample
+towards short episodes, even with identical sub-environments.
+`"per_env"` rolls the environment out with
+`break_when_all_done=True` so that each rollout yields exactly
+one episode per sub-environment; it requires the `"thread"`
+backend without `weight_sync_schemes` and an integer
+`max_steps`. `evaluate_episodes()` always samples
+`"per_env"`. Default: `"first_done"`.
 - **busy_policy** (*str*) -
 
 Behaviour when `trigger_eval()` is called
@@ -14487,6 +14556,77 @@ Returns:
 
 dict with at least `"<prefix>/reward"` and
 `"<prefix>/episode_length"` keys.
+
+evaluate_episodes(*weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None = None*, *step: int | None = None*, ***, *weights_dict: dict[str, [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)] | None = None*, *seed: int | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator.evaluate_episodes)
+
+Run a blocking evaluation and return one entry per episode.
+
+Episodes are always sampled `"per_env"` (see `episode_sampling`):
+each rollout of the environment contributes exactly one episode per
+sub-environment until `num_trajectories` episodes are gathered.
+Unlike `evaluate()`, this does not advance the internal step
+counter and does not call `on_result` or `metrics_fn`. When the
+env has a device, the policy may live on another one: data is moved
+between them at each step. The policy's train/eval mode is restored
+afterwards, also when a rollout raises. Requires the `"thread"`
+backend without `weight_sync_schemes` and an integer `max_steps`.
+
+Parameters:
+
+- **weights** (*TensorDictBase**or**nn.Module**,**optional*) - Policy weights to
+load before the rollouts. See `evaluate()`. Defaults to
+`None` (current weights).
+- **step** (*int**,**optional*) - Step at which the video of a
+[`VideoRecorder`](torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder) on the env is logged.
+Defaults to `None` (the recorder's own counter).
+
+Keyword Arguments:
+
+- **weights_dict** (*dict**,**optional*) - Multi-model weights dict. See
+`evaluate()`. Defaults to `None`.
+- **seed** (*int**,**optional*) - Before each rollout, the torch RNG (CPU and
+the current accelerator, e.g. CUDA or MPS) is seeded and
+[`set_seed()`](torchrl.envs.EnvBase.html#id3) is called with a seed
+derived from `seed` and the rollout index only, so two
+evaluations with the same `seed` start each episode from the
+same state whatever the policy, and their results are paired
+episode by episode. The caller's
+torch RNG state is restored afterwards, while the environment
+keeps the seeds it was given. Defaults to `None` (RNGs are
+left untouched).
+
+Returns:
+
+a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) of batch size
+`[num_trajectories]` on the env device, with entries
+`"episode_reward"` (the final `("next", "episode_reward")` of
+a [`RewardSum`](torchrl.envs.transforms.RewardSum.html#torchrl.envs.transforms.RewardSum) when present,
+otherwise the sum of rewards), `"episode_length"` (int64),
+`"truncated"` (bool, `True` when the episode reached
+`max_steps` without a done or the env flagged it as truncated)
+and `"env_index"` (int64, the flat index of the sub-environment
+that ran the episode).
+
+Examples
+
+```
+>>> from torchrl.collectors import Evaluator, paired_comparison
+>>> from torchrl.envs import GymEnv, SerialEnv
+>>> from torchrl.modules import RandomPolicy
+>>> env = SerialEnv(4, lambda: GymEnv("Pendulum-v1"))
+>>> evaluator = Evaluator(
+... env, RandomPolicy(env.action_spec), num_trajectories=6, max_steps=50
+... )
+>>> episodes = evaluator.evaluate_episodes(seed=0)
+>>> episodes["env_index"], episodes["truncated"].all()
+(tensor([0, 1, 2, 3, 0, 1]), tensor(True))
+>>> again = evaluator.evaluate_episodes(seed=0)
+>>> paired_comparison(again["episode_reward"], episodes["episode_reward"])[
+... "estimate"
+... ]
+tensor(0.)
+>>> evaluator.shutdown()
+```
 
 *static*extract_weights(*policy: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator.extract_weights)
 
@@ -18188,6 +18328,50 @@ Registers a post-hook to be called after weights are updated.
 Parameters:
 
 **hook** (*Callable**[**[**]**,**None**]*) - The post-hook to register.
+
+---
+
+# bootstrap_estimate
+
+*class*torchrl.collectors.bootstrap_estimate(*values: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *dim: int = -1*, ***, *statistic: Literal['mean', 'median', 'iqm'] = 'iqm'*, *confidence: float = 0.95*, *num_resamples: int = 1000*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | None = None*)[[source]](../../_modules/torchrl/collectors/_evaluation_stats.html#bootstrap_estimate)
+
+Reduce `values` along `dim` to an estimate with a percentile bootstrap interval.
+
+Parameters:
+
+- **values** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the samples, e.g. per-episode returns.
+- **dim** (*int**,**optional*) - the dimension holding the samples. Defaults to `-1`.
+
+Keyword Arguments:
+
+- **statistic** (*str**,**optional*) - `"mean"`, `"median"` or `"iqm"`
+(the mean of the samples left after dropping the lowest and
+highest 25%). Defaults to `"iqm"`.
+- **confidence** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - the coverage of the interval, in
+`(0, 1)`. Defaults to `0.95`.
+- **num_resamples** (*int**,**optional*) - the number of bootstrap resamples,
+each drawn with replacement. Defaults to `1000`.
+- **generator** ([*torch.Generator*](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator)*,**optional*) - the generator used to draw
+resamples, for reproducible intervals. Defaults to `None`.
+
+Returns:
+
+a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) with entries `"estimate"`,
+`"ci_low"` and `"ci_high"` whose batch size is the shape of
+`values` without `dim`.
+
+Examples
+
+```
+>>> import torch
+>>> from torchrl.collectors import bootstrap_estimate
+>>> returns = torch.tensor([[0.0, 0.0, 0.0, 100.0], [5.0, 5.0, 5.0, 5.0]])
+>>> summary = bootstrap_estimate(returns, statistic="iqm")
+>>> summary["estimate"]
+tensor([0., 5.])
+>>> summary["ci_low"][1], summary["ci_high"][1]
+(tensor(5.), tensor(5.))
+```
 
 ---
 
@@ -23241,6 +23425,52 @@ Registers a post-hook to be called after weights are updated.
 Parameters:
 
 **hook** (*Callable**[**[**]**,**None**]*) - The post-hook to register.
+
+---
+
+# paired_comparison
+
+*class*torchrl.collectors.paired_comparison(*first: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *second: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *dim: int = -1*, ***, *statistic: Literal['mean', 'median', 'iqm'] = 'mean'*, *confidence: float = 0.95*, *num_resamples: int = 1000*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | None = None*)[[source]](../../_modules/torchrl/collectors/_evaluation_stats.html#paired_comparison)
+
+Compare two sets of paired samples, e.g. two policies evaluated on the same seeds.
+
+Sample `i` of `first` and `second` must come from the same
+conditions, as with
+[`evaluate_episodes()`](torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate_episodes) called with the
+same `seed`.
+
+Parameters:
+
+- **first** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the samples of the first candidate.
+- **second** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the samples of the second candidate, with the
+same shape as `first`.
+- **dim** (*int**,**optional*) - the dimension holding the samples. Defaults to `-1`.
+
+Keyword Arguments:
+
+- **statistic** (*str**,**optional*) - the statistic of the paired differences
+`first - second`: `"mean"`, `"median"` or `"iqm"`.
+Defaults to `"mean"`.
+- **confidence** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - see [`bootstrap_estimate()`](torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate).
+- **num_resamples** (*int**,**optional*) - see [`bootstrap_estimate()`](torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate).
+- **generator** ([*torch.Generator*](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator)*,**optional*) - see [`bootstrap_estimate()`](torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate).
+
+Returns:
+
+the output of [`bootstrap_estimate()`](torchrl.collectors.bootstrap_estimate.html#torchrl.collectors.bootstrap_estimate) on `first - second`, plus
+`"probability_of_improvement"`: the fraction of pairs where
+`first` is larger, ties counting as half.
+
+Examples
+
+```
+>>> import torch
+>>> from torchrl.collectors import paired_comparison
+>>> first = torch.tensor([3.0, 5.0, 4.0, 6.0])
+>>> result = paired_comparison(first, first - 1)
+>>> result["estimate"], result["probability_of_improvement"]
+(tensor(1.), tensor(1.))
+```
 
 ---
 
@@ -104462,11 +104692,11 @@ RENDER_BACKGROUND*: ClassVar[tuple[float, float, float] | None]**= None*
 Background color for the `mujoco-torch` ray-cast renderer.
 Subclasses (e.g. satellite) override to a deep-space tone.
 
-REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'head_level_std': 0.3, 'head_pitch_target': 0.0, 'heading_std': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'turn_rate': 0.0, 'turn_rate_std': 0.5, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
+REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'head_level_std': 0.3, 'head_pitch_target': 0.0, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'turn_rate': 0.0, 'turn_rate_std': 0.5, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
 
 Default value of every term parameter a [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) carries.
 
-REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'head_level': _RegisteredTerm(fn=<function _head_level>, weight=1.0, per_second=True), 'heading': _RegisteredTerm(fn=<function heading>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'turn': _RegisteredTerm(fn=<function _turn>, weight=0.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
+REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'head_level': _RegisteredTerm(fn=<function _head_level>, weight=1.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'turn': _RegisteredTerm(fn=<function _turn>, weight=0.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
 
 Registered reward terms by name, in weight-vector order.
 
@@ -257835,13 +258065,6 @@ TensorDict with key "loss_bc".
 
 The keys that the module reads from the input tensordict.
 
-*property*out_keys
-
-The keys that the module writes to the output tensordict.
-
-After `select_out_keys()`, only the selected keys. The full list
-is in `out_keys_source`.
-
 set_keys(***kwargs*) → None[[source]](../../_modules/torchrl/objectives/bc.html#BCLoss.set_keys)
 
 Set tensordict key names.
@@ -259008,13 +259231,6 @@ Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#
 >>> ppo_loss.make_value_estimator(gae)
 ```
 
-*property*out_keys
-
-The keys that the module writes to the output tensordict.
-
-After `select_out_keys()`, only the selected keys. The full list
-is in `out_keys_source`.
-
 ---
 
 # DQNLoss
@@ -259208,13 +259424,6 @@ Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#
 >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
 >>> ppo_loss.make_value_estimator(gae)
 ```
-
-*property*out_keys
-
-The keys that the module writes to the output tensordict.
-
-After `select_out_keys()`, only the selected keys. The full list
-is in `out_keys_source`.
 
 ---
 
