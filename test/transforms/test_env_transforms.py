@@ -501,6 +501,61 @@ class TestStepCounter(TransformBase):
             : max_steps - 1
         ].any(), "Root done should be False before max_steps"
 
+    @pytest.mark.parametrize("truncating_group", ["left", "right"])
+    @pytest.mark.parametrize("update_done", [False, True])
+    def test_stepcounter_independent_nested_groups(self, truncating_group, update_done):
+        class GroupedEnv(EnvBase):
+            def __init__(self):
+                super().__init__()
+                self.observation_spec = Composite(observation=Unbounded(shape=(1,)))
+                self.action_spec = Categorical(2, shape=(1,))
+                self.reward_spec = Unbounded(shape=(1,))
+                flags = Composite(
+                    {
+                        key: Categorical(2, shape=(1,), dtype=torch.bool)
+                        for key in ("done", "terminated", "truncated")
+                    }
+                )
+                group = flags.clone()
+                group["agents"] = flags.expand(3)
+                self.done_spec = Composite(left=group.clone(), right=group.clone())
+
+            def _reset(self, tensordict=None, **kwargs):
+                return self.observation_spec.zero().update(self.full_done_spec.zero())
+
+            def _step(self, tensordict):
+                result = self._reset().update(self.full_reward_spec.zero())
+                result["right", "agents", "truncated"][0] = True
+                result["right", "agents", "done"][0] = True
+                return result
+
+            def _set_seed(self, seed):
+                pass
+
+        env = TransformedEnv(GroupedEnv(), StepCounter(3, update_done=update_done))
+        try:
+            td = env.reset()
+            td[truncating_group, "step_count"].fill_(2)
+            rollout = env.rollout(1, tensordict=td, auto_reset=False)
+            for group in ("left", "right"):
+                truncated = group == truncating_group
+                torch.testing.assert_close(
+                    rollout["next", group, "truncated"], torch.tensor([[truncated]])
+                )
+                agent_done = torch.tensor([group == "right", False, False]).reshape(
+                    1, 3, 1
+                )
+                torch.testing.assert_close(
+                    rollout["next", group, "agents", "truncated"],
+                    agent_done | truncated,
+                )
+                torch.testing.assert_close(
+                    rollout["next", group, "agents", "done"],
+                    agent_done | (truncated and update_done),
+                )
+        finally:
+            env.close()
+
 
 class _AgentNestedCountingEnv(EnvBase):
     """Counting env whose done keys live under the ``agent`` nest."""
