@@ -238,6 +238,8 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
         "SamplerEnsembleConfig",
+        "SubgoalTripletConfig",
+        "TransitiveQLossConfig",
     }
 )
 
@@ -675,11 +677,12 @@ class TestDataConfigs:
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_sample_unit_configs(self):
-        """Test TransitionConfig and SequenceConfig."""
+        """Test TransitionConfig, SequenceConfig and SubgoalTripletConfig."""
         from hydra.utils import instantiate
-        from torchrl.data.replay_buffers import Sequence, Transition
+        from torchrl.data.replay_buffers import Sequence, SubgoalTriplet, Transition
         from torchrl.trainers.algorithms.configs.data import (
             SequenceConfig,
+            SubgoalTripletConfig,
             TransitionConfig,
         )
 
@@ -693,6 +696,13 @@ class TestDataConfigs:
         assert isinstance(unit, Sequence)
         assert unit.length == 8
         assert unit.episode_boundary == "stop"
+        assert unit.done_key == ("next", "done")
+
+        cfg = SubgoalTripletConfig(goal_discount=None, policy_goal_discount=0.9)
+        unit = instantiate(cfg)
+        assert isinstance(unit, SubgoalTriplet)
+        assert unit.goal_discount is None
+        assert unit.policy_goal_discount == 0.9
         assert unit.done_key == ("next", "done")
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
@@ -2576,6 +2586,51 @@ class TestLossConfigs:
             assert loss.target_entropy.item() == pytest.approx(expected_entropy)
         else:
             assert type(loss) is SACLoss
+
+    def test_transitive_q_loss_config(self):
+        from hydra.utils import instantiate
+        from torchrl.modules import (
+            IndependentNormal,
+            MLP,
+            NormalParamExtractor,
+            ProbabilisticActor,
+        )
+        from torchrl.objectives import TransitiveQLoss
+        from torchrl.trainers.algorithms.configs.objectives import TransitiveQLossConfig
+
+        actor = ProbabilisticActor(
+            TensorDictSequential(
+                TensorDictModule(
+                    MLP(in_features=6, out_features=4, num_cells=[8]),
+                    in_keys=["observation", "goal"],
+                    out_keys=["param"],
+                ),
+                TensorDictModule(
+                    NormalParamExtractor(),
+                    in_keys=["param"],
+                    out_keys=["loc", "scale"],
+                ),
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=IndependentNormal,
+        )
+        critic = TensorDictModule(
+            MLP(in_features=8, out_features=1, num_cells=[8]),
+            in_keys=["observation", "goal", "action"],
+            out_keys=["state_action_value"],
+        )
+        cfg = TransitiveQLossConfig(
+            actor_network=actor,
+            qvalue_network=critic,
+            num_qvalue_nets=3,
+            discount=0.9,
+            expectile=0.6,
+        )
+        loss = instantiate(cfg)
+        assert type(loss) is TransitiveQLoss
+        assert loss.discount == 0.9
+        assert loss.expectile == 0.6
+        assert loss.qvalue_network_params.batch_size == torch.Size([3])
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_dqn_loss_config(self):

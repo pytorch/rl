@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import functools
 import json
+import math
 import pickle
 import sys
 import threading
@@ -29,6 +30,7 @@ from torchrl.data import (
     ReplayBuffer,
     ReplayBufferEnsemble,
     Sequence,
+    SubgoalTriplet,
     tensordict_collate,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -4246,6 +4248,71 @@ class TestTorchDataInterop:
             list(loader)
         with pytest.raises(RuntimeError, match="cannot share"):
             pickle.dumps(rb.as_dataset())
+
+
+class TestSubgoalTriplet:
+    @staticmethod
+    def _buffer(lengths, unit, capacity=None, batch_size=4096):
+        """Episodes of the given lengths; each record stores its episode and in-episode step."""
+        episode = torch.cat(
+            [torch.full((n,), e, dtype=torch.long) for e, n in enumerate(lengths)]
+        )
+        step = torch.cat([torch.arange(n) for n in lengths])
+        done = torch.cat([torch.arange(n) == n - 1 for n in lengths]).unsqueeze(-1)
+        data = TensorDict(
+            {"episode": episode, "step": step, ("next", "done"): done},
+            batch_size=[len(step)],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(capacity or len(step)),
+            batch_size=batch_size,
+            sample_unit=unit,
+        )
+        rb.extend(data)
+        return rb
+
+    @pytest.mark.parametrize("goal_discount", [0.9, None])
+    def test_records_ordered_within_episode(self, goal_discount):
+        torch.manual_seed(0)
+        rb = self._buffer(
+            [7, 20, 3, 12], SubgoalTriplet(goal_discount=goal_discount), capacity=30
+        )
+        batch = rb.sample().unflatten(0, (-1, 4))
+        assert (batch["episode"] == batch["episode"][:, :1]).all()
+        state, subgoal, goal, policy_goal = batch["step"].unbind(-1)
+        assert (state <= subgoal).all() and (subgoal < goal).all()
+        assert (state < policy_goal).all()
+        assert (batch["step_offset"] == batch["step"] - state.unsqueeze(-1)).all()
+        assert batch["validity_mask"].all()
+
+    def test_final_anchor_moves_back(self):
+        unit = SubgoalTriplet()
+        rb = self._buffer([5, 4], unit)
+        index, info = unit.expand(torch.tensor([4, 8]), {}, rb.storage)
+        records = rb.storage[index].unflatten(0, (-1, 4))
+        assert records["step"][:, 0].tolist() == [3, 2]
+        assert records["step"][:, 2].tolist() == [4, 3]
+        assert info["anchor_index"][::4].tolist() == [3, 7]
+
+    def test_goal_offset_distribution(self):
+        torch.manual_seed(0)
+        unit = SubgoalTriplet(goal_discount=0.9)
+        rb = self._buffer([2000], unit)
+        _, info = unit.expand(torch.zeros(20000, dtype=torch.long), {}, rb.storage)
+        offsets = info["step_offset"].view(-1, 4).float()
+        assert offsets[:, 2].mean() == pytest.approx(10.0, rel=0.05)
+        assert offsets[:, 3].mean() == pytest.approx(1000.0, rel=0.05)
+        p = 0.1
+        mean_inverse_goal = -p * math.log(p) / (1 - p)
+        assert (offsets[:, 1] / offsets[:, 2]).mean() == pytest.approx(
+            0.5 - 0.5 * mean_inverse_goal, abs=0.01
+        )
+
+    def test_single_record_episode_is_invalid(self):
+        unit = SubgoalTriplet()
+        rb = self._buffer([1, 6], unit)
+        _, info = unit.expand(torch.tensor([0, 1]), {}, rb.storage)
+        assert info["validity_mask"].view(-1, 4).all(-1).tolist() == [False, True]
 
 
 if __name__ == "__main__":

@@ -31,6 +31,13 @@ commands = {
   evaluation.interval=10 evaluation.episodes=1 log_interval=1 \
   hydra.run.dir=$SOTA_LOG_DIR/fql
 """,
+    "transitive_rl": """python sota-implementations/transitive_rl/transitive_rl.py \
+  device=cpu dataset.name=null dataset.random_frames=64 env.max_episode_steps=16 \
+  optim.steps=10 optim.batch_size=8 network.hidden=[32,32] \
+  evaluation.interval=10 evaluation.num_tasks=1 evaluation.episodes=1 \
+  evaluation.max_steps=5 log_interval=1 \
+  hydra.run.dir=$SOTA_LOG_DIR/transitive_rl
+""",
     "tdmpc2": """python sota-implementations/tdmpc2_trainer/train.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -564,10 +571,10 @@ def test_commands(algo, monkeypatch, tmp_path):
     if dataset_id is not None:
         monkeypatch.setenv("HOME", str(tmp_path))
         _write_synthetic_d4rl_dataset(tmp_path, dataset_id)
-    if algo in {"ppo_mujoco", "sac", "fql"}:
+    if algo in {"ppo_mujoco", "sac", "fql", "transitive_rl"}:
         monkeypatch.setenv("SOTA_LOG_DIR", str(tmp_path))
     run_command(commands[algo])
-    if algo in {"ppo_mujoco", "sac", "fql"}:
+    if algo in {"ppo_mujoco", "sac", "fql", "transitive_rl"}:
         scalar_roots = list(tmp_path.rglob("scalars"))
         assert len(scalar_roots) == 1
         scalar_names = {
@@ -578,9 +585,13 @@ def test_commands(algo, monkeypatch, tmp_path):
             "ppo_mujoco": "training/loss_objective.csv",
             "sac": "training/q_loss.csv",
             "fql": "training/loss_actor.csv",
+            "transitive_rl": "training/loss_qvalue.csv",
         }[algo]
         assert expected_training_metric in scalar_names
-        expected_evaluation_metric = "return" if algo == "fql" else "reward"
+        expected_evaluation_metric = {
+            "fql": "return",
+            "transitive_rl": "overall",
+        }.get(algo, "reward")
         assert f"evaluation/{expected_evaluation_metric}.csv" in scalar_names
         assert scalar_names
         assert all(
