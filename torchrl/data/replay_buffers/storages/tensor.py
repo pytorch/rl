@@ -1162,7 +1162,7 @@ class LazyTensorStorage(TensorStorage):
     def _wait_for_init(self) -> None:
         # wait till coordinator has initialized
         self._init_event.wait()
-        storage = TensorDict.load_memmap(self._init_directory)
+        storage = TensorDict.load_memmap(self._init_directory, allow_pickle=True)
         self._storage = storage
         self._reconcile_shared_init_device()
         self.initialized = True
