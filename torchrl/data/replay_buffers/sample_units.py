@@ -72,6 +72,58 @@ class SampleUnit(abc.ABC):
         """
         ...
 
+    def _check_storage(self, storage: Storage) -> None:
+        if not isinstance(storage, TensorStorage):
+            raise TypeError(
+                f"{type(self).__name__} requires a TensorDict-backed TensorStorage "
+                f"(e.g. LazyTensorStorage or LazyMemmapStorage written with "
+                f"TensorDict data) to recover episode boundaries and the write "
+                f"cursor; got {type(storage).__name__}."
+            )
+        contents = getattr(storage, "_storage", None)
+        if contents is not None and not is_tensor_collection(contents):
+            raise TypeError(
+                f"{type(self).__name__} requires the TensorStorage to hold a "
+                f"TensorDict (or other tensor collection) so that the "
+                f"'{self.done_key}' entry can be read; the storage holds "
+                f"{type(contents).__name__} instead."
+            )
+
+    @staticmethod
+    def _repeat_info(info: dict[str, Any], repeats: int) -> dict[str, Any]:
+        """Repeats every per-anchor entry of ``info``; scalar metadata is kept as is."""
+        return {
+            k: v
+            if torch.as_tensor(v).ndim == 0
+            else torch.as_tensor(v).repeat_interleave(repeats, dim=0)
+            for k, v in info.items()
+        }
+
+    @staticmethod
+    def _episode_boundaries(
+        storage: Storage, done_key: NestedKey | None, device: torch.device
+    ) -> _ReplayBoundaryIndex:
+        """Episode boundaries of ``storage``, read from its ``done_key`` entry.
+
+        Without a ``done_key`` the storage holds a single episode.
+        """
+        done = (
+            storage.get(done_key)
+            if done_key is not None
+            else torch.zeros(storage.shape, dtype=torch.bool, device=device)
+        )
+        while done.ndim > storage.ndim and done.shape[-1] == 1:
+            done = done.squeeze(-1)
+        return _ReplayBoundaryIndex(
+            end=done,
+            at_capacity=storage._is_full,
+            cursor=getattr(storage, "_last_cursor_index", None),
+            device=device,
+            storage=storage,
+            source=("end", done_key),
+            cache_values=True,
+        )
+
 
 class Transition(SampleUnit):
     """The identity sample unit: every anchor is one transition.
@@ -290,23 +342,6 @@ class Sequence(SampleUnit):
             return cursor % written
         return written - 1
 
-    def _check_storage(self, storage: Storage) -> None:
-        if not isinstance(storage, TensorStorage):
-            raise TypeError(
-                f"{type(self).__name__} requires a TensorDict-backed TensorStorage "
-                f"(e.g. LazyTensorStorage or LazyMemmapStorage written with "
-                f"TensorDict data) to recover episode boundaries and the write "
-                f"cursor; got {type(storage).__name__}."
-            )
-        contents = getattr(storage, "_storage", None)
-        if contents is not None and not is_tensor_collection(contents):
-            raise TypeError(
-                f"{type(self).__name__} requires the TensorStorage to hold a "
-                f"TensorDict (or other tensor collection) so that the "
-                f"'{self.done_key}' entry can be read; the storage holds "
-                f"{type(contents).__name__} instead."
-            )
-
     def expand(
         self,
         index: torch.Tensor | tuple,
@@ -335,14 +370,7 @@ class Sequence(SampleUnit):
         device = anchor.device
         total = self.burn_in + self.length + self.bootstrap
 
-        expanded_info = {}
-        for k, v in info.items():
-            val = torch.as_tensor(v)
-            if val.ndim == 0:
-                # scalar metadata is not per-anchor: leave it untouched
-                expanded_info[k] = v
-            else:
-                expanded_info[k] = val.repeat_interleave(total, dim=0)
+        expanded_info = self._repeat_info(info, total)
 
         steps = torch.arange(total, device=device, dtype=torch.long)
         learning = (steps >= self.burn_in) & (steps < self.burn_in + self.length)
@@ -357,22 +385,7 @@ class Sequence(SampleUnit):
         offset = ((steps - self.burn_in) * self.dilation).unsqueeze(0).expand(B, total)
 
         if self.episode_boundary in ("pad", "stop"):
-            done = (
-                storage.get(self.done_key)
-                if self.done_key is not None
-                else torch.zeros(storage.shape, dtype=torch.bool, device=device)
-            )
-            while done.ndim > storage.ndim and done.shape[-1] == 1:
-                done = done.squeeze(-1)
-            boundary = _ReplayBoundaryIndex(
-                end=done,
-                at_capacity=storage._is_full,
-                cursor=getattr(storage, "_last_cursor_index", None),
-                device=device,
-                storage=storage,
-                source=("end", self.done_key),
-                cache_values=True,
-            )
+            boundary = self._episode_boundaries(storage, self.done_key, device)
             dist_from_start, dist_to_stop = boundary.distances(anchor)
             max_len = boundary.length
 
@@ -537,27 +550,17 @@ class SubgoalTriplet(SampleUnit):
         info: dict[str, Any],
         storage: Storage,
     ) -> tuple[torch.Tensor | tuple, dict[str, Any]]:
-        if not isinstance(storage, TensorStorage) or storage.ndim != 1:
+        self._check_storage(storage)
+        if storage.ndim != 1:
             raise TypeError(
-                f"{type(self).__name__} requires a one-dimensional TensorDict-backed "
-                f"TensorStorage, got {type(storage).__name__}."
+                f"{type(self).__name__} requires a one-dimensional storage, got "
+                f"{storage.ndim} dimensions."
             )
         if isinstance(index, tuple):
             (index,) = index
         anchor = index.to(torch.long)
         device = anchor.device
-        done = storage.get(self.done_key)
-        while done.ndim > 1 and done.shape[-1] == 1:
-            done = done.squeeze(-1)
-        boundary = _ReplayBoundaryIndex(
-            end=done,
-            at_capacity=storage._is_full,
-            cursor=getattr(storage, "_last_cursor_index", None),
-            device=device,
-            storage=storage,
-            source=("end", self.done_key),
-            cache_values=True,
-        )
+        boundary = self._episode_boundaries(storage, self.done_key, device)
         dist_from_start, dist_to_stop = boundary.distances(anchor)
         length = boundary.length
 
@@ -585,13 +588,7 @@ class SubgoalTriplet(SampleUnit):
         )
         offsets = torch.where(valid.unsqueeze(-1), offsets, torch.zeros_like(offsets))
 
-        expanded_info = {}
-        for k, v in info.items():
-            val = torch.as_tensor(v)
-            if val.ndim == 0:
-                expanded_info[k] = v
-            else:
-                expanded_info[k] = val.repeat_interleave(self.num_records, dim=0)
+        expanded_info = self._repeat_info(info, self.num_records)
         expanded_info["step_offset"] = offsets.flatten()
         expanded_info["anchor_index"] = anchor.repeat_interleave(self.num_records)
         expanded_info["validity_mask"] = valid.repeat_interleave(self.num_records)

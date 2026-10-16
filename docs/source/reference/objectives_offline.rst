@@ -48,34 +48,7 @@ Transitive RL
 -------------
 
 :class:`TransitiveQLoss` implements Transitive RL (Park et al., ICLR 2026,
-https://arxiv.org/abs/2510.22512) for offline goal-conditioned RL. The critic
-:math:`Q(s, a, g)` lives in :math:`(0, 1]` and is read as
-:math:`\gamma^{d(s, g)}`; instead of a one-step backup, it is regressed toward
-the product of two target-critic values through a subgoal the dataset
-trajectory visited between the state and the goal.
-
-Batches come from a replay buffer with the
-:class:`~torchrl.data.replay_buffers.SubgoalTriplet` sample unit, which expands
-each anchor into its state, subgoal, goal and policy-goal records and reports
-the step offset of each one. The flat ``[4 * B]`` sample is passed to the loss
-as is. Sum ``loss_qvalue``, ``loss_actor`` and, with an oracle critic,
-``loss_oracle_qvalue``, then update the target critic with
-:class:`~torchrl.objectives.SoftUpdate`.
-
-.. code-block:: python
-
-    from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
-    from torchrl.data.replay_buffers import SubgoalTriplet
-    from torchrl.objectives import SoftUpdate, TransitiveQLoss
-
-    rb = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(dataset.numel()),
-        batch_size=1024,
-        sample_unit=SubgoalTriplet(goal_discount=0.99),
-    )
-    rb.extend(dataset)
-    loss = TransitiveQLoss(actor, critics, discount=0.99, expectile=0.7)
-    updater = SoftUpdate(loss, tau=0.005)
-    losses = loss(rb.sample())
-
-``sota-implementations/transitive_rl/`` trains it on OGBench datasets.
+https://arxiv.org/abs/2510.22512), a divide-and-conquer critic for offline
+goal-conditioned RL. It reads the flat batches of a replay buffer sampling with
+:class:`~torchrl.data.replay_buffers.SubgoalTriplet`;
+``sota-implementations/transitive_rl/`` trains it on OGBench.

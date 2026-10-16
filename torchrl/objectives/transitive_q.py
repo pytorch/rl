@@ -66,6 +66,11 @@ class TransitiveQLoss(LossModule):
     mean absolute value, plus ``alpha`` times the behavior log-likelihood of
     the dataset action.
 
+    Anchors whose :attr:`~torchrl.objectives.LossModule.loss_mask_key` entry
+    is ``False`` are left out of every term. It defaults to the
+    ``"validity_mask"`` written by
+    :class:`~torchrl.data.replay_buffers.SubgoalTriplet`.
+
     Args:
         actor_network (TensorDictModule): a probabilistic actor reading the
             ``observation`` and ``goal`` keys and supporting ``get_dist``.
@@ -156,8 +161,6 @@ class TransitiveQLoss(LossModule):
                 ``"state_action_value"``.
             step_offset (NestedKey): per-record distance to the anchor.
                 Defaults to ``"step_offset"``.
-            validity_mask (NestedKey): per-record validity flag; missing
-                entries count as valid. Defaults to ``"validity_mask"``.
         """
 
         observation: NestedKey = "observation"
@@ -167,9 +170,9 @@ class TransitiveQLoss(LossModule):
         policy_goal: NestedKey = "observation"
         value: NestedKey = "state_action_value"
         step_offset: NestedKey = "step_offset"
-        validity_mask: NestedKey = "validity_mask"
 
     default_keys = _AcceptedKeys
+    _loss_mask_key = "validity_mask"
     actor_network: TensorDictModuleBase
     qvalue_network: TensorDictModule
     oracle_qvalue_network: TensorDictModule
@@ -253,15 +256,10 @@ class TransitiveQLoss(LossModule):
 
     def _critic_input(
         self, state: TensorDictBase, goal: torch.Tensor, action: torch.Tensor
-    ) -> TensorDict:
+    ) -> TensorDictBase:
         keys = self.tensor_keys
-        return TensorDict(
-            {
-                keys.observation: state.get(keys.observation),
-                keys.goal: goal,
-                keys.action: action,
-            },
-            batch_size=state.batch_size,
+        return (
+            state.select(keys.observation).set(keys.goal, goal).set(keys.action, action)
         )
 
     def _logits(self, vmap_func, td: TensorDictBase, params) -> torch.Tensor:
@@ -270,15 +268,11 @@ class TransitiveQLoss(LossModule):
     def _bce(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         return F.binary_cross_entropy_with_logits(logits, target, reduction="none")
 
-    def _masked_mean(self, value: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        mask = mask.to(value.dtype).expand_as(value)
-        return (value * mask).sum() / mask.sum().clamp_min(1.0)
-
-    def _validity_mask(self, state: TensorDictBase) -> torch.Tensor:
-        mask = state.get(self.tensor_keys.validity_mask, None)
-        if mask is None:
-            return torch.ones(state.batch_size, dtype=torch.bool, device=state.device)
-        return mask
+    def _mean(self, value: torch.Tensor, state: TensorDictBase) -> torch.Tensor:
+        """Mean over the valid anchors of ``state``, with any ensemble dimension leading."""
+        if value.ndim > state.ndim:
+            value = value.movedim(0, -1)
+        return self._reduce_loss(value, state, reduction="mean")
 
     def qvalue_loss(
         self, tensordict: TensorDictBase
@@ -286,7 +280,6 @@ class TransitiveQLoss(LossModule):
         """Returns the critic loss, the oracle distillation loss and metadata."""
         keys = self.tensor_keys
         state, subgoal, goal = (tensordict[..., r] for r in range(3))
-        mask = self._validity_mask(state)
         action = state.get(keys.action)
         goal_obs = goal.get(keys.achieved_goal)
         logits = self._logits(
@@ -319,7 +312,7 @@ class TransitiveQLoss(LossModule):
             if self.distance_weight:
                 distance = target.log() / self.log_discount
                 weight = weight * (1 + distance).pow(-self.distance_weight)
-        loss_qvalue = self._masked_mean(weight * self._bce(logits, target), mask)
+        loss_qvalue = self._mean(weight * self._bce(logits, target), state)
         loss_oracle = None
         if self.use_oracle:
             oracle_logits = self._logits(
@@ -327,7 +320,7 @@ class TransitiveQLoss(LossModule):
                 self._critic_input(state, goal.get(keys.policy_goal), action),
                 self.oracle_qvalue_network_params,
             )
-            loss_oracle = self._masked_mean(self._bce(oracle_logits, q.detach()), mask)
+            loss_oracle = self._mean(self._bce(oracle_logits, q.detach()), state)
         metadata = {
             "q_mean": q.mean().detach(),
             "q_min": q.min().detach(),
@@ -360,18 +353,15 @@ class TransitiveQLoss(LossModule):
             logits = self._logits(
                 self.qvalue_vmap, critic_td, self.qvalue_network_params.detach()
             )
-        mask = self._validity_mask(state)
         q = logits.min(0).values
-        q_loss = -self._masked_mean(q, mask) / (
-            self._masked_mean(q.abs(), mask).detach() + 1e-6
-        )
+        q_loss = -self._mean(q, state) / (self._mean(q.abs(), state).detach() + 1e-6)
         log_prob = dist.log_prob(state.get(keys.action))
-        bc_loss = -self.alpha * self._masked_mean(log_prob, mask)
+        bc_loss = -self.alpha * self._mean(log_prob, state)
         squared_error = (dist.mode - state.get(keys.action)).pow(2).mean(-1)
         return q_loss + bc_loss, {
             "actor_q_loss": q_loss.detach(),
             "bc_loss": bc_loss.detach(),
-            "bc_mse": self._masked_mean(squared_error, mask).detach(),
+            "bc_mse": self._mean(squared_error, state).detach(),
         }
 
     @dispatch
