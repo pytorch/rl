@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-10-15
+# Flaky Test Report - 2026-10-16
 
 ## Summary
 
-- **Flaky tests**: 5771
-- **Newly flaky** (last 7 days): 5771
+- **Flaky tests**: 5735
+- **Newly flaky** (last 7 days): 5735
 - **Resolved**: 0
-- **Total tests analyzed**: 32528
+- **Total tests analyzed**: 32551
 - **CI runs analyzed**: 60
 
 ---
@@ -14,26 +14,26 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...replay_collection_smoke[cuda-async-True-True-True-frames]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `..._replay_collection_smoke[cuda-sync-True-True-True-frames]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...replay_collection_smoke[cuda-async-True-False-False-time]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...play_collection_smoke[cuda-async-True-False-False-warmup]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...ollection_smoke[cuda-sync-True-False-False-reset_records]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...eamer_v3_process_inference_collection_smoke[cuda:0-False]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...reamer_v3_process_inference_collection_smoke[cuda:0-True]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...d.py::test_cuda_prioritized_replay_buffer_samples_on_cuda` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...ict_prioritized_replay_buffer_memmap_storage_cuda_sampler` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...cuda_prioritized_replay_buffer_weight_matches_cpu_formula` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...b/test_rb_core.py::TestSequenceUnit::test_non_cpu_storage` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...ce[tensor-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...torage_device[tensor-LazyMemmapStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...ce[tensor-LazyTensorStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...torage_device[tensor-LazyTensorStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...device[tc-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...st_storage_device[tc-LazyMemmapStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...device[tc-LazyTensorStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...st_storage_device[tc-LazyTensorStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
-| `...device[td-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-14 |
+| `...replay_collection_smoke[cuda-async-True-True-True-frames]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `..._replay_collection_smoke[cuda-sync-True-True-True-frames]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...replay_collection_smoke[cuda-async-True-False-False-time]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...play_collection_smoke[cuda-async-True-False-False-warmup]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...ollection_smoke[cuda-sync-True-False-False-reset_records]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...eamer_v3_process_inference_collection_smoke[cuda:0-False]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...reamer_v3_process_inference_collection_smoke[cuda:0-True]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...d.py::test_cuda_prioritized_replay_buffer_samples_on_cuda` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...ict_prioritized_replay_buffer_memmap_storage_cuda_sampler` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...cuda_prioritized_replay_buffer_weight_matches_cpu_formula` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...b/test_rb_core.py::TestSequenceUnit::test_non_cpu_storage` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...ce[tensor-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...torage_device[tensor-LazyMemmapStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...ce[tensor-LazyTensorStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...torage_device[tensor-LazyTensorStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...device[tc-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...st_storage_device[tc-LazyMemmapStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...device[tc-LazyTensorStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...st_storage_device[tc-LazyTensorStorage-device_data3-auto]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
+| `...device[td-LazyMemmapStorage-device_data0-device_storage0]` 🆕 | 20.0% (15/75) | 15 | 0.40 | 2026-10-16 |
 
 
 ### Newly Flaky Tests
@@ -67,42 +67,6 @@
 - `test/test_custom_envs.py::TestCustomEnvs::test_financial_env_device`
 - `test/test_trainer.py::test_fql_update_matches_recipe[False-cuda]`
 - `test/test_trainer.py::test_fql_update_matches_recipe[True-cuda]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_basic[50]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_basic[100]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_mult`
-- `test/test_distributed.py::TestRayCollector::test_collector_next_method`
-- `test/test_distributed.py::TestRayCollector::test_dqn_trainer_ray_backend`
-- `test/test_distributed.py::TestRayCollector::test_offpolicy_trainer_ray_backend[DDPGTrainer]`
-- `test/test_distributed.py::TestRayCollector::test_offpolicy_trainer_ray_backend[SACTrainer]`
-- `test/test_distributed.py::TestRayCollector::test_offpolicy_trainer_ray_backend[TD3Trainer]`
-- `test/test_distributed.py::TestRayCollector::test_ray_learner_publishes_to_collector_owned_policy`
-- `test/test_distributed.py::TestRayCollector::test_ray_owned_inference_and_replay`
-- `test/test_distributed.py::TestRayCollector::test_ray_collector_pause_drains_and_resumes`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_sync[False]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_sync[True]`
-- `test/test_distributed.py::TestRayCollector::test_collector_shutdown_clears_python_processes[False]`
-- `test/test_distributed.py::TestRayCollector::test_collector_shutdown_clears_python_processes[True]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_class[MultiSyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_class[MultiAsyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_class[Collector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[False-False-Collector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[False-False-MultiSyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[False-False-MultiAsyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[False-True-Collector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[False-True-MultiSyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[False-True-MultiAsyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-False-Collector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-False-MultiSyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-False-MultiAsyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-Collector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-MultiSyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-MultiAsyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_ray_collector_policy_constructor`
-- `test/test_collectors.py::TestCollectorStats::test_ray_stats_during_collection`
-- `test/test_collectors.py::TestCollectorStats::test_ray_collector_stats`
-- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_gru_nested_layout_across_decisions[True]`
-- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[None-3]`
-- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[group_key1-3]`
 - `test/modules/test_actor.py::TestFlow::test_euler[1-batch0-True-device0]`
 - `test/modules/test_actor.py::TestFlow::test_euler[1-batch1-True-device0]`
 - `test/modules/test_actor.py::TestFlow::test_euler[2-batch0-True-device0]`
@@ -5805,10 +5769,10 @@
 - `test/test_trainer.py::TestPPOFromEnv::test_training_and_checkpoint_resume[True-True]`
 - `test/test_trainer.py::test_fql_update_matches_recipe[True-cpu]`
 - `test/test_utils.py::test_rng_decorator[device0]`
+- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_gru_nested_layout_across_decisions[True]`
+- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[None-3]`
+- `test/transforms/test_action_transforms.py::TestClosedLoopMultiAction::test_feedback_and_state[group_key1-3]`
 - `.github/unittest/examples/scripts/test_examples.py::test_run_example_terminates_timeouts`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[distributed-ray-dqn]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[ray-wandb-monitor]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[services-ray-collector]`
 
 ---
 
@@ -5821,4 +5785,4 @@
 
 ---
 
-*Generated at 2026-10-15T06:27:11.572844+00:00*
+*Generated at 2026-10-16T06:29:24.726181+00:00*
