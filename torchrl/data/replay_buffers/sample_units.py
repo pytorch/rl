@@ -466,7 +466,9 @@ class SubgoalTriplet(SampleUnit):
 
     This unit requires a :class:`~torchrl.data.replay_buffers.TensorStorage`
     backed by a TensorDict with a one-dimensional batch, since episode
-    boundaries are read from the stored ``done_key`` entry.
+    boundaries are read from the stored ``done_key`` entry. Offsets are drawn
+    from the buffer's generator when it has one on the anchors' device, so
+    seeding the buffer makes its batches reproducible.
 
     Reference: Park, Oberai, Atreya, Levine. "Transitive RL: Value Learning
     via Divide and Conquer." ICLR 2026. https://arxiv.org/abs/2510.22512
@@ -534,13 +536,19 @@ class SubgoalTriplet(SampleUnit):
         self.done_key = done_key
 
     @staticmethod
-    def _offsets(horizon: torch.Tensor, discount: float | None) -> torch.Tensor:
+    def _offsets(
+        horizon: torch.Tensor,
+        discount: float | None,
+        generator: torch.Generator | None,
+    ) -> torch.Tensor:
         """Draws offsets in ``[1, horizon]`` (``horizon >= 1``)."""
         if discount is None:
-            uniform = torch.rand(horizon.shape, device=horizon.device)
+            uniform = torch.rand(
+                horizon.shape, device=horizon.device, generator=generator
+            )
             return 1 + (uniform * horizon).long().clamp_max(horizon - 1)
         geometric = torch.empty(horizon.shape, device=horizon.device).geometric_(
-            1.0 - discount
+            1.0 - discount, generator=generator
         )
         return torch.minimum(geometric.long(), horizon)
 
@@ -560,6 +568,9 @@ class SubgoalTriplet(SampleUnit):
             (index,) = index
         anchor = index.to(torch.long)
         device = anchor.device
+        generator = getattr(storage, "_rng", None)
+        if generator is not None and generator.device.type != device.type:
+            generator = None
         boundary = self._episode_boundaries(storage, self.done_key, device)
         dist_from_start, dist_to_stop = boundary.distances(anchor)
         length = boundary.length
@@ -570,13 +581,18 @@ class SubgoalTriplet(SampleUnit):
         valid = dist_to_stop > 0
         horizon = dist_to_stop.clamp_min(1)
 
-        goal_offset = self._offsets(horizon, self.goal_discount)
+        goal_offset = self._offsets(horizon, self.goal_discount, generator)
         subgoal_offset = (
-            (torch.rand(goal_offset.shape, device=device) * goal_offset)
+            (
+                torch.rand(goal_offset.shape, device=device, generator=generator)
+                * goal_offset
+            )
             .long()
             .clamp_max(goal_offset - 1)
         )
-        policy_goal_offset = self._offsets(horizon, self.policy_goal_discount)
+        policy_goal_offset = self._offsets(
+            horizon, self.policy_goal_discount, generator
+        )
         offsets = torch.stack(
             [
                 torch.zeros_like(goal_offset),

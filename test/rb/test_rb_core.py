@@ -4339,6 +4339,18 @@ class TestSubgoalTriplet:
         _, info = rb.sample(return_info=True)
         assert (info["anchor_index"][::4] == 2).float().mean() > 0.9
 
+    def test_buffer_generator_controls_sampling(self):
+        """Seeding the buffer reproduces its batches whatever the global seed."""
+        batches = []
+        for global_seed in (1, 2):
+            rb = self._buffer(
+                [12, 18], SubgoalTriplet(goal_discount=0.9), batch_size=16
+            )
+            rb.set_rng(torch.Generator().manual_seed(0))
+            torch.manual_seed(global_seed)
+            batches.append(rb.sample()["step"])
+        assert torch.equal(*batches)
+
     def test_single_record_episode_is_invalid(self):
         unit = SubgoalTriplet()
         rb = self._buffer([1, 6], unit)

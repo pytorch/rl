@@ -74,7 +74,7 @@ class TransitiveQLoss(LossModule):
     weights nor writes a priority entry.
 
     Args:
-        actor_network (TensorDictModule): a probabilistic actor reading the
+        actor_network (TensorDictModuleBase): a probabilistic actor reading the
             ``observation`` and ``goal`` keys and supporting ``get_dist``.
         qvalue_network (TensorDictModule or list of TensorDictModule): the
             critic, reading the ``observation``, ``goal`` and ``action`` keys
@@ -324,10 +324,10 @@ class TransitiveQLoss(LossModule):
             )
             loss_oracle = self._mean(self._bce(oracle_logits, q.detach()), state)
         metadata = {
-            "q_mean": q.mean().detach(),
+            "q_mean": self._mean(q, state).detach(),
             "q_min": q.min().detach(),
             "q_max": q.max().detach(),
-            "target_mean": target.mean(),
+            "target_mean": self._mean(target, state),
         }
         return loss_qvalue, loss_oracle, metadata
 
@@ -388,5 +388,6 @@ class TransitiveQLoss(LossModule):
             "actor_network_params",
             "qvalue_network_params",
             "target_qvalue_network_params",
+            "oracle_qvalue_network_params",
         )
         return result

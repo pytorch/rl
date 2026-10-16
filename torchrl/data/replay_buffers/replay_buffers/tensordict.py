@@ -409,8 +409,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
         priority = priority.reshape(-1)
         if validity is not None:
             validity = validity.reshape(-1)
-            # every anchor's own record is always valid, so masking cannot
-            # drop an anchor from the update
+            # an anchor drops out of the update only when its own record is
+            # invalid (a SubgoalTriplet anchor in a single-record episode)
             anchor = anchor[validity]
             priority = priority[validity]
         unique, inverse = torch.unique(anchor, return_inverse=True)

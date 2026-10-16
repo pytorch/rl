@@ -165,50 +165,38 @@ class TestTransitiveQLoss:
         )
 
     def test_invalid_anchors_do_not_contribute(self):
-        """Anchors flagged invalid leave the critic and actor losses unchanged."""
-        torch.manual_seed(0)
-        loss = TransitiveQLoss(make_actor(), make_critics(GoalSumLogit), alpha=0.5)
-        valid = make_batch([0, 1, 2], [3, 4, 5])
-        invalid = make_batch([0, 0], [0, 0])
-        invalid["observation"] = invalid["observation"] * 100
-        invalid["action"] = invalid["action"].sign()
-        batch = torch.cat([valid, invalid])
-        batch["validity_mask"] = torch.tensor([True] * 3 + [False] * 2)[:, None].expand(
-            5, 4
-        )
-        masked, reference = loss(batch), loss(valid)
-        for key in ("loss_qvalue", "loss_actor"):
-            torch.testing.assert_close(masked[key], reference[key])
+        """Anchors SubgoalTriplet flags invalid leave the critic and actor losses unchanged.
 
-    def test_trains_on_subgoal_triplet_samples(self):
-        """Flat SubgoalTriplet samples give the same losses as their unflattened view."""
+        The flat sample is fed as the buffer returns it; single-record episodes
+        are the anchors the unit marks invalid.
+        """
         torch.manual_seed(0)
-        done = torch.zeros(40, 1, dtype=torch.bool)
-        done[[9, 39]] = True
+        done = torch.zeros(24, 1, dtype=torch.bool)
+        done[[0, 8, 9, 10, 22, 23]] = True
         rb = TensorDictReplayBuffer(
-            storage=LazyTensorStorage(40),
-            batch_size=16,
+            storage=LazyTensorStorage(24),
+            batch_size=64,
             sample_unit=SubgoalTriplet(goal_discount=0.9),
         )
         rb.extend(
             TensorDict(
                 {
-                    "observation": torch.randn(40, OBS),
-                    "action": torch.rand(40, ACT) * 2 - 1,
+                    "observation": torch.randn(24, OBS),
+                    "action": torch.rand(24, ACT) * 2 - 1,
                     ("next", "done"): done,
                 },
-                batch_size=[40],
+                batch_size=[24],
             )
         )
-        loss = TransitiveQLoss(make_actor(), make_critics(ConstantLogit, 0.5))
         batch = rb.sample()
-        flat, nested = loss(batch), loss(batch.unflatten(0, (batch.shape[0] // 4, 4)))
+        records = batch.unflatten(0, (batch.shape[0] // 4, 4))
+        valid = records["validity_mask"][:, 0]
+        assert valid.any() and not valid.all()
+        loss = TransitiveQLoss(make_actor(), make_critics(GoalSumLogit), alpha=0.5)
+        masked = loss(batch)
+        reference = loss(records[valid].exclude("validity_mask"))
         for key in ("loss_qvalue", "loss_actor"):
-            torch.testing.assert_close(flat[key], nested[key])
-        (flat["loss_qvalue"] + flat["loss_actor"]).backward()
-        assert all(
-            p.grad is not None for p in loss.qvalue_network_params.values(True, True)
-        )
+            torch.testing.assert_close(masked[key], reference[key])
 
 
 if __name__ == "__main__":

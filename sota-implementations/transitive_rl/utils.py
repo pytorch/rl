@@ -208,6 +208,12 @@ def make_agent(cfg: DictConfig, replay, goal_dim: int, device: torch.device):
     action_dim = sample["action"].shape[-1]
     hidden = list(cfg.network.hidden)
     oracle = cfg.loss.oracle_distill
+    if not oracle and goal_dim != obs_dim:
+        raise ValueError(
+            "loss.oracle_distill=false needs goals in the observation space, but "
+            f"{cfg.dataset.name} provides {goal_dim}-dimensional oracle goals; "
+            "set loss.oracle_distill=true."
+        )
     critic_keys = ["observation", "goal", "action"]
 
     def critics(goal_features):
