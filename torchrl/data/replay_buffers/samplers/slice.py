@@ -496,6 +496,9 @@ class SliceSampler(Sampler):
             )
         self.pad_output = pad_output
         self._cache = {}
+        # Boundaries from the ``ends``/``trajectories`` arguments describe the
+        # storage by contract, so writes and pickling must not drop them.
+        self._static_stop_and_length = None
         self.use_gpu = bool(use_gpu)
         self._gpu_device = (
             None
@@ -520,11 +523,10 @@ class SliceSampler(Sampler):
                 raise RuntimeError(
                     "To be used, trajectories requires `cache_values` to be set to `True`."
                 )
-            vals = self._find_start_stop_traj(
+            self._static_stop_and_length = self._find_start_stop_traj(
                 trajectory=trajectories,
                 at_capacity=True,
             )
-            self._cache["static-stop-and-length"] = vals
 
         elif ends is not None:
             if traj_key is not None or end_key or end_keys:
@@ -537,8 +539,9 @@ class SliceSampler(Sampler):
                 raise RuntimeError(
                     "To be used, ends requires `cache_values` to be set to `True`."
                 )
-            vals = self._find_start_stop_traj(end=ends, at_capacity=True)
-            self._cache["static-stop-and-length"] = vals
+            self._static_stop_and_length = self._find_start_stop_traj(
+                end=ends, at_capacity=True
+            )
 
         else:
             if traj_key is not None:
@@ -797,8 +800,8 @@ class SliceSampler(Sampler):
         self._fetch_traj = False
 
     def _get_stop_and_length(self, storage, fallback=True):
-        if self.cache_values and "static-stop-and-length" in self._cache:
-            return self._cache.get("static-stop-and-length")
+        if self._static_stop_and_length is not None:
+            return self._static_stop_and_length
 
         if getattr(self, "_traj_key_auto", False):
             self._resolve_traj_key(storage)
