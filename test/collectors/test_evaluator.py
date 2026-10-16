@@ -1490,6 +1490,57 @@ class TestEvaluatorEpisodeSampling:
         torch.testing.assert_close(episodes["env_index"], torch.tensor([0, 1, 2, 0, 1]))
         assert result["eval/step"] == 0
 
+    def test_evaluate_episodes_restores_policy_mode(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, num_trajectories=2, max_steps=5)
+        policy.eval()
+        evaluator.evaluate_episodes()
+        assert not policy.training
+
+        def fail(module, args, output):
+            raise RuntimeError("policy failed")
+
+        policy.train()
+        handle = policy.module.register_forward_hook(fail)
+        with pytest.raises(RuntimeError, match="policy failed"):
+            evaluator.evaluate_episodes()
+        assert policy.training
+        handle.remove()
+        assert evaluator.evaluate_episodes().batch_size == torch.Size([2])
+        evaluator.shutdown()
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="needs CUDA"
+                    ),
+                ],
+            ),
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="needs MPS"
+                ),
+            ),
+        ],
+    )
+    def test_evaluate_episodes_policy_device(self, device):
+        env = ContinuousActionVecMockEnv(device="cpu")
+        policy = _make_policy(env)
+        expected = Evaluator(
+            env, policy, num_trajectories=4, max_steps=5
+        ).evaluate_episodes(seed=0)
+        evaluator = Evaluator(env, policy.to(device), num_trajectories=4, max_steps=5)
+        episodes = evaluator.evaluate_episodes(seed=0)
+        evaluator.shutdown()
+        torch.testing.assert_close(episodes, expected)
+
     @pytest.mark.parametrize(
         "device",
         [
@@ -1503,6 +1554,12 @@ class TestEvaluatorEpisodeSampling:
                     ),
                 ],
             ),
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="needs MPS"
+                ),
+            ),
         ],
     )
     def test_seed(self, device):
@@ -1510,9 +1567,11 @@ class TestEvaluatorEpisodeSampling:
         evaluator = Evaluator(
             env, RandomPolicy(env.action_spec), num_trajectories=8, max_steps=100
         )
-        get_rng_state = (
-            torch.cuda.get_rng_state if device == "cuda" else torch.get_rng_state
-        )
+        get_rng_state = {
+            "cpu": torch.get_rng_state,
+            "cuda": torch.cuda.get_rng_state,
+            "mps": torch.mps.get_rng_state,
+        }[device]
         rng_state = get_rng_state()
         lengths = [
             evaluator.evaluate_episodes(seed=seed)["episode_length"]

@@ -78,7 +78,7 @@ import logging
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from types import SimpleNamespace
 from typing import Any, Literal
 
@@ -86,7 +86,7 @@ import torch
 import torch.nn as nn
 from tensordict import pad, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.weight_update import MultiProcessWeightSyncScheme, WeightStrategy
@@ -480,7 +480,10 @@ class Evaluator:
         each rollout of the environment contributes exactly one episode per
         sub-environment until ``num_trajectories`` episodes are gathered.
         Unlike :meth:`evaluate`, this does not advance the internal step
-        counter and does not call ``on_result``. Requires the ``"thread"``
+        counter and does not call ``on_result`` or ``metrics_fn``. When the
+        env has a device, the policy may live on another one: data is moved
+        between them at each step. The policy's train/eval mode is restored
+        afterwards, also when a rollout raises. Requires the ``"thread"``
         backend without ``weight_sync_schemes`` and an integer ``max_steps``.
 
         Args:
@@ -495,13 +498,15 @@ class Evaluator:
             weights_dict (dict, optional): Multi-model weights dict. See
                 :meth:`evaluate`. Defaults to ``None``.
             seed (int, optional): Before each rollout, the torch RNG (CPU and
-                CUDA) is seeded and :meth:`~torchrl.envs.EnvBase.set_seed` is
-                called with a seed derived from ``seed`` and the rollout
-                index only, so two evaluations with the same ``seed`` start
-                each episode from the same state whatever the policy, and
-                their results are paired episode by episode. The caller's
-                RNG state is restored afterwards. Defaults to ``None`` (RNGs
-                are left untouched).
+                the current accelerator, e.g. CUDA or MPS) is seeded and
+                :meth:`~torchrl.envs.EnvBase.set_seed` is called with a seed
+                derived from ``seed`` and the rollout index only, so two
+                evaluations with the same ``seed`` start each episode from the
+                same state whatever the policy, and their results are paired
+                episode by episode. The caller's
+                torch RNG state is restored afterwards, while the environment
+                keeps the seeds it was given. Defaults to ``None`` (RNGs are
+                left untouched).
 
         Returns:
             a :class:`~tensordict.TensorDict` of batch size
@@ -994,10 +999,26 @@ def _env_has_step_count(env: EnvBase) -> bool:
     return False
 
 
-def _episodes_from_padded_trajectories(
+@implement_for("torch", None, "2.6")
+def _fork_rng() -> contextlib.AbstractContextManager:
+    """Fork the CPU and CUDA RNGs."""
+    return torch.random.fork_rng(devices=range(torch.cuda.device_count()))
+
+
+@implement_for("torch", "2.6")
+def _fork_rng() -> contextlib.AbstractContextManager:  # noqa: F811
+    """Fork the CPU RNG and the RNGs of every device of the current accelerator."""
+    accelerator = torch.accelerator.current_accelerator()
+    return torch.random.fork_rng(
+        devices=range(torch.accelerator.device_count()),
+        device_type=accelerator.type if accelerator is not None else "cuda",
+    )
+
+
+def _episodes_from_masked_rollout(
     traj_batch: TensorDictBase, reward_keys: NestedKey, done_keys: NestedKey
 ) -> TensorDictBase:
-    """Reduce a padded ``[num_episodes, max_steps]`` batch to one entry per episode."""
+    """Reduce a masked ``[num_episodes, num_steps]`` batch to one entry per episode."""
     mask = traj_batch.get(("collector", "mask"))
     episode_length = mask.sum(-1)
     final = traj_batch[
@@ -1246,20 +1267,22 @@ class _ThreadEvalBackend(_EvalBackend):
             )
         self._ensure_env_and_policy()
         self._load_weights(weights_dict, direct=True)
-        if isinstance(self._policy, nn.Module):
-            self._policy.eval()
-        rng = (
-            contextlib.nullcontext()
-            if seed is None
-            else torch.random.fork_rng(devices=range(torch.cuda.device_count()))
-        )
-        with rng, set_exploration_type(self._exploration_type), torch.no_grad():
-            traj_batch = self._rollout_per_env(seed)
-        if isinstance(self._policy, nn.Module):
-            self._policy.train()
-        return _episodes_from_padded_trajectories(
-            traj_batch, self._reward_keys, self._done_keys
-        )
+        with contextlib.ExitStack() as restore:
+            if isinstance(self._policy, nn.Module):
+                restore.callback(self._policy.train, self._policy.training)
+                self._policy.eval()
+            if seed is not None:
+                restore.enter_context(_fork_rng())
+            with set_exploration_type(self._exploration_type), torch.no_grad():
+                episodes = torch.cat(
+                    [
+                        _episodes_from_masked_rollout(
+                            rollout, self._reward_keys, self._done_keys
+                        )
+                        for rollout in self._rollouts_per_env(seed)
+                    ]
+                )
+        return episodes
 
     # ---- async ----
 
@@ -1494,17 +1517,22 @@ class _ThreadEvalBackend(_EvalBackend):
             on_missing_traj_info=self._warn_missing_traj_info,
         )
 
-    def _rollout_per_env(self, seed: int | None = None) -> TensorDictBase:
-        rollouts = []
-        num_episodes = 0
-        while num_episodes < self._num_trajectories:
+    def _rollouts_per_env(self, seed: int | None = None) -> Iterator[TensorDictBase]:
+        """Yield masked ``[num_episodes, num_steps]`` rollouts until ``num_trajectories`` episodes are gathered."""
+        remaining = self._num_trajectories
+        while remaining > 0:
             if seed is not None:
                 torch.manual_seed(seed)
                 seed = self._env.set_seed(seed)
             rollout = self._env.rollout(
-                self._max_steps, self._policy, break_when_all_done=True
+                self._max_steps,
+                self._policy,
+                break_when_all_done=True,
+                auto_cast_to_device=self._env.device is not None
+                and self._device is not None
+                and self._device != self._env.device,
             )
-            rollout = rollout.reshape(-1, rollout.shape[-1])
+            rollout = rollout.reshape(-1, rollout.shape[-1])[:remaining]
             done = rollout.get(self._done_keys).to(torch.int64)
             in_episode = (done.cumsum(1) == done).reshape(*rollout.shape, -1).any(-1)
             rollout.set(("collector", "mask"), in_episode)
@@ -1513,9 +1541,19 @@ class _ThreadEvalBackend(_EvalBackend):
                 ("collector", "env_index"),
                 env_index.unsqueeze(-1).expand(rollout.shape),
             )
-            rollouts.append(pad(rollout, [0, 0, 0, self._max_steps - rollout.shape[1]]))
-            num_episodes += rollout.shape[0]
-        return torch.cat(rollouts)[: self._num_trajectories]
+            remaining -= rollout.shape[0]
+            yield rollout
+
+    def _rollout_per_env(self) -> TensorDictBase:
+        """Stack the per-env rollouts, padded to the longest one."""
+        rollouts = list(self._rollouts_per_env())
+        num_steps = max(rollout.shape[1] for rollout in rollouts)
+        return torch.cat(
+            [
+                pad(rollout, [0, 0, 0, num_steps - rollout.shape[1]])
+                for rollout in rollouts
+            ]
+        )
 
     def _warn_missing_traj_info(self) -> None:
         """Warn (once per instance) that trajectory boundaries are unknown."""
