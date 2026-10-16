@@ -1,0 +1,55 @@
+seed: 0
+device: cuda
+matmul_precision: high
+log_interval: 10000
+
+logger:
+  backend: csv
+  project: torchrl-transitive-rl
+  group: null
+  mode: online
+
+env:
+  name: Pendulum-v1
+  max_episode_steps: 200
+
+dataset:
+  name: scene-play-oraclerep-v0
+  random_frames: 1000
+
+sampling:
+  geometric_goal: true
+  geometric_policy_goal: false
+
+network:
+  hidden: [512, 512, 512]
+
+loss:
+  discount: 0.99
+  expectile: 0.7
+  distance_weight: 1.0
+  alpha: 1.0
+  tau: 0.005
+  oracle_distill: true
+
+optim:
+  steps: 1000000
+  batch_size: 1024
+  lr: 0.0003
+
+compile:
+  compile: false
+  compile_mode:
+  cudagraphs: false
+
+evaluation:
+  interval: 100000
+  num_tasks: 5
+  episodes: 15
+  max_steps: 1000
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/transitive_rl/${dataset.name}/seed${seed}_${now:%H-%M-%S}

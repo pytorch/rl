@@ -52,6 +52,7 @@ from torchrl.trainers.algorithms.configs.data import (
     StorageEnsembleConfig,
     StorageEnsembleWriterConfig,
     StreamingSliceSamplerConfig,
+    SubgoalTripletConfig,
     TensorDictReplayBufferConfig,
     TensorStorageConfig,
     TransitionConfig,
@@ -149,6 +150,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     TD3LossConfig,
     TdMpc2LossConfig,
     TQCLossConfig,
+    TransitiveQLossConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
     A2CTrainerConfig,
@@ -437,6 +439,7 @@ __all__ = [
     # Sample units
     "SampleUnitConfig",
     "SequenceConfig",
+    "SubgoalTripletConfig",
     "TransitionConfig",
     # Samplers
     "ConsumingSamplerConfig",
@@ -462,6 +465,7 @@ __all__ = [
     "TD3LossConfig",
     "TdMpc2LossConfig",
     "TQCLossConfig",
+    "TransitiveQLossConfig",
     # Value functions
     "GAEConfig",
     # Trainers
@@ -741,6 +745,7 @@ def _register_configs():
     cs.store(group="loss", name="td3", node=TD3LossConfig)
     cs.store(group="loss", name="tdmpc2", node=TdMpc2LossConfig)
     cs.store(group="loss", name="tqc", node=TQCLossConfig)
+    cs.store(group="loss", name="transitive_q", node=TransitiveQLossConfig)
 
     # =============================================================================
     # Value Function Configurations
@@ -790,6 +795,7 @@ def _register_configs():
     cs.store(group="writer", name="round_robin", node=RoundRobinWriterConfig)
     cs.store(group="sample_unit", name="transition", node=TransitionConfig)
     cs.store(group="sample_unit", name="sequence", node=SequenceConfig)
+    cs.store(group="sample_unit", name="subgoal_triplet", node=SubgoalTripletConfig)
 
     # =============================================================================
     # Collector Configurations
