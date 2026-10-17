@@ -2467,6 +2467,28 @@ class TestTo:
         spec = MultiOneHot(nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long)
         assert spec.to(device).device == device
 
+    @pytest.mark.parametrize(
+        "spec_cls,expected",
+        [
+            (MultiCategorical, [1, 0]),
+            (MultiOneHot, [0, 1, 0, 1, 0]),
+        ],
+    )
+    def test_multi_masked_dtype(self, spec_cls, expected, device):
+        mask = torch.tensor([False, True, False, True, False], device=device)
+        spec = spec_cls([3, 2], device=device, mask=mask)
+
+        converted = spec.to(torch.int32)
+        assert converted.dtype == torch.int32
+        assert converted.mask.dtype == torch.bool
+        torch.testing.assert_close(converted.mask, mask)
+        sample = converted.rand((2, 3))
+        expected = torch.tensor(expected, dtype=torch.int32, device=device)
+        torch.testing.assert_close(sample, expected.expand(2, 3, -1))
+        assert converted.is_in(sample)
+        assert spec.dtype != converted.dtype
+        torch.testing.assert_close(spec.mask, mask)
+
     def test_non_tensor(self, device):
         spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
         assert spec.to(device).device == device
