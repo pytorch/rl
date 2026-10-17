@@ -912,7 +912,13 @@ class GRPOLoss(LossModule):
                 expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
             )
         diff = ref_log_prob - cur_log_prob
-        kl_penalty = (diff.expm1() - diff).mean()
+        kl_token = diff.expm1() - diff
+        if mask is None:
+            kl_penalty = kl_token.mean()
+        else:
+            kl_penalty = self._aggregate_loss_value(
+                kl_token.unsqueeze(-1), mask, tensordict=tensordict
+            )
         return coeff * kl_penalty, kl_penalty
 
     def _log_weight(
