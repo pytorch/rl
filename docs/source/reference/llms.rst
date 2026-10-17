@@ -291,6 +291,7 @@ See :doc:`services` for more details on the service registry system.
 
     >>> from torchrl.envs.llm.transforms import PythonInterpreter
     >>> from torchrl.envs.llm import ChatEnv
+    >>> from torchrl.data.llm import History
     >>> from tensordict import TensorDict, set_list_to_stack
     >>> from transformers import AutoTokenizer
     >>> from pprint import pprint
@@ -307,7 +308,7 @@ See :doc:`services` for more details on the service registry system.
     >>> env.set_seed(0)
     >>> # Pass the reset data - the prompt - to the environment
     >>> reset_data = env.reset(TensorDict(
-    ...     text="Let's write a Python function that returns the square of a number.",
+    ...     query="Let's write a Python function that returns the square of a number.",
     ...     batch_size=[1])
     ... )
     >>> # Simulate an action - i.e., a response from the LLM (as if we were an LLM) 
@@ -317,13 +318,16 @@ See :doc:`services` for more details on the service registry system.
     ...     return x * x
     ... print('testing the square function with input 2:', square(2))
     ... ```
-    ... <|im_end|>
     ... """
-    >>> step_data = reset_data.set("text_response", [action])
-    >>> s, s_ = env.step_and_maybe_reset(reset_data)
+    >>> step_data = reset_data.clone()
+    >>> step_data["history"].response = History(content=action, role="assistant").view(1, 1)
+    >>> step_data["history"].full = step_data["history"].prompt.extend(
+    ...     step_data["history"].response, dim=-1
+    ... )
+    >>> stepped_data, next_data = env.step_and_maybe_reset(step_data)
     >>> # The history is a stack of chat messages.
     >>> #  The python interpreter transform has executed the code in the last message.
-    >>> pprint(s_["history"].apply_chat_template(tokenizer=tokenizer))
+    >>> pprint(next_data["history"].prompt.apply_chat_template(tokenizer=tokenizer))
     ['<|im_start|>system\n'
      'You are an assistant that can execute Python code. Decorate your code with '
      '```python``` tags.<|im_end|>\n'
