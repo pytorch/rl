@@ -318,7 +318,6 @@ See :doc:`services` for more details on the service registry system.
     ...     return x * x
     ... print('testing the square function with input 2:', square(2))
     ... ```
-    ... <|im_end|>
     ... """
     >>> step_data = reset_data.clone()
     >>> step_data["history"].response = History(content=action, role="assistant").view(1, 1)
