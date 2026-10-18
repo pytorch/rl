@@ -27,8 +27,13 @@ class ReplayDatasetExporter(Protocol[_ExternalDatasetT_co]):
     Implement this protocol to export a finite, map-style dataset whose items
     are :class:`~tensordict.TensorDictBase` instances. The returned object is
     native to the external library and can, for example, be published or saved
-    with that library. This converts stored data only; replay-buffer state such
-    as the sampler and writer state is outside this protocol.
+    with that library. Use exported replay data for offline learning,
+    archiving, or sharing with other tools.
+
+    Finish reading the input dataset before returning and return data that is
+    independent of subsequent changes to the input. This lets
+    :meth:`~torchrl.data.ReplayBuffer.export` resume replay-buffer writes after
+    conversion completes.
 
     Examples:
         >>> import torch
@@ -37,7 +42,7 @@ class ReplayDatasetExporter(Protocol[_ExternalDatasetT_co]):
         >>> from torchrl.data.datasets import ReplayDatasetExporter
         >>> class ListExporter:
         ...     def to_external(self, dataset):
-        ...         return [dataset[index].to_dict() for index in range(len(dataset))]
+        ...         return [dataset[index].clone().to_dict() for index in range(len(dataset))]
         >>> replay_buffer = ReplayBuffer(storage=LazyTensorStorage(max_size=2))
         >>> _ = replay_buffer.extend(TensorDict({"observation": torch.arange(2)}, [2]))
         >>> exporter: ReplayDatasetExporter[list[dict]] = ListExporter()

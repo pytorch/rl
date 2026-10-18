@@ -91,8 +91,8 @@ class StorageDataset(Dataset):
     Reading the storage directly with a DataLoader, without this adapter,
     fetches items one by one and passes the list to the collate function.
 
-    DataLoader workers read the storage content live: creating the dataset
-    moves a CPU tensor storage to shared memory and memory-mapped storages are
+    DataLoader workers read the storage content live: by default, creating the
+    dataset moves CPU tensor storage to shared memory and memory-mapped storages are
     read through their files, so rows written after the workers start are
     visible to them under every start method. Reads are not synchronized with
     writes, and a row written while a worker reads it can come back partially
@@ -102,6 +102,13 @@ class StorageDataset(Dataset):
 
     Args:
         storage (Storage): the storage to read. Must be one-dimensional.
+
+    Keyword Args:
+        share_memory (bool, optional): whether to move CPU tensor storage to
+            shared memory when creating the dataset, so DataLoader workers
+            observe later writes. Defaults to ``True``. Set to ``False`` for
+            reads in the calling process or when storage sharing is already
+            arranged.
 
     Examples:
         >>> import torch
@@ -120,13 +127,14 @@ class StorageDataset(Dataset):
         torch.Size([4])
     """
 
-    def __init__(self, storage: Storage) -> None:
+    def __init__(self, storage: Storage, *, share_memory: bool = True) -> None:
         if storage.ndim > 1:
             raise RuntimeError(
                 f"A {type(storage).__name__} with ndim={storage.ndim} is not a "
                 "flat dataset. Read storage.flatten().as_dataset() instead."
             )
-        storage._share_memory_()
+        if share_memory:
+            storage._share_memory_()
         self.storage = storage
         self._worker_checked = False
 
