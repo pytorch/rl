@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from .adapters import ReplayDatasetAdapter, ReplayDatasetExporter, ReplayDatasetImporter
+
 # Import classes that don't have external dependencies
 from .atari_dqn import AtariDQNExperienceReplay
 from .common import BaseDatasetExperienceReplay
@@ -48,6 +50,9 @@ except ImportError:
     pass
 
 __all__ = [
+    "ReplayDatasetAdapter",
+    "ReplayDatasetExporter",
+    "ReplayDatasetImporter",
     "AtariDQNExperienceReplay",
     "BaseDatasetExperienceReplay",
     "load_dataset",
