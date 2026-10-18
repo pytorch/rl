@@ -29,6 +29,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
+    LazyTensorStorage,
     ListStorage,
     ReplayBuffer,
     ReplayBufferEnsemble,
@@ -915,6 +916,49 @@ class TestHuggingFaceDatasetAdapter:
         imported = HuggingFaceDatasetAdapter().from_external(external)
 
         assert imported[0]["price"] == Decimal("1.25")
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets"
+    )
+    @pytest.mark.parametrize("storage_type", [ListStorage, LazyTensorStorage])
+    @pytest.mark.parametrize("shared", [False, True])
+    def test_replay_buffer_episodic_export(self, storage_type, shared):
+        rb = ReplayBuffer(storage=storage_type(4), shared=shared)
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.tensor([11, 1, 10, 0]),
+                    ("collector", "traj_ids"): torch.tensor([1, 0, 1, 0]),
+                    "step": torch.tensor([1, 1, 0, 0]),
+                },
+                [4],
+            )
+        )
+        adapter = HuggingFaceDatasetAdapter()
+        external = rb.export(
+            adapter, trajectory_key=("collector", "traj_ids"), step_key="step"
+        )
+        rb.empty()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.tensor([99]),
+                    ("collector", "traj_ids"): torch.tensor([9]),
+                    "step": torch.tensor([0]),
+                },
+                [1],
+            )
+        )
+        imported = adapter.from_external(external)
+        assert [imported[i]["obs"].item() for i in range(len(imported))] == [
+            0,
+            1,
+            10,
+            11,
+        ]
+        assert [
+            imported[i]["collector", "traj_ids"].item() for i in range(len(imported))
+        ] == [0, 0, 1, 1]
 
 
 @pytest.mark.slow
