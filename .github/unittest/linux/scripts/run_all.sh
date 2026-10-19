@@ -154,6 +154,16 @@ uv_pip_install \
   ninja \
   timm
 
+# Dataset adapter tests are collected by the CPU bulk shard.
+if [[ "${CU_VERSION:-}" == cpu && "${TORCHRL_TEST_SHARD:-all}" == bulk ]]; then
+  # Exercise the oldest supported datasets version on the oldest Python job.
+  if [[ "${PYTHON_VERSION}" == "3.10" ]]; then
+    uv_pip_install "datasets==3.6.0" "pyarrow>=14.0.0"
+  else
+    uv_pip_install datasets "pyarrow>=14.0.0"
+  fi
+fi
+
 # Install dm_control for Python < 3.13
 # labmaze (dm_control dependency) doesn't have Python 3.13+ wheels
 if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
