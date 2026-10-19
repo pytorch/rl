@@ -1589,6 +1589,10 @@ document.write(`
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../data_datasets.html">Datasets</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.ReplayDatasetExporter.html">ReplayDatasetExporter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.ReplayDatasetImporter.html">ReplayDatasetImporter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.ReplayDatasetAdapter.html">ReplayDatasetAdapter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.HuggingFaceDatasetAdapter.html">HuggingFaceDatasetAdapter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.AtariDQNExperienceReplay.html">AtariDQNExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.D4RLExperienceReplay.html">D4RLExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.GenDGRLExperienceReplay.html">GenDGRLExperienceReplay</a></li>
@@ -2648,6 +2652,15 @@ document.write(`
 <dd><p>Returns the interaction type set by <code class="xref py py-class docutils literal notranslate"><span class="pre">set_interaction_type</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> outside of it.</p>
 <p>When it returns <code class="docutils literal notranslate"><span class="pre">None</span></code>, each <code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code>
 uses its <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code>.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">interaction_type</span><span class="p">,</span> <span class="n">set_interaction_type</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">interaction_type</span><span class="p">())</span>
+<span class="go">None</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_interaction_type</span><span class="p">(</span><span class="s2">&quot;mode&quot;</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">interaction_type</span><span class="p">())</span>
+<span class="go">mode</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -3022,7 +3035,7 @@ uses its <code class="docutils literal notranslate"><span class="pre">default_in
        "headline": "exploration_type",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.envs.exploration_type.html",
-       "articleBody": "exploration_type# torchrl.envs.exploration_type() \u2192 InteractionType | None# Returns the interaction type set by set_interaction_type, or None outside of it. When it returns None, each ProbabilisticTensorDictModule uses its default_interaction_type.",
+       "articleBody": "exploration_type# torchrl.envs.exploration_type() \u2192 InteractionType | None# Returns the interaction type set by set_interaction_type, or None outside of it. When it returns None, each ProbabilisticTensorDictModule uses its default_interaction_type. Examples \u003e\u003e\u003e from tensordict.nn import interaction_type, set_interaction_type \u003e\u003e\u003e print(interaction_type()) None \u003e\u003e\u003e with set_interaction_type(\"mode\"): ... print(interaction_type()) mode",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

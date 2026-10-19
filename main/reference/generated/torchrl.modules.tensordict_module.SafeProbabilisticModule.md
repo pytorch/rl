@@ -202,16 +202,27 @@ tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
 
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*, *tensordict_out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *_requires_sample: bool = True*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/modules/tensordict_module/probabilistic.html#SafeProbabilisticModule.forward)
 
-Define the computation performed at every call.
+Builds the distribution from `tensordict` and writes a value from it at `out_keys`.
 
-Should be overridden by all subclasses.
+With `return_log_prob=True`, the module also writes the
+log-probability of the value. You can also call the module with the
+parameters as keyword arguments, `module(loc=..., scale=...)`, and
+get the outputs back (see `dispatch()`).
 
-Note
+Parameters:
 
-Although the recipe for forward pass needs to be defined within
-this function, one should call the `Module` instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.
+- **tensordict** (*TensorDictBase*) - the input, with the distribution
+parameters at `in_keys`.
+- **tensordict_out** (*TensorDictBase**,**optional*) - the tensordict where
+the outputs are written. Defaults to `None`, which writes
+them into `tensordict`.
+
+Returns:
+
+The tensordict that holds the outputs, `tensordict_out` or
+`tensordict`. With `num_samples`, a new tensordict, which is
+that tensordict expanded to `num_samples + batch_size`. The
+input does not get the outputs then.
 
 random(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/modules/tensordict_module/probabilistic.html#SafeProbabilisticModule.random)
 

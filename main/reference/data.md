@@ -139,6 +139,7 @@ rb.update_tensordict_priority(sample)
 - [Replay Buffers](data_replaybuffers.html)
 
 - [Core Replay Buffer Classes](data_replaybuffers.html#core-replay-buffer-classes)
+- [Exporting replay data](data_replaybuffers.html#exporting-replay-data)
 - [Asynchronous readiness and statistics](data_replaybuffers.html#asynchronous-readiness-and-statistics)
 - [Replay-ratio limiting](data_replaybuffers.html#replay-ratio-limiting)
 - [Sample units](data_replaybuffers.html#sample-units)

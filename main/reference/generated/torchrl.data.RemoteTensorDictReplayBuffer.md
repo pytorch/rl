@@ -165,6 +165,79 @@ Parameters:
 
 **empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
 
+export(*exporter: [ReplayDatasetExporter](torchrl.data.datasets.ReplayDatasetExporter.html#torchrl.data.datasets.ReplayDatasetExporter)[T]*, */*, ***, *trajectory_key: NestedKey | None = None*, *step_key: NestedKey | None = None*) → T
+
+Convert stored replay data to an external dataset.
+
+The exporter receives a finite, map-style dataset with one item per
+storage entry. Entries are read in physical storage order by default.
+Storage dimensions are flattened, while each item's remaining batch
+and feature dimensions are preserved. The values are the stored values,
+before sampling transforms are applied.
+
+Pass both `trajectory_key` and `step_key` to group entries by
+trajectory identifier and order each group by step number. Groups are
+ordered by increasing trajectory identifier. All stored entries are
+retained, including partially stored trajectories. Each key must hold
+one integer per entry, step numbers must be non-negative, and each
+trajectory/step pair must be unique. Use identifiers that distinguish
+episodes across all producers contributing to the buffer.
+
+Export waits for pending buffer work and runs synchronously. Storage
+reads and writes through the buffer that begin during conversion wait
+for the exporter to finish.
+
+Buffers configured with `shared=True` require CPU-backed data for
+export. Accelerator-backed data can be exported from unshared buffers.
+
+Parameters:
+
+**exporter** ([*ReplayDatasetExporter*](torchrl.data.datasets.ReplayDatasetExporter.html#torchrl.data.datasets.ReplayDatasetExporter)) - object implementing
+`to_external(dataset)`. It converts the dataset to the
+external library's native representation and must support
+the storage's item types and shapes. It completes all reads
+of the input dataset before returning. The returned data must
+be independent of subsequent replay-buffer writes.
+
+Keyword Arguments:
+
+- **trajectory_key** (*NestedKey**or**None**,**optional*) - stored trajectory
+identifier used to group entries. Supply together with
+`step_key` for episodic ordering. Defaults to `None`.
+- **step_key** (*NestedKey**or**None**,**optional*) - stored step number used to
+order entries within each trajectory. Supply together with
+`trajectory_key`. Defaults to `None`.
+
+Returns:
+
+The native external dataset returned by the exporter. Use the
+external library's methods to save or publish it.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+>>> class ColumnExporter:
+... def to_external(self, dataset):
+... return torch.stack([dataset[i]["observation"] for i in range(len(dataset))])
+>>> rb = ReplayBuffer(storage=LazyTensorStorage(4))
+>>> _ = rb.extend(TensorDict({
+... "observation": torch.tensor([11, 1, 10, 0]),
+... ("collector", "traj_ids"): torch.tensor([1, 0, 1, 0]),
+... "step_count": torch.tensor([1, 1, 0, 0]),
+... }, batch_size=[4]))
+>>> rb.export(ColumnExporter()).tolist()
+[11, 1, 10, 0]
+>>> rb.export(
+... ColumnExporter(),
+... trajectory_key=("collector", "traj_ids"),
+... step_key="step_count",
+... ).tolist()
+[0, 1, 10, 11]
+```
+
 extend(*tensordicts: list | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/remote.html#RemoteTensorDictReplayBuffer.extend)
 
 Extends the replay buffer with a batch of data.

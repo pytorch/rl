@@ -94,7 +94,7 @@ Methods
 | `get_submodule`(target) | Return the submodule given by `target` if it exists, otherwise throw an error. |
 | `half`() | Casts all floating point parameters and buffers to `half` datatype. |
 | `ipu`([device]) | Move all model parameters and buffers to the IPU. |
-| `is_tdmodule_compatible`(module) | Checks if a module is compatible with TensorDictModule API. |
+| `is_tdmodule_compatible`(module) | Returns `True` if `module` has both an `in_keys` and an `out_keys` attribute. |
 | `load_state_dict`(state_dict[, strict, assign]) | Copy parameters and buffers from `state_dict` into this module and its descendants. |
 | `modules`([remove_duplicate]) | Return an iterator over all modules in the network. |
 | `mtia`([device]) | Move all model parameters and buffers to the MTIA. |
@@ -116,9 +116,9 @@ Methods
 | `register_state_dict_post_hook`(hook) | Register a post-hook for the [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) method. |
 | `register_state_dict_pre_hook`(hook) | Register a pre-hook for the [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) method. |
 | `requires_grad_`([requires_grad]) | Change if autograd should record operations on parameters in this module. |
-| `reset_out_keys`() | Resets the `out_keys` attribute to its original value. |
-| `reset_parameters_recursive`([parameters]) | Recursively reset the parameters of the module and its children. |
-| `select_out_keys`(*out_keys) | Selects the keys that will be found in the output tensordict. |
+| `reset_out_keys`() | Undoes `select_out_keys()`: the module writes all its `out_keys` again. |
+| `reset_parameters_recursive`([parameters]) | Resets the parameters of every submodule that has a `reset_parameters` method. |
+| `select_out_keys`(*out_keys) | Keeps only some of the `out_keys` in the output of the module, and returns the module. |
 | `set_extra_state`(state) | Set extra state contained in the loaded state_dict. |
 | `set_submodule`(target, module[, strict]) | Set the submodule given by `target` if it exists, otherwise throw an error. |
 | `share_memory`() | See [`torch.Tensor.share_memory_()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.share_memory_.html#torch.Tensor.share_memory_). |

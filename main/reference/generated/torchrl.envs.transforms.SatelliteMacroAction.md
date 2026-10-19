@@ -22,11 +22,11 @@ torch.Size([1, 4])
 
 cat(*dim: int = 0*, ***, *out=None*)
 
-Concatenates tensordicts into a single tensordict along the given dimension.
+Concatenates tensordicts along an existing batch dimension `dim`.
 
-This call is equivalent to calling [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) but is compatible with torch.compile.
-The tensordicts must have the same keys, and the same batch size
-except along `dim`.
+It is equivalent to [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat), and also works under
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile). The tensordicts must have the same keys, or a
+`KeyError` is raised, and the same batch size except along `dim`.
 
 Parameters:
 
@@ -37,7 +37,7 @@ Defaults to `0`.
 Keyword Arguments:
 
 **out** (*TensorDictBase**,**optional*) - a tensordict to write the result
-into.
+into. Defaults to `None`.
 
 Examples
 
@@ -59,91 +59,167 @@ Deprecated since version 0.15: Use `dataclasses.fields(cls)` instead. It returns
 
 from_any(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
-Recursively converts any object to a TensorDict.
+Converts a dict, tuple, dataclass, array or file to a tensordict, recursively.
 
-Note
+`from_any` picks the conversion from the type of `obj`, and
+applies it to the values inside `obj` too. It accepts more types
+than the [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) constructor, at the cost of
+some overhead and of opinionated choices about how each type maps to
+entries:
 
-`from_any` is less restrictive than the regular TensorDict constructor. It can cast data structures like
-dataclasses or tuples to a tensordict using custom heuristics. This approach may incur some extra overhead and
-involves more opinionated choices in terms of mapping strategies.
+- a dict or `collections.UserDict`: [`from_dict()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.from_dict);
+- a named tuple: `from_namedtuple()`;
+- a tuple: `from_tuple()`, with the keys `"0"`, `"1"`, ...
+This includes the results of `torch.return_types` (`max`,
+`sort`, `topk`, ...), which also emit a `FutureWarning`.
+Starting with TensorDict 0.17, the default will change to their
+field names (`"values"`, `"indices"`, ...), as
+`from_namedtuple()` gives;
+- a dataclass instance: `from_dataclass()` (the result is a
+tensordict, not a tensorclass). A dataclass type whose fields all
+have defaults gives a tensordict of the defaults too, with a
+`FutureWarning`. Starting with TensorDict 0.17, the default
+will change to returning the type unchanged, as for any other
+class;
+- a NumPy structured array: `from_struct_array()`;
+- a pandas DataFrame: `from_pandas()`;
+- an open `h5py.File`: a
+[`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) (see `from_h5()`).
 
-Note
-
-This method recursively converts the input object to a TensorDict. If the object is already a
-TensorDict (or any similar tensor collection object), it will be returned as is.
+A tensor or a tensor collection is returned as it is. A list becomes a
+tensor if [`torch.tensor()`](https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor) takes it, and a
+[`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) otherwise. Any other object is
+returned unchanged.
 
 Parameters:
 
-**obj** - The object to be converted.
+**obj** - the object to convert.
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - if `True`, the batch size will be computed automatically.
-Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output tensordict
-should have. Defaults to `None` (full batch-size at each level).
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
-Exclusive with `auto_batch_size`.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`, except for a dict, where
+`batch_size` wins, and for an `h5py.File`, where
+`auto_batch_size` wins. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
+Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`, except for a dict, where
+`batch_size` wins and no batch size is computed, and for an
+`h5py.File`, where `auto_batch_size` wins and
+`batch_size` is ignored. Defaults to `None`.
 
 Returns:
 
-A TensorDict representation of the input object.
+A tensordict (a [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) for an
+HDF5 file), a tensor or a [`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) for
+a list, or `obj` itself for the other types.
 
-Supported objects:
+Examples
 
-- Dataclasses through `from_dataclass()` (dataclasses will be converted to TensorDict instances, not tensorclasses).
-- Namedtuples through `from_namedtuple()`.
-- Dictionaries through [`from_dict()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.from_dict).
-- Tuples through `from_tuple()`. This includes the results of
-`torch.return_types` (`max`, `sort`, `topk`, ...), which get
-the keys `"0"`, `"1"`, ... and a `FutureWarning`.
-Starting with TensorDict 0.17, the default will change to their
-field names (`"values"`, `"indices"`, ...), as
-`from_namedtuple()` gives.
-- NumPy's structured arrays through `from_struct_array()`.
-- HDF5 objects through `from_h5()`.
+```
+>>> import dataclasses
+>>> import torch
+>>> from tensordict import TensorDict
+>>> @dataclasses.dataclass
+... class Data:
+... obs: torch.Tensor
+... extra: tuple
+>>> data = Data(obs=torch.zeros(3, 4), extra=(torch.ones(3), {"x": torch.ones(3)}))
+>>> td = TensorDict.from_any(data, auto_batch_size=True)
+>>> td.batch_size
+torch.Size([3])
+>>> sorted(td.keys(include_nested=True, leaves_only=True), key=str)
+[('extra', '0'), ('extra', '1', 'x'), 'obs']
+>>> TensorDict.from_any([1, 2, 3])
+tensor([1, 2, 3])
+```
 
 from_consolidated()
 
-Reconstructs a tensordict from a file written by `consolidate()`.
+Reconstructs a tensordict from a file written by `consolidate(filename=...)`.
 
-The batch sizes and names are as they were when the file was written.
-To write later changes into the file, call
-`consolidate(filename=filename)` again on the consolidated tensordict.
-See [`from_consolidated()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_consolidated.html#tensordict.from_consolidated).
-
-from_csv(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, ***kwargs*) → Self
-
-Creates a TensorDict from a CSV file.
-
-Requires either pandas or pyarrow to be installed.
+The result is consolidated: its leaves are views into one
+copy-on-write memory map of the file, so in-place writes into them do
+not reach the file. It is not locked. The batch sizes and names are as
+they were when the file was written. Same as
+[`from_consolidated()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_consolidated.html#tensordict.from_consolidated).
 
 Parameters:
 
-**path** (*str**or**Path*) - Path to the CSV file.
+**filename** (*str**or**Path*) - the file to read.
+
+Examples
+
+```
+>>> import tempfile
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}, batch_size=[3])
+>>> with tempfile.TemporaryDirectory() as path:
+... _ = td.consolidate(filename=f"{path}/td.bin")
+... loaded = TensorDict.from_consolidated(f"{path}/td.bin")
+... print(loaded["b", "c"], loaded.is_consolidated())
+tensor([1., 1., 1.]) True
+```
+
+from_csv(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, ***kwargs*) → Self
+
+Reads a CSV file into a tensordict, with one entry per column.
+
+Requires pandas or pyarrow: the file is read with
+`pandas.read_csv()` when pandas is installed, and with
+`pyarrow.csv.read_csv` otherwise. The columns are converted as in
+`from_pandas()`. `to_csv()` writes such a file.
+
+Parameters:
+
+**path** (*str**or**Path*) - the path of the CSV file.
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will
-be computed automatically. Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`,
-defines how many dimensions the output tensordict should have.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
-Defaults to `None`.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
-`[num_rows]`.
-- **separator** (*str**,**optional*) - If provided, column names are split on
-this separator to create nested TensorDicts. Defaults to `None`.
-- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
-are cast to this dtype. Defaults to `None`.
-- ****kwargs** - Additional keyword arguments forwarded to the CSV reader
-(`pandas.read_csv` or `pyarrow.csv.read_csv`).
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`,
+which gives `[num_rows]`.
+- **separator** (*str**,**optional*) - if given, splits the column names on it
+to build nested entries: with `separator="."`, the column
+`"obs.x"` becomes the entry `("obs", "x")`. Defaults to
+`None`, which keeps the column names as keys.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - if given, casts the numeric and
+boolean columns to it. Defaults to `None`, which keeps the
+dtype of each column.
+- ****kwargs** - passed to the CSV reader.
 
 Returns:
 
-A TensorDict representation of the CSV data.
+A tensordict of the class this method is called on
+([`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) for `TensorDictBase`).
 
 Examples
 
@@ -164,77 +240,133 @@ Examples
 
 from_dataclass(***, *dest_cls: Type | None = None*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *as_tensorclass: bool = False*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
-Converts a dataclass into a TensorDict instance.
+Converts a dataclass instance to a tensordict, with one entry per field.
+
+Each field value is converted with `from_any()`, so a nested
+dataclass or dict becomes a nested tensordict and a number becomes a
+tensor. With `as_tensorclass=True`, the conversion is that of the
+function [`from_dataclass()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass) instead, which returns a
+tensorclass.
 
 Parameters:
 
-**dataclass** - The dataclass instance to be converted.
+**dataclass** - the dataclass instance to convert. With
+`as_tensorclass=True`, it can also be a dataclass type.
+Without it, a dataclass type whose fields all have defaults
+gives a tensordict of the defaults, with a
+`FutureWarning`. Starting with TensorDict 0.17, the
+default will change to raising a `TypeError` for it.
 
 Keyword Arguments:
 
-- **dest_cls** (*tensorclass**,**optional*) - A tensorclass type to be used to map the data. If not provided, a new
-class is created. Without effect if `obj` is a type or as_tensorclass is False.
-- **auto_batch_size** (*bool**,**optional*) - If `True`, automatically determines and applies batch size to the
-resulting TensorDict. Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
-tensordict should have. Defaults to `None` (full batch-size at each level).
-- **as_tensorclass** (*bool**,**optional*) - If `True`, delegates the conversion to the free function
-[`from_dataclass()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass) and returns a tensor-compatible class ([`tensorclass()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.tensorclass.html#tensordict.tensorclass))
-or instance instead of a TensorDict. Defaults to `False`.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
+- **dest_cls** ([*type*](torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.type)*,**optional*) - with `as_tensorclass=True`, the
+tensorclass to convert to. Ignored otherwise. Defaults to
+`None`, which creates a new tensorclass with the fields of
+the dataclass.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **as_tensorclass** (*bool**,**optional*) - if `True`, returns a
+tensorclass instance (or a tensorclass type, for a dataclass
+type) through [`from_dataclass()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass). Defaults to
+`False`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
-Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`, an
+empty batch size.
 
 Returns:
 
-A TensorDict instance derived from the provided dataclass, unless as_tensorclass is True, in which case a tensor-compatible class or instance is returned.
+A [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), or a tensorclass instance or
+type if `as_tensorclass=True`.
 
 Raises:
 
-**TypeError** - If the provided input is not a dataclass instance.
+**TypeError** - if `dataclass` is not a dataclass and
+ `as_tensorclass=False`, if it is a dataclass type with a
+ field that cannot be read from the class (a field without a
+ default, or a field of a tensorclass type) and
+ `as_tensorclass=False`, or if both `auto_batch_size=True`
+ and `batch_size` are given.
 
-Warning
+Examples
 
-This method is distinct from the free function from_dataclass and serves a different purpose.
-While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.
-
-Note
-
-- This method creates a new TensorDict instance with keys corresponding to the fields of the input dataclass.
-- Each key in the resulting TensorDict is initialized using the cls.from_any method.
-- The auto_batch_size option allows for automatic batch size determination and application to the
-resulting TensorDict.
+```
+>>> import dataclasses
+>>> import torch
+>>> from tensordict import TensorDict
+>>> @dataclasses.dataclass
+... class Data:
+... obs: torch.Tensor
+... reward: torch.Tensor
+>>> data = Data(obs=torch.zeros(3, 4), reward=torch.ones(3))
+>>> td = TensorDict.from_dataclass(data, auto_batch_size=True)
+>>> type(td).__name__, td.batch_size
+('TensorDict', torch.Size([3]))
+>>> tc = TensorDict.from_dataclass(data, as_tensorclass=True, batch_size=[3])
+>>> type(tc).__name__, tc.batch_size
+('Data_tc', torch.Size([3]))
+```
 
 from_h5(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *non_tensor_as_stack: bool = False*)
 
-Creates a PersistentTensorDict from a h5 file.
+Opens an HDF5 file as a [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
+
+The data stays in the file: entries are read when they are accessed.
+Requires `h5py`. See [Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving) and
+[`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
 
 Parameters:
 
-**filename** (*str*) - The path to the h5 file.
+**filename** (*str**or**path*) - the path to the HDF5 file.
 
 Keyword Arguments:
 
-- **mode** (*str**,**optional*) - how the file is opened: `"r"` (read only),
-`"r+"` (read and write), or another mode of `h5py.File`
-(see [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)). Defaults to `"r"`.
-- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically.
-Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output
-tensordict should have. Defaults to `None` (full batch-size at each level).
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`.
+- **mode** (*str**,**optional*) - how the file is opened, as in
+`h5py.File`: `"r"` (read only), `"r+"` (read and
+write), and so on. Defaults to `"r"`.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`, which
+gives each nested tensordict the largest batch size that its
+entries share.
 - **non_tensor_as_stack** (*bool**,**optional*) - if `True`, a non-tensor
 dataset that tensordict did not write, such as a string column
 with one string per row, reads as a
 [`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
-leading dims equal the batch size. Otherwise it reads as one
-[`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
+leading dimensions equal the batch size. Otherwise it reads as
+one [`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
 dataset. Defaults to `False`.
 
 Returns:
 
-A PersistentTensorDict representation of the input h5 file.
+A [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) backed by the file.
+
+Raises:
+
+**TypeError** - if both `auto_batch_size=True` and `batch_size`
+ are given.
 
 Examples
 
@@ -260,41 +392,56 @@ PersistentTensorDict(
 
 from_json(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *lines: bool = False*, ***kwargs*) → Self
 
-Creates a TensorDict from a JSON file.
+Reads a JSON file of records into a tensordict, with one entry per field.
 
-Supports both standard JSON (array of records) and JSON Lines format.
-For nested JSON objects, use `from_dict()` instead.
-
-Requires pandas for best results. Falls back to stdlib `json`
-for simple cases.
+The file holds an array of records (`[{"a": 1, "b": 2.0}, ...]`),
+or one record per line with `lines=True` (JSON Lines). Each field
+becomes an entry with one value per record. The file is read with
+`pandas.read_json()` when pandas is installed, and with the
+`json` module otherwise. To convert a single JSON object, load
+it with `json.load()` and pass it to [`from_dict()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.from_dict).
+[`to_json()`](torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.to_json) writes such a file.
 
 Parameters:
 
-**path** (*str**or**Path*) - Path to the JSON file.
+**path** (*str**or**Path*) - the path of the JSON file.
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will
-be computed automatically. Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`,
-defines how many dimensions the output tensordict should have.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
-Defaults to `None`.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
-`[num_rows]`.
-- **separator** (*str**,**optional*) - If provided, column names are split on
-this separator to create nested TensorDicts. Defaults to `None`.
-- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
-are cast to this dtype. Defaults to `None`.
-- **lines** (*bool**,**optional*) - If `True`, reads the file as JSON Lines
-(one JSON object per line). Defaults to `False`.
-- ****kwargs** - Additional keyword arguments forwarded to the JSON
-reader.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`,
+which gives `[num_rows]`.
+- **separator** (*str**,**optional*) - if given, splits the column names on it
+to build nested entries: with `separator="."`, the column
+`"obs.x"` becomes the entry `("obs", "x")`. Defaults to
+`None`, which keeps the column names as keys.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - if given, casts the numeric and
+boolean columns to it. Defaults to `None`, which keeps the
+dtype of each column.
+- **lines** (*bool**,**optional*) - if `True`, reads the file as JSON Lines,
+one record per line. Defaults to `False`.
+- ****kwargs** - passed to `pandas.read_json()`. Ignored without
+pandas.
 
 Returns:
 
-A TensorDict representation of the JSON data.
+A tensordict of the class this method is called on
+([`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) for `TensorDictBase`).
 
 Examples
 
@@ -320,7 +467,12 @@ from_list(***, *auto_batch_size: bool | None = None*, *batch_size: [torch.Size](
 Builds a tensordict by stacking a list of dicts or tensor collections.
 
 Each dict is converted with `from_dict()` and the results are
-stacked along a new leading dimension.
+stacked along a new leading dimension. A tensordict or tensorclass in
+the list is stacked as it is: the keyword arguments do not apply to
+it. When the result does not get the `batch_size` or `device`
+asked for, a `FutureWarning` is emitted: starting with TensorDict
+0.17, the default will change to applying them to the result, which
+raises if the batch size does not fit, as for a list of dicts.
 
 Parameters:
 
@@ -328,23 +480,32 @@ Parameters:
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - if `True`, the batch size of
-each element is computed automatically. See `from_dict()`.
-- **batch_size** (*iterable**of**int**,**optional*) - the batch size of the
-result, with the length of the list first. Each element gets
-`batch_size[1:]`.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**compatible type**,**optional*) - a device for
-the result.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+of each element to the largest leading shape that all its
+entries share. Defaults to `None`, which behaves like
+`False` unless `batch_dims` is given.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result, with the length of the list first. Each element
+gets `batch_size[1:]`. Defaults to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
+Defaults to `None`.
 - **batch_dims** (*int**,**optional*) - the maximum number of batch dimensions
-of the result, the list dimension included. Exclusive with
-`batch_size`.
-- **names** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**str**,**optional*) - the dimension names of the result,
-one per batch dimension, with the name of the list dimension
-first.
+of the result, the list dimension included. Turns on
+`auto_batch_size` when that is `None`. Exclusive with
+`batch_size`. Defaults to `None`.
+- **names** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**str**,**optional*) - the names of the batch dimensions
+of the result, one per dimension, with the name of the list
+dimension first. Defaults to `None`.
 - **lazy** (*bool**,**optional*) - if `True`, the result is a lazy stack;
 if `False`, a dense stack. Defaults to `None`, which builds
 a dense stack when the elements have the same shape and a lazy
-stack otherwise.
+stack otherwise. See [Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking).
+
+Raises:
+
+**ValueError** - if `batch_size[0]` is not the length of the list.
 
 Examples
 
@@ -364,7 +525,7 @@ torch.Size([2, 3])
 
 from_module(*as_module: bool = False*, *lock: bool = False*, *use_state_dict: bool = False*, *filter_empty: bool = True*)
 
-Puts the parameters and buffers of a module in a tensordict.
+Returns a tensordict that holds the parameters and buffers of a module.
 
 The entries are the parameters and buffers of the module themselves,
 not copies. Submodules become nested tensordicts.
@@ -377,7 +538,7 @@ The function [`tensordict.from_module()`](https://docs.pytorch.org/tensordict/st
 
 Parameters:
 
-- **module** (*nn.Module*) - the module to get the parameters from.
+- **module** ([*torch.nn.Module*](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)) - the module to get the parameters from.
 - **as_module** (*bool**,**optional*) - if `True`, a `TensorDictParams`
 instance is returned, which can be used to store parameters
 within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
@@ -394,7 +555,7 @@ Defaults to `True`.
 
 Returns:
 
-a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), or a
+A [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), or a
 `TensorDictParams` if `as_module=True`.
 
 Examples
@@ -414,64 +575,63 @@ False
 
 from_modules(***, *as_module: bool = False*, *lock: bool = True*, *use_state_dict: bool = False*, *lazy_stack: bool = False*, *expand_identical: bool = False*)
 
-Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.
+Stacks the parameters and buffers of several modules in one tensordict.
+
+The result has one batch dimension, with one element per module, and
+the structure that `from_module()` gives. Use it to run an
+ensemble of modules that have the same structure with
+[`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap) and `to_module()` (see the example).
+
+The default, dense result holds new parameters and buffers: the
+stacks of those of the modules, with the same `requires_grad`. Pass
+these new parameters to the optimizer: gradients reach them, not the
+parameters of the modules. With `lazy_stack=True`, the result is a
+lazy stack of the parameters of the modules, which receive the
+gradients.
 
 Parameters:
 
-**modules** (*sequence**of**nn.Module*) - the modules to get the parameters from.
-If the modules differ in their structure, a lazy stack is needed
-(see the `lazy_stack` argument below).
+***modules** (*nn.Module*) - the modules to get the parameters from. With
+a dense stack, they must have the same parameters and buffers,
+with the same shapes.
 
 Keyword Arguments:
 
-- **as_module** (*bool**,**optional*) - if `True`, a `TensorDictParams`
-instance will be returned which can be used to store parameters
-within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
-- **lock** (*bool**,**optional*) - if `True`, the resulting tensordict will be locked.
-Defaults to `True`.
-- **use_state_dict** (*bool**,**optional*) -
-
-if `True`, the state-dict from the
-module will be used and unflattened into a TensorDict with
-the tree structure of the model. Defaults to `False`.
-
-Note
-
-This is particularly useful when state-dict hooks have to be used.
+- **as_module** (*bool**,**optional*) - if `True`, returns a
+`TensorDictParams`, which can be stored
+as a submodule of a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Exclusive with
+`lazy_stack`. Defaults to `False`.
+- **lock** (*bool**,**optional*) - if `True`, the result is locked (see
+[Locking and temporary changes](https://docs.pytorch.org/tensordict/stable/concepts/keys.html#keys-locking)). Defaults to `True`.
+- **use_state_dict** (*bool**,**optional*) - if `True`, reads the
+`state_dict()` of each module, so that its state-dict hooks
+run. Defaults to `False`.
 - **lazy_stack** (*bool**,**optional*) -
 
-whether parameters should be densly or
-lazily stacked. Defaults to `False` (dense stack).
-
-Note
-
-`lazy_stack` and `as_module` are exclusive features.
-
-Warning
-
-There is a crucial difference between lazy and non-lazy outputs
-in that non-lazy output will reinstantiate parameters with the
-desired batch-size, while `lazy_stack` will just represent
-the parameters as lazily stacked. This means that whilst the
-original parameters can safely be passed to an optimizer
-when `lazy_stack=True`, the new parameters need to be passed
-when it is set to `True`.
+if `True`, returns a
+[`LazyStackedTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) of the parameters of
+the modules; if `False`, stacks them into new parameters.
+Exclusive with `as_module`, and not compatible with lazy
+modules. Defaults to `False`.
 
 Warning
 
-Whilst it can be tempting to use a lazy stack to keep the
-orignal parameter references, remember that lazy stack
-perform a stack each time [`get()`](torchrl.data.Composite.html#torchrl.data.Composite.get) is called. This will
-require memory (N times the size of the parameters, more if a
-graph is built) and time to be computed.
-It also means that the optimizer(s) will contain more
-parameters, and operations like [`step()`](https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.step.html#torch.optim.Optimizer.step)
-or [`zero_grad()`](https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.zero_grad.html#torch.optim.Optimizer.zero_grad) will take longer
-to be executed. In general, `lazy_stack` should be reserved
-to very few use cases.
-- **expand_identical** (*bool**,**optional*) - if `True` and the same parameter (same
-identity) is being stacked to itself, an expanded version of this parameter
-will be returned instead. This argument is ignored when `lazy_stack=True`.
+A lazy stack stacks the parameters each time an entry is
+read with [`get()`](torchrl.data.Composite.html#torchrl.data.Composite.get), which costs memory (`N` times
+the size of the parameters, more if a graph is built) and
+time, and the optimizer holds `N` times more parameters.
+Use `lazy_stack=True` only when you need to train the
+parameters of the modules themselves.
+- **expand_identical** (*bool**,**optional*) - if `True`, a parameter that is
+the same object in every module is expanded instead of
+stacked, so that the result shares its memory. Ignored when
+`lazy_stack=True`. Defaults to `False`.
+
+Raises:
+
+**RuntimeError** - if `lazy_stack=True` and `as_module=True`, or if
+ `lazy_stack=True` and a module has uninitialized (lazy)
+ parameters.
 
 Examples
 
@@ -480,75 +640,86 @@ Examples
 >>> from torch import nn
 >>> from tensordict import TensorDict
 >>> _ = torch.manual_seed(0)
->>> empty_module = nn.Linear(3, 4, device="meta")
->>> n_models = 2
->>> modules = [nn.Linear(3, 4) for _ in range(n_models)]
+>>> modules = [nn.Linear(3, 4) for _ in range(2)]
 >>> params = TensorDict.from_modules(*modules)
->>> print(params)
-TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
->>> # example of batch execution
+>>> params.batch_size, params["weight"].shape
+(torch.Size([2]), torch.Size([2, 4, 3]))
+```
+
+Run the two modules on one input with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap), through a
+module on the `"meta"` device that holds no data. The gradients
+reach the stacked parameters, not those of the modules:
+
+```
+>>> empty_module = nn.Linear(3, 4, device="meta")
 >>> def exec_module(params, x):
 ... with params.to_module(empty_module):
 ... return empty_module(x)
 >>> x = torch.randn(3)
 >>> y = torch.vmap(exec_module, (0, None))(params, x)
->>> assert y.shape == (n_models, 4)
->>> # since lazy_stack = False, backprop leaves the original params untouched
+>>> y.shape
+torch.Size([2, 4])
 >>> y.sum().backward()
->>> assert params["weight"].grad.norm() > 0
->>> assert modules[0].weight.grad is None
+>>> params["weight"].grad is not None, modules[0].weight.grad is None
+(True, True)
 ```
 
-With `lazy_stack=True`, things are slightly different:
+With `lazy_stack=True`, the gradients reach the parameters of
+the modules:
 
 ```
 >>> params = TensorDict.from_modules(*modules, lazy_stack=True)
->>> print(params)
-LazyStackedTensorDict(
- fields={
- bias: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Tensor(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- exclusive_fields={
- },
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0)
->>> # example of batch execution
+>>> type(params).__name__
+'LazyStackedTensorDict'
 >>> y = torch.vmap(exec_module, (0, None))(params, x)
->>> assert y.shape == (n_models, 4)
 >>> y.sum().backward()
->>> assert modules[0].weight.grad is not None
+>>> modules[0].weight.grad is not None
+True
 ```
 
 from_namedtuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
-Converts a namedtuple to a TensorDict recursively.
+Converts a named tuple to a tensordict whose keys are its field names.
+
+Each field value is converted with `from_any()`, so a nested
+named tuple or dict becomes a nested tensordict and a number becomes a
+tensor. The `torch.return_types` results of `torch.max`,
+`torch.sort` and the like are accepted too. `to_namedtuple()`
+converts back.
 
 Parameters:
 
-**named_tuple** - The namedtuple instance to be converted.
+**named_tuple** (*NamedTuple*) - the named tuple to convert.
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - if `True`, the batch size will be computed automatically.
-Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
-tensordict should have. Defaults to `None` (full batch-size at each level).
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
-Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+It applies to the nested tensordicts too. Exclusive with
+`auto_batch_size`. Defaults to `None`, an empty batch size.
 
 Returns:
 
-A TensorDict representation of the input namedtuple.
+A [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict).
+
+Raises:
+
+**TypeError** - if both `auto_batch_size=True` and `batch_size`
+ are given.
 
 Examples
 
@@ -559,56 +730,61 @@ Examples
 ... "a_tensor": torch.zeros((3)),
 ... "nested": {"a_tensor": torch.zeros((3)), "a_string": "zero!"}}, [3])
 >>> nt = data.to_namedtuple()
->>> print(nt)
+>>> nt
 GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
->>> TensorDict.from_namedtuple(nt, auto_batch_size=True)
-TensorDict(
- fields={
- a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested: TensorDict(
- fields={
- a_string: NonTensorData(data=zero!, batch_size=torch.Size([3]), device=None),
- a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+>>> td = TensorDict.from_namedtuple(nt, auto_batch_size=True)
+>>> td.batch_size, td["nested", "a_string"]
+(torch.Size([3]), 'zero!')
+>>> sorted(TensorDict.from_namedtuple(torch.tensor([2, 0, 1]).max(0)).keys())
+['indices', 'values']
 ```
 
 from_pandas(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*) → Self
 
-Converts a pandas DataFrame to a TensorDict.
+Converts a pandas DataFrame to a tensordict, with one entry per column.
 
-Numeric columns become tensors, string/object columns become
-[`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData).
+The batch size is `[num_rows]`. Numeric and boolean columns become
+tensors, string and object columns become non-tensor data, a
+categorical column becomes the tensor of its codes, and a datetime
+column becomes an `int64` tensor of nanoseconds.
+`to_pandas()` converts back.
 
 Parameters:
 
-**dataframe** (*pd.DataFrame*) - The pandas DataFrame to convert.
+**dataframe** (*pd.DataFrame*) - the DataFrame to convert.
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will
-be computed automatically. Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`,
-defines how many dimensions the output tensordict should have.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
-Defaults to `None`.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
-`[num_rows]`.
-- **separator** (*str**,**optional*) - If provided, column names are split on
-this separator to create nested TensorDicts. For example, with
-`separator="."`, a column `"obs.x"` becomes
-`td["obs", "x"]`. Defaults to `None`.
-- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
-are cast to this dtype. Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`,
+which gives `[num_rows]`.
+- **separator** (*str**,**optional*) - if given, splits the column names on it
+to build nested entries: with `separator="."`, the column
+`"obs.x"` becomes the entry `("obs", "x")`. Defaults to
+`None`, which keeps the column names as keys.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - if given, casts the numeric and
+boolean columns to it. Defaults to `None`, which keeps the
+dtype of each column.
 
 Returns:
 
-A TensorDict representation of the DataFrame.
+A tensordict of the class this method is called on
+([`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) for `TensorDictBase`).
 
 Examples
 
@@ -629,38 +805,52 @@ TensorDict(
 
 from_parquet(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *columns: list[str] | None = None*, ***kwargs*) → Self
 
-Creates a TensorDict from a Parquet file.
+Reads a Parquet file into a tensordict, with one entry per column.
 
-Requires either pyarrow or pandas to be installed. Prefers pyarrow
-when available for better performance.
+Requires pyarrow or pandas: the file is read with
+`pyarrow.parquet.read_table` when pyarrow is installed, and with
+`pandas.read_parquet()` otherwise. The columns are converted as in
+`from_pandas()`. `to_parquet()` writes such a file.
 
 Parameters:
 
-**path** (*str**or**Path*) - Path to the Parquet file.
+**path** (*str**or**Path*) - the path of the Parquet file.
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will
-be computed automatically. Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`,
-defines how many dimensions the output tensordict should have.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
-Defaults to `None`.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
-`[num_rows]`.
-- **separator** (*str**,**optional*) - If provided, column names are split on
-this separator to create nested TensorDicts. Defaults to `None`.
-- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
-are cast to this dtype. Defaults to `None`.
-- **columns** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**str**,**optional*) - If provided, only read these
-columns from the file. Defaults to `None` (all columns).
-- ****kwargs** - Additional keyword arguments forwarded to the Parquet
-reader.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`,
+which gives `[num_rows]`.
+- **separator** (*str**,**optional*) - if given, splits the column names on it
+to build nested entries: with `separator="."`, the column
+`"obs.x"` becomes the entry `("obs", "x")`. Defaults to
+`None`, which keeps the column names as keys.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - if given, casts the numeric and
+boolean columns to it. Defaults to `None`, which keeps the
+dtype of each column.
+- **columns** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**str**,**optional*) - the columns to read. Defaults to
+`None`, which reads all the columns.
+- ****kwargs** - passed to the Parquet reader.
 
 Returns:
 
-A TensorDict representation of the Parquet data.
+A tensordict of the class this method is called on
+([`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) for `TensorDictBase`).
 
 Examples
 
@@ -681,29 +871,55 @@ Examples
 
 from_pytree(***, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*)
 
-Converts a pytree to a TensorDict instance.
+Converts a pytree to a tensordict that `to_pytree()` converts back.
 
-This method is designed to keep the pytree nested structure as much as possible.
+Each list, tuple, named tuple and dict of the pytree becomes a nested
+tensordict, and its type is stored in a `"_pytree_type"` entry so
+that `to_pytree()` can rebuild the pytree. The elements of a list
+or tuple get the keys `"0"`, `"1"`, ... The subclasses of these
+types, such as `collections.OrderedDict`,
+`collections.defaultdict` and the `torch.return_types`
+results of `torch.max` and the like, are accepted too. A
+`defaultdict` is rebuilt without its `default_factory`.
 
-Additional non-tensor keys are added to keep track of each level's identity, providing
-a built-in pytree-to-tensordict bijective transform API.
+A tensor or a tensor collection is returned as it is. Python ints and
+floats and NumPy arrays become tensors, so `to_pytree()` returns
+them as tensors. A dict key that is not a `NestedKey` (such as an
+int or an object) is stored in a [`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData)
+entry next to its value. Other types raise a `NotImplementedError`.
 
-Accepted classes currently include lists, tuples, named tuples and dict,
-and subclasses of these such as `collections.OrderedDict`,
-`collections.defaultdict` and the results of `torch.max` and
-the other `torch.return_types`. A `defaultdict` is rebuilt without
-its `default_factory`.
+Parameters:
+
+**pytree** - the pytree to convert: a list, tuple, named tuple or dict,
+nested to any depth, whose leaves are tensors, tensor
+collections, Python numbers or NumPy arrays.
+
+Keyword Arguments:
+
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Defaults to `None`, which gives an empty batch size unless
+`auto_batch_size=True`.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
 
 Note
 
-For dictionaries, non-NestedKey keys are registered separately as [`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData)
-instances.
-
-Note
-
-Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
-Note that this transformation is surjective: transforming back the tensordict to a pytree will not
-recover the original types.
+A module `state_dict()` round-trips through `from_pytree`, and its
+[`memmap()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.memmap) output loads with `load_memmap(path, allow_pickle=False)`.
+The state dicts of an optimizer and of a learning-rate scheduler hold
+`None`, `str` values and Python numbers, which `from_pytree` rejects
+(`None` and `str`) or returns as tensors (numbers): save them with
+`torch.save(sd, path)` and load them with `torch.load(path, weights_only=True)`,
+which round-trips them exactly without unpickling arbitrary objects.
 
 Note
 
@@ -712,98 +928,110 @@ fields, are converted with `from_any()` and do not
 round-trip through `to_pytree()`:
 
 - a list of numbers comes back as a tensor;
-- a dict holding a str, list or tuple, and an empty dict or named
-tuple (or a dict or named tuple holding one), come back as a
-`GenericDict` named tuple;
-- a tuple subclass, such as a `torch.return_types` result, and
-a plain tuple holding anything but tensors, Python ints and
-floats, dicts and named tuples (such as a str, a list or a NumPy
-number), or holding one of the dicts or named tuples above, make
-`to_pytree()` raise a `ValueError`, and an empty tuple
-comes back as an empty `GenericDict`.
+- an empty tuple, an empty dict or named tuple, and a dict that
+holds a str or a list come back as a `GenericDict` named
+tuple;
+- a dict that holds a tuple, a tuple subclass (such as a
+`torch.return_types` result), and a tuple that holds anything
+other than tensors, Python numbers, dicts and named tuples make
+`to_pytree()` raise a `ValueError`.
 
-The other dict, named tuple and plain tuple fields come back with
-their own type.
+The other dict, named tuple and tuple fields come back with their
+own type.
 
 Examples
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> # Create a pytree with tensor leaves, and one "weird"-looking dict key
->>> class WeirdLookingClass:
+>>> pytree = {"obs": torch.zeros(3, 4), "pair": (torch.zeros(3), torch.ones(3))}
+>>> td = TensorDict.from_pytree(pytree, auto_batch_size=True)
+>>> td.batch_size
+torch.Size([3])
+>>> sorted(td.keys()), sorted(td["pair"].keys())
+(['_pytree_type', 'obs', 'pair'], ['0', '1', '_pytree_type'])
+>>> type(td.to_pytree()["pair"]).__name__
+'tuple'
+```
+
+A pytree with lists, dicts, a named tuple and a dict key that is
+not a string round-trips:
+
+```
+>>> class Key:
 ... pass
-...
->>> weird_key = WeirdLookingClass()
->>> # Make a pytree with tuple, lists, dict and namedtuple
+>>> key = Key()
 >>> pytree = (
-... [torch.randint(10, (3,)), torch.zeros(2)],
-... {
-... "tensor": torch.randn(
-... 2,
-... ),
-... "td": TensorDict({"one": 1}),
-... weird_key: torch.randint(10, (2,)),
-... "list": [1, 2, 3],
-... },
-... {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+... [torch.arange(3), torch.zeros(2)],
+... {"tensor": torch.ones(2), key: torch.arange(2), "list": [1, 2, 3]},
+... {"named_tuple": TensorDict(two=torch.ones(1)).to_namedtuple()},
 ... )
->>> # Build a TensorDict from that pytree
->>> td = TensorDict.from_pytree(pytree)
->>> # Recover the pytree
->>> pytree_recon = td.to_pytree()
->>> # Check that the leaves match
+>>> pytree_recon = TensorDict.from_pytree(pytree).to_pytree()
 >>> def check(v1, v2):
 ... assert (v1 == v2).all()
-...
 >>> _ = torch.utils._pytree.tree_map(check, pytree, pytree_recon)
->>> assert weird_key in pytree_recon[1]
+>>> key in pytree_recon[1]
+True
 ```
 
 from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
 
-Pre-allocate a zero-filled TensorDict from a schema.
+Allocates a zero-filled tensordict from a schema of shapes and dtypes.
 
-Creates a `TensorDictBase` whose storage backend is selected
-by `storage`. Each entry in `schema` maps a field name to an
-`(element_shape, dtype)` pair; the full stored shape is
-`[*batch_size, *element_shape]`.
+Each entry of `schema` maps a key to an `(element_shape, dtype)`
+pair, and the entry gets the shape `[*batch_size, *element_shape]`.
+`storage` selects where the zeros are stored, so that a buffer on
+disk or on a server can be created without building it in memory
+first.
 
 Parameters:
 
-**schema** - Mapping from field name to `(element_shape, dtype)`.
-`element_shape` is the per-element shape (excluding
-`batch_size`).
+**schema** (*dict*) - maps each key (a `str`) to a pair
+`(element_shape, dtype)`, where `element_shape` (a list of
+int or a `torch.Size`) is the shape of the entry after the
+batch dimensions.
 
 Keyword Arguments:
 
-- **batch_size** - Overall batch dimensions prepended to every element
-shape. Defaults to `()`.
-- **storage** (*str**or**None*) -
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result, prepended to every element shape. Defaults to
+`None`, an empty batch size.
+- **storage** (*str**,**optional*) -
 
-Backend selector:
+where the entries are stored:
 
-- `None` - plain `TensorDict` with regular tensors.
-- `"memmap"` - memory-mapped tensors on disk.
-Pass `prefix=<dir>` in *kwargs*.
-- `"h5"` - HDF5 via `PersistentTensorDict`.
-Pass `filename=<path>` in *kwargs*.
-- `"zarr"` - zarr (requires `zarr>=3.0`) via
-`PersistentTensorDict`. Pass `filename=<path or store>`
-in *kwargs*.
-- `"shared"` - CPU shared-memory tensors.
-- `"redis"` / `"dragonfly"` - delegates to
-`TensorDictStore.from_schema()`.
-- **device** - Device for the resulting tensors (ignored by some
-backends).
-- ****kwargs** - Backend-specific arguments forwarded to the
-underlying constructor (e.g. `prefix` for memmap,
-`filename` for h5, `host`/`port` for redis).
+- `None`: a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) of regular
+tensors.
+- `"memmap"`: memory-mapped tensors, in the directory given
+by `prefix=<dir>` (see [`memmap_like()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.memmap_like)).
+- `"h5"`: a [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) in the
+HDF5 file given by `filename=<path>`.
+- `"zarr"`: a [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) in
+the zarr store given by `filename=<path or store>`
+(requires `zarr>=3.0`).
+- `"shared"`: tensors in shared memory (see
+[`share_memory_()`](torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.share_memory_)).
+- `"redis"` or `"dragonfly"`: a
+[`TensorDictStore`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) on a server,
+through [`TensorDictStore.from_schema`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore.from_schema).
+
+Defaults to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. The `"memmap"` storage ignores it. Defaults to
+`None`.
+- ****kwargs** - passed to the backend: `prefix` and the other
+arguments of [`memmap_like()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.memmap_like) for `"memmap"`,
+`filename` for `"h5"` and `"zarr"`, `host`, `port`
+and the like for `"redis"` and `"dragonfly"`.
 
 Returns:
 
-A new `TensorDictBase` subclass instance with
-pre-allocated (zero-filled) keys.
+A new tensordict of the type that `storage` selects, filled with
+zeros.
+
+Raises:
+
+**ValueError** - if `storage` is not one of the values above.
 
 Examples
 
@@ -828,45 +1056,59 @@ torch.Size([1000, 84, 84, 3])
 ... storage="memmap",
 ... prefix=d,
 ... )
-... assert td_mm.is_memmap()
+... print(td_mm.is_memmap())
+True
 ```
 
 from_struct_array(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*) → Self
 
-Converts a structured numpy array to a TensorDict.
+Converts a NumPy structured array to a tensordict, with one entry per field.
 
-The resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy operation).
-Changing values of the structured numpy array in-place will affect the content of the TensorDict.
-
-Note
-
-This method performs a zero-copy operation, meaning that the resulting TensorDict will share the same memory
-content as the input numpy array. Therefore, changing values of the numpy array in-place will affect the content
-of the TensorDict.
+The batch size is the shape of the array, and each entry holds a
+field. The conversion is zero-copy: the tensors share memory with the
+array, so an in-place change to the array changes the tensordict, and
+the other way around. Two cases copy the data: a `device` other
+than the CPU, and a field whose item size does not divide the size of
+a record, such as the `"i8"` field of a packed array of `"i8"` and
+`"f4"` fields (12 bytes per record), which torch cannot view. String
+fields become non-tensor data. `to_struct_array()` converts
+back.
 
 Parameters:
 
-**struct_array** (*np.ndarray*) - The structured numpy array to be converted.
+**struct_array** (*np.ndarray*) - the structured array to convert.
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically. Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
-tensordict should have. Defaults to `None` (full batch-size at each level).
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) -
-
-The device on which the TensorDict will be created.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share,
+which can add the dimensions of array fields. Exclusive with
+`batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-
-Note
-
-Changing the device (i.e., specifying any device other than `None` or `"cpu"`) will transfer the data,
-resulting in a change to the memory location of the returned data.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to None.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`,
+which uses the shape of the array.
 
 Returns:
 
-A TensorDict representation of the input structured numpy array.
+A tensordict of the class this method is called on
+([`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) for `TensorDictBase`).
+
+Raises:
+
+**TypeError** - if both `auto_batch_size=True` and `batch_size`
+ are given.
 
 Examples
 
@@ -878,12 +1120,13 @@ Examples
 ... dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
 ... )
 >>> td = TensorDict.from_struct_array(x)
->>> x_recon = td.to_struct_array()
->>> assert (x_recon == x).all()
->>> assert x_recon.shape == x.shape
->>> # Try modifying x age field and check effect on td
->>> x["age"] += 1
->>> assert (td["age"] == np.array([10, 4])).all()
+>>> td.batch_size, td["age"]
+(torch.Size([2]), tensor([9, 3], dtype=torch.int32))
+>>> x["age"] += 1 # the tensordict shares memory with the array
+>>> td["age"]
+tensor([10, 4], dtype=torch.int32)
+>>> bool((td.to_struct_array() == x).all())
+True
 ```
 
 *classmethod*from_tensordict(*tensordict: TensorDictBase*, *non_tensordict: dict | None = None*, *safe: bool | None = None*) → Self
@@ -901,10 +1144,17 @@ Parameters:
 
 - **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
 - **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
-fields that neither argument holds are set to `None`.
-- **safe** (*bool**,**optional*) - Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
-raise an error if `tensordict` is not a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase).
-Without it, such a tensordict raises an error.
+fields that neither argument holds are set to `None`. Defaults
+to `None`.
+- **safe** (*bool**,**optional*) - deprecated in 0.15, will be removed in TensorDict 0.17.
+If `False`, skips the check that `tensordict` is a
+[`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). By default, the check runs, and
+another type raises a `RuntimeError`.
+
+Returns:
+
+A new instance of the class, whose fields are the entries of
+`tensordict`.
 
 Examples
 
@@ -922,74 +1172,116 @@ Examples
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
-Converts a tuple to a TensorDict.
+Converts a tuple to a tensordict with the keys `"0"`, `"1"`, ...
+
+Each element is converted with `from_any()`, so a nested tuple
+or dict becomes a nested tensordict and a number becomes a tensor.
 
 Parameters:
 
-**obj** - The tuple instance to be converted.
+**obj** (*tuple*) - the tuple to convert.
 
 Keyword Arguments:
 
-- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically. Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output tensordict
-should have. Defaults to `None` (full batch-size at each level).
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created. Defaults to `None`.
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
+Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+It applies to the nested tensordicts too. Exclusive with
+`auto_batch_size`. Defaults to `None`, an empty batch size.
 
 Returns:
 
-A TensorDict representation of the input tuple.
+A [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict).
+
+Raises:
+
+**TypeError** - if both `auto_batch_size=True` and `batch_size`
+ are given.
 
 Examples
 
 ```
+>>> import torch
 >>> from tensordict import TensorDict
->>> my_tuple = (1, 2, 3)
->>> td = TensorDict.from_tuple(my_tuple)
->>> print(td)
-TensorDict(
- fields={
- 0: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- 1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- 2: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+>>> td = TensorDict.from_tuple((torch.zeros(3, 4), 1), auto_batch_size=True)
+>>> td["0"].shape, td["1"], td.batch_size
+(torch.Size([3, 4]), tensor(1), torch.Size([]))
+>>> td = TensorDict.from_tuple((torch.zeros(3, 4), torch.ones(3)), auto_batch_size=True)
+>>> td.batch_size
+torch.Size([3])
 ```
 
-from_zarr(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *non_tensor_as_stack: bool = False*)
+from_zarr(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *non_tensor_as_stack: bool = False*, *allow_pickle: bool | None = None*)
 
-Creates a PersistentTensorDict from a zarr store.
+Opens a zarr store as a [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
 
-Requires `zarr>=3.0` to be installed.
+The data stays in the store: entries are read when they are accessed.
+Requires `zarr>=3.0`. See [Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving) and
+[`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
 
 Parameters:
 
-**filename** (*str**,**path**or**zarr store*) - The path to the zarr store (a
+**filename** (*str**,**path**or**zarr store*) - the path to the zarr store (a
 directory), or a `zarr.abc.store.Store` instance (e.g. a
 `zarr.storage.ZipStore`).
 
 Keyword Arguments:
 
-- **mode** (*str**,**optional*) - Reading mode. Defaults to `"r"`.
-- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically.
-Defaults to `False`.
-- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output
-tensordict should have. Defaults to `None` (full batch-size at each level).
-- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`
-(read from the metadata written by `to_zarr()`, or automatically determined
-for stores written by other tools).
+- **mode** (*str**,**optional*) - how the store is opened: `"r"` (read
+only), `"r+"` (read and write), and so on, as in
+`zarr.open_group()`. Defaults to `"r"`.
+- **auto_batch_size** (*bool**,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`, which
+reads the batch size and the names of the batch dimensions that `to_zarr()` stored, or, for
+a store written by another tool, gives each nested tensordict
+the largest batch size that its entries share.
 - **non_tensor_as_stack** (*bool**,**optional*) - if `True`, a non-tensor
 array that tensordict did not write, such as a string column
 with one string per row, reads as a
 [`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
-leading dims equal the batch size. Otherwise it reads as one
-[`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
+leading dimensions equal the batch size. Otherwise it reads as
+one [`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
 array. Defaults to `False`.
+- **allow_pickle** (*bool**,**optional*) - whether to decode pickled
+non-tensor values. `False` rejects them before decoding.
+`True` permits them: use it only for data you trust.
+`None` permits them with a `FutureWarning` when read.
+Starting with TensorDict 0.17, the default will change to
+`allow_pickle=False`. Tensor and JSON entries are unaffected.
+Defaults to `None`.
 
 Returns:
 
-A PersistentTensorDict representation of the input zarr store.
+A [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) backed by the store.
+
+Raises:
+
+**TypeError** - if both `auto_batch_size=True` and `batch_size`
+ are given.
 
 Examples
 
@@ -1015,21 +1307,52 @@ PersistentTensorDict(
 
 fromkeys(*value: Any = 0*)
 
-Creates a tensordict from a list of keys and a single value.
+Creates a tensordict with the same value for every key, like `dict.fromkeys()`.
+
+The result is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) with an empty batch
+size. A nested key creates nested tensordicts. A Python number becomes
+a tensor for each key, and a tensor is stored as it is: every key then
+holds the same tensor object.
 
 Parameters:
 
-- **keys** (*list**of**NestedKey*) - An iterable specifying the keys of the new dictionary.
-- **value** (*compatible type**,**optional*) - The value for all keys. Defaults to `0`.
+- **keys** (*list**of**NestedKey*) - the keys of the result.
+- **value** (*Any**,**optional*) - the value of every key: a tensor, a number,
+or any value that the [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict)
+constructor takes. Defaults to `0`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict.fromkeys(["a", ("b", "c")], torch.zeros(3))
+>>> td["b", "c"]
+tensor([0., 0., 0.])
+>>> td["a"] is td["b", "c"]
+True
+```
 
 lazy_stack(*dim: int = 0*, ***, *out=None*, ***kwargs*)
 
-Creates a lazy stack of tensordicts.
+Stacks tensordicts into a lazy stack.
 
 A lazy stack keeps the tensordicts as they are and stacks their values
 only when you read them. The tensordicts can have different keys and
-different feature shapes. See [Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking), and
-[`tensordict.lazy_stack()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack) for the arguments.
+different feature shapes. See [Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking).
+
+Parameters:
+
+- **input** (*sequence**of**TensorDictBase*) - the tensordicts to stack.
+- **dim** (*int**,**optional*) - the new batch dimension. Defaults to `0`.
+
+Keyword Arguments:
+
+- **out** (*TensorDictBase**,**optional*) - a lazy stack to write the result
+into. Defaults to `None`.
+- ****kwargs** - passed to
+[`LazyStackedTensorDict.lazy_stack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.lazy_stack), for example
+`stack_dim_name` or `strict_shape`.
 
 Examples
 
@@ -1047,171 +1370,183 @@ load(**args*, ***kwargs*) → Self
 
 Loads a tensordict that [`save()`](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save) or [`memmap()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.memmap) wrote to disk.
 
-`load` is `load_memmap()`: it takes the same arguments,
-including `allow_pickle`, `device` and `mode`. The leaves of the
-result are memory-mapped tensors that read the files. See
-[Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving) and the example of [`save()`](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save).
+`load` calls `load_memmap()`, which documents the other
+arguments, such as `device`, `mode`, `subpath` and
+`allow_pickle`. The leaves of the result read the files lazily. See
+[Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving).
 
 Parameters:
 
-**prefix** (*str**or**Path*) - the directory, or the `".tdz"` archive
-file, to read.
-
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
-
-Loads a memory-mapped tensordict from disk.
-
-Parameters:
-
-- **prefix** (*str**or**Path to folder*) - the path to the folder where the
-saved tensordict should be fetched, or the path to a memmap
-archive file written through
-`save(..., archive=True)` / a `".tdz"` prefix (or packed
-with [`pack_memmap()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.pack_memmap.html#tensordict.pack_memmap)). Archives are
-memory-mapped once and every leaf is exposed as a zero-copy
-view into the mapping: only the pages of the leaves that are
-actually accessed are read from disk. Unlike directory-backed
-tensordicts, in-place writes to the leaves of an
-archive-loaded tensordict do not propagate to the file by
-default (see `mode`).
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**equivalent**,**optional*) - if provided, the
-data will be asynchronously cast to that device.
-Supports "meta" device, in which case the data isn't loaded
-but a set of empty "meta" tensors are created. This is
-useful to get a sense of the total model size and structure
-without actually opening any file.
-- **non_blocking** (*bool**,**optional*) - if `True`, synchronize won't be
-called after loading tensors on device. Defaults to `False`.
-- **out** (*TensorDictBase**,**optional*) - optional tensordict where the data
-should be loaded. Its nested containers are reused, but its
-leaves are rebound to the loaded tensors, so their storage is
-not reused. Keys of `out` that are missing from the saved
-data are removed. If `out` has a device, the data is loaded
-on it, and a different `device` raises a `ValueError`.
-To write the data into the preallocated storage of `out`,
-use `out.update_(TensorDict.load_memmap(prefix, device=device))`
-instead.
-- **robust_key** (*bool**,**optional*) - if `True` (default), expects robust key encoding was used
-when saving and decodes filenames accordingly. If `False`, uses legacy
-behavior. If `None`, uses the default robust behavior.
-- **subpath** (*NestedKey**or**str path**,**optional*) - the location of a
-nested tensordict to load, as a nested key (e.g.
-`("module", "0")`, with arbitrary nesting allowed as usual)
-or as a `"/"`-separated string path (e.g. `"module/0"`).
-Only that subtree is loaded. Works both for directories
-(equivalent to appending the path to `prefix`) and for
-archives. A nested key reaches the entries of a saved
-tensorclass as `obj.get(key)` does, without its
-`_tensordict` level.
-- **mode** (*str**,**optional*) - how the files are memory-mapped. With
-`"r"`, the mapping is copy-on-write: in-place writes to the
-leaves stay in memory. They reach the files only if the
-tensordict is saved there, and [`memmap_()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.memmap_) without a
-prefix does not write back to `prefix`. With `"r+"`, the
-mapping is shared: in-place writes propagate to the files,
-and a file that is not writable raises a
-`PermissionError`. Defaults to `None`, which maps
-archives as with `"r"`, and each file of a directory as with
-`"r+"` if the process can write it, as with `"r"`
-otherwise. Prefer `"r"` for data that is only read: on some
-network file systems (e.g. Lustre), page faults on a shared
-writable mapping take write locks, so readers on different
-nodes block each other. On Linux, copy-on-write mappings count
-against the memory commit limit, so a file larger than the
-available RAM and swap can fail to map with `"r"`. With
-archives, `"r+"` requires uncompressed, aligned tensor
-payloads (i.e. archives written by tensordict without
-`compression`) and is not available for nested-tensor
-leaves. In-place writes do not update the per-entry CRC-32
-stored by the zip format; `load_memmap()` ignores
-checksums, but call
-[`refresh_archive_checksums()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums) before handing
-a modified archive to tools that verify them (`unzip`,
-[`unpack_memmap()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap), ...).
-- **num_threads** (*int**,**optional*) - number of threads used to decompress
-the leaves of a compressed archive (deflate entries are
-inflated in parallel, which scales nearly linearly). Without
-compression, loading is a metadata-only operation and this
-argument has no effect. Defaults to `0` (sequential).
-- **allow_pickle** (*bool**,**optional*) - whether pickled non-tensor fields
-may be loaded. Pickle can execute arbitrary code, so pass
-`True` only for data from a trusted source and `False`
-for untrusted data. In TensorDict 0.14 and 0.15, omitting
-this option loads pickle with a `FutureWarning`; the
-default will change to `False` in 0.16. Saves without
-a pickle sidecar do not require this option.
-
-Examples
-
-```
->>> import torch
->>> from tensordict import TensorDict
->>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
->>> _ = td.memmap("./saved_td")
->>> td_load = TensorDict.load_memmap("./saved_td")
->>> assert (td == td_load).all()
-```
-
-This method also allows loading nested tensordicts.
-
-Examples
-
-```
->>> nested = TensorDict.load_memmap("./saved_td/nested")
->>> assert nested["e"] == 0
-```
-
-A tensordict can also be loaded on "meta" device or, alternatively,
-as a fake tensor.
+- **prefix** (*str**or**Path*) - the directory, or the archive file, to read.
+- ***args** - passed to `load_memmap()`.
+- ****kwargs** - passed to `load_memmap()`.
 
 Examples
 
 ```
 >>> import tempfile
->>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.arange(3), batch_size=[3])
 >>> with tempfile.TemporaryDirectory() as path:
 ... _ = td.save(path)
-... td_load = TensorDict.load_memmap(path, device="meta")
-... print("meta:", td_load)
-... from torch._subclasses import FakeTensorMode
+... loaded = TensorDict.load(path)
+... print(loaded["a"], loaded.batch_size)
+MemoryMappedTensor([0, 1, 2]) torch.Size([3])
+```
+
+load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+
+Loads a tensordict that [`memmap()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.memmap) or [`save()`](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save) wrote, from a directory or an archive.
+
+The leaves of the result read the files lazily: from a directory, each
+leaf is a [`MemoryMappedTensor`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) of its file, and from
+an archive, each leaf is a view into one memory map of the archive.
+Only the pages of the leaves that you use are read from disk. The
+result has the class that was saved (a tensorclass is loaded as that
+tensorclass), and it is not locked. `load()` is this method. See
+[Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving).
+
+Parameters:
+
+- **prefix** (*str**or**Path*) - the directory to read, or an archive file
+written by `save(..., archive=True)`, by a `".tdz"` prefix,
+or by [`pack_memmap()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.pack_memmap.html#tensordict.pack_memmap).
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**str**or**int**,**optional*) - the device of the
+result. The leaves are copied to it, which reads the files,
+unless it is the CPU.
+With `"meta"`, no file is read: the leaves are meta tensors,
+which show the structure and size of the data. Defaults to
+`None`, which keeps the leaves on the CPU, memory-mapped.
+- **non_blocking** (*bool**,**optional*) - if `True`, does not synchronize
+the device after the copies to `device`. Defaults to
+`False`.
+
+Keyword Arguments:
+
+- **out** (*TensorDictBase**,**optional*) - a tensordict to load the data into.
+Its nested tensordicts are reused, but its leaves are replaced
+by the loaded tensors, so their storage is not reused. Its keys
+that are not in the saved data are removed. If `out` has a
+device, the data is loaded on it, and another `device` raises
+a `ValueError`. To write the data into the storage of
+`out`, use
+`out.update_(TensorDict.load_memmap(prefix, device=device))`.
+Defaults to `None`.
+- **robust_key** (*bool**,**optional*) - if `True`, reads the
+percent-encoded file names that [`memmap()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.memmap) writes by
+default, and falls back to the legacy names of keys that are
+safe file names. If `False`, reads the legacy layout only.
+`None` is the same as `True`. Defaults to `True`.
+- **subpath** (*NestedKey**or**str**,**optional*) - the nested tensordict to
+load, as a nested key (`("module", "0")`) or as a
+`"/"`-separated path (`"module/0"`). Only that subtree is
+read, from a directory or an archive. A nested key reaches the
+entries of a saved tensorclass as `obj.get(key)` does.
+Defaults to `None`, which loads the whole tensordict.
+- **mode** (*str**,**optional*) - how the files are mapped. With `"r"`, the
+mapping is copy-on-write: in-place writes into the leaves stay
+in memory, and the files do not change. With `"r+"`, in-place
+writes reach the files, and a file that the process cannot
+write raises a `PermissionError`. Defaults to `None`, which
+maps an archive as with `"r"`, and each file of a directory
+as with `"r+"` if the process can write it, and as with
+`"r"` otherwise. See the note below.
+- **num_threads** (*int**,**optional*) - the number of threads that decompress
+the leaves of a compressed archive. It has no effect on an
+uncompressed archive or a directory. Defaults to `0`, which
+decompresses them one after the other.
+- **allow_pickle** (*bool**,**optional*) - whether non-tensor data saved with
+`pickle` may be loaded. Pickle can run arbitrary code: pass
+`True` only for data you trust, and `False` for other data,
+which raises a `RuntimeError` on pickled data. Defaults to
+`None`, which loads pickled data with a `FutureWarning`.
+Starting with TensorDict 0.16, the default will change to
+`False`. Data saved without pickle loads with any value.
+
+Returns:
+
+The loaded tensordict, or `out` if it is given.
+
+Raises:
+
+**ValueError** - if `prefix` is a file that is not an archive, if
+ `subpath` names no saved tensordict, or if `mode` is not
+ `None`, `"r"` or `"r+"`.
+
+Note
+
+Load with `mode="r"` data that you only read: on some network
+file systems (for example Lustre), page faults on a shared
+writable mapping take write locks, so readers on different nodes
+block each other. On Linux, a copy-on-write mapping counts against
+the memory commit limit, so a file larger than RAM plus swap can
+fail to map with `"r"`. With `"r"`, [`memmap_()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.memmap_) without a
+prefix does not write back to `prefix`.
+
+Note
+
+An archive opened with `mode="r+"` must have uncompressed,
+aligned payloads (as written by tensordict without
+`compression`) and no nested tensor. In-place writes do not
+update the CRC-32 checksums of its entries: `load_memmap` does
+not check them, but call
+[`refresh_archive_checksums()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums) before you give the
+archive to a tool that does, such as `unzip`.
+
+Examples
+
+```
+>>> import tempfile
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(3), nested=TensorDict(b=torch.ones(3)))
+>>> with tempfile.TemporaryDirectory() as path:
+... _ = td.memmap(path)
+... loaded = TensorDict.load_memmap(path)
+... print((loaded == td).all(), type(loaded["a"]).__name__)
+... # load one nested tensordict
+... print(TensorDict.load_memmap(path, subpath="nested")["b"])
+... # read the structure without reading the data
+... print(TensorDict.load_memmap(path, device="meta")["a"].device)
+True MemoryMappedTensor
+MemoryMappedTensor([1., 1., 1.])
+meta
+```
+
+With a `FakeTensorMode` active, the leaves are fake tensors and
+no file is read:
+
+```
+>>> from torch._subclasses import FakeTensorMode
+>>> with tempfile.TemporaryDirectory() as path:
+... _ = td.memmap(path)
 ... with FakeTensorMode():
-... td_load = TensorDict.load_memmap(path)
-... print("fake:", td_load)
-meta: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False),
- b: TensorDict(
- fields={
- c: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=meta,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=meta,
- is_shared=False)
-fake: TensorDict(
- fields={
- a: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- b: TensorDict(
- fields={
- c: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=cpu,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=cpu,
- is_shared=False)
+... print(type(TensorDict.load_memmap(path)["a"]).__name__)
+FakeTensor
 ```
 
 maybe_dense_stack(*dim: int = 0*, ***, *out=None*, ***kwargs*)
 
-Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required.
+Stacks tensordicts densely if possible, or into a lazy stack otherwise.
 
 The result is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) if the tensordicts
 have the same keys and shapes, and a
 [`LazyStackedTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) otherwise. See
-[Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking), and [`tensordict.maybe_dense_stack()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack) for the
-arguments.
+[Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking).
+
+Parameters:
+
+- **input** (*sequence**of**TensorDictBase*) - the tensordicts to stack.
+- **dim** (*int**,**optional*) - the new batch dimension. Defaults to `0`.
+
+Keyword Arguments:
+
+- **out** (*TensorDictBase**,**optional*) - a tensordict to write the result
+into. Defaults to `None`.
+- ****kwargs** - passed to
+[`LazyStackedTensorDict.maybe_dense_stack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.maybe_dense_stack), for
+example `strict`.
 
 Examples
 
@@ -1233,13 +1568,13 @@ Ask the transform to steer the satellite toward `target_quat`.
 
 stack(*dim: int = 0*, ***, *out=None*)
 
-Stacks tensordicts into a single tensordict along the given dimension.
+Stacks tensordicts into one dense tensordict along a new dimension `dim`.
 
-This call is equivalent to calling [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) but is compatible with torch.compile.
-The tensordicts must have the same batch size and the same keys.
-Otherwise, the call raises `RuntimeError`. To stack tensordicts with
-different keys or shapes, use `lazy_stack()`. See
-[Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking).
+It is equivalent to [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack), and also works under
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile). The tensordicts must have the same batch size
+and the same keys, or a `RuntimeError` is raised. To stack
+tensordicts with different keys or shapes, use `lazy_stack()`.
+See [Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.html#stacking).
 
 Parameters:
 
@@ -1249,7 +1584,7 @@ Parameters:
 Keyword Arguments:
 
 **out** (*TensorDictBase**,**optional*) - a tensordict to write the result
-into.
+into. Defaults to `None`.
 
 Examples
 

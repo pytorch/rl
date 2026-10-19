@@ -52,7 +52,7 @@
     <script src="../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="AtariDQNExperienceReplay" href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html" />
+    <link rel="next" title="ReplayDatasetExporter" href="generated/torchrl.data.datasets.ReplayDatasetExporter.html" />
     <link rel="prev" title="WriterEnsemble" href="generated/torchrl.data.replay_buffers.WriterEnsemble.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1589,6 +1589,10 @@ document.write(`
 </ul>
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#">Datasets</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.ReplayDatasetExporter.html">ReplayDatasetExporter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.ReplayDatasetImporter.html">ReplayDatasetImporter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.ReplayDatasetAdapter.html">ReplayDatasetAdapter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.HuggingFaceDatasetAdapter.html">HuggingFaceDatasetAdapter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html">AtariDQNExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.D4RLExperienceReplay.html">D4RLExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.GenDGRLExperienceReplay.html">GenDGRLExperienceReplay</a></li>
@@ -2681,6 +2685,18 @@ are called as <code class="docutils literal notranslate"><span class="pre">facto
 </div>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.ReplayDatasetExporter.html#torchrl.data.datasets.ReplayDatasetExporter" title="torchrl.data.datasets.ReplayDatasetExporter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.ReplayDatasetExporter</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Convert replay storage data to an external dataset format.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.ReplayDatasetImporter.html#torchrl.data.datasets.ReplayDatasetImporter" title="torchrl.data.datasets.ReplayDatasetImporter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.ReplayDatasetImporter</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Expose an external dataset as a TorchRL map-style dataset.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.ReplayDatasetAdapter.html#torchrl.data.datasets.ReplayDatasetAdapter" title="torchrl.data.datasets.ReplayDatasetAdapter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.ReplayDatasetAdapter</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Import and export an external dataset format for use with replay buffers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.HuggingFaceDatasetAdapter.html#torchrl.data.datasets.HuggingFaceDatasetAdapter" title="torchrl.data.datasets.HuggingFaceDatasetAdapter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.HuggingFaceDatasetAdapter</span></code></a>(*[, ...])</p></td>
+<td><p>Convert between TorchRL map-style datasets and Hugging Face datasets.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay" title="torchrl.data.datasets.AtariDQNExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.AtariDQNExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>Atari DQN Experience replay class.</p></td>
 </tr>
@@ -2785,11 +2801,11 @@ are called as <code class="docutils literal notranslate"><span class="pre">facto
       </div>
     </a>
     <a class="right-next"
-       href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html"
+       href="generated/torchrl.data.datasets.ReplayDatasetExporter.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">AtariDQNExperienceReplay</p>
+        <p class="prev-next-title">ReplayDatasetExporter</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2824,11 +2840,11 @@ are called as <code class="docutils literal notranslate"><span class="pre">facto
       </div>
     </a>
     <a class="right-next"
-       href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html"
+       href="generated/torchrl.data.datasets.ReplayDatasetExporter.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">AtariDQNExperienceReplay</p>
+        <p class="prev-next-title">ReplayDatasetExporter</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -3106,7 +3122,7 @@ are called as <code class="docutils literal notranslate"><span class="pre">facto
        "headline": "Datasets",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/data_datasets.html",
-       "articleBody": "Datasets# TorchRL provides dataset utilities for offline RL and data management. TorchRL Episode Data (TED) Format# The TED format is TorchRL\u2019s standard data layout for offline RL datasets. It structures trajectories as nested tensors where each element contains the full trajectory data, making it efficient for sequence-based sampling and training. Dataset loading registry# Many offline datasets can be constructed from a compact string identifier with load_dataset(). The identifier is split as \"\u003csource\u003e:\u003cdataset-id\u003e\". The source prefix selects a registered dataset factory and the remainder is forwarded as the first constructor argument, with any extra keyword arguments forwarded unchanged. TorchRL registers the built-in dataset families at import time, including \"atari\", \"atari_dqn\", \"d4rl\", \"gen_dgrl\", \"lerobot\", \"minari\", \"openml\", \"openx\", \"roboset\", and \"vd4rl\". For example: from torchrl.data.datasets import load_dataset dataset = load_dataset(\"d4rl:halfcheetah-medium-v2\", batch_size=256) minari_dataset = load_dataset( \"minari:mujoco/hopper/expert-v0\", batch_size=256, split_trajs=True, ) Projects can add their own sources with register_dataset(). A registered factory can be a callable or a lazy import string of the form \"module:attribute\". Factories are called as factory(dataset_id, **kwargs). from torchrl.data.datasets import load_dataset, register_dataset class MyDataset: def __init__(self, dataset_id, *, batch_size): self.dataset_id = dataset_id self.batch_size = batch_size register_dataset(\"my_backend\", MyDataset) dataset = load_dataset(\"my_backend:my-task-v0\", batch_size=128) register_dataset( \"my_lazy_backend\", \"my_package.datasets:MyDataset\", ) datasets.AtariDQNExperienceReplay(*args[, ...]) Atari DQN Experience replay class. datasets.D4RLExperienceReplay(*args[, ...]) An Experience replay class for D4RL. datasets.GenDGRLExperienceReplay(*args[, ...]) Gen-DGRL Experience Replay dataset. datasets.LeRobotExperienceReplay(*args[, ...]) Experience replay over a LeRobot dataset. datasets.MinariExperienceReplay(*args[, ...]) Minari Experience replay dataset. datasets.OpenMLExperienceReplay(*args[, ...]) An experience replay for OpenML data. datasets.OpenXExperienceReplay(*args[, ...]) Open X-Embodiment datasets experience replay. datasets.RobosetExperienceReplay(*args[, ...]) Roboset experience replay dataset. datasets.VD4RLExperienceReplay(*args[, ...]) V-D4RL experience replay dataset. datasets.lerobot_columns_to_tensordict(...) Convert a LeRobot-style columnar dict into a canonical VLA TensorDict. datasets.load_dataset(dataset_id, **kwargs) Parse a dataset ID string and return the registered dataset object. datasets.register_dataset(prefix, dataset, *) Register a dataset factory for load_dataset().",
+       "articleBody": "Datasets# TorchRL provides dataset utilities for offline RL and data management. TorchRL Episode Data (TED) Format# The TED format is TorchRL\u2019s standard data layout for offline RL datasets. It structures trajectories as nested tensors where each element contains the full trajectory data, making it efficient for sequence-based sampling and training. Dataset loading registry# Many offline datasets can be constructed from a compact string identifier with load_dataset(). The identifier is split as \"\u003csource\u003e:\u003cdataset-id\u003e\". The source prefix selects a registered dataset factory and the remainder is forwarded as the first constructor argument, with any extra keyword arguments forwarded unchanged. TorchRL registers the built-in dataset families at import time, including \"atari\", \"atari_dqn\", \"d4rl\", \"gen_dgrl\", \"lerobot\", \"minari\", \"openml\", \"openx\", \"roboset\", and \"vd4rl\". For example: from torchrl.data.datasets import load_dataset dataset = load_dataset(\"d4rl:halfcheetah-medium-v2\", batch_size=256) minari_dataset = load_dataset( \"minari:mujoco/hopper/expert-v0\", batch_size=256, split_trajs=True, ) Projects can add their own sources with register_dataset(). A registered factory can be a callable or a lazy import string of the form \"module:attribute\". Factories are called as factory(dataset_id, **kwargs). from torchrl.data.datasets import load_dataset, register_dataset class MyDataset: def __init__(self, dataset_id, *, batch_size): self.dataset_id = dataset_id self.batch_size = batch_size register_dataset(\"my_backend\", MyDataset) dataset = load_dataset(\"my_backend:my-task-v0\", batch_size=128) register_dataset( \"my_lazy_backend\", \"my_package.datasets:MyDataset\", ) datasets.ReplayDatasetExporter(*args, **kwargs) Convert replay storage data to an external dataset format. datasets.ReplayDatasetImporter(*args, **kwargs) Expose an external dataset as a TorchRL map-style dataset. datasets.ReplayDatasetAdapter(*args, **kwargs) Import and export an external dataset format for use with replay buffers. datasets.HuggingFaceDatasetAdapter(*[, ...]) Convert between TorchRL map-style datasets and Hugging Face datasets. datasets.AtariDQNExperienceReplay(*args[, ...]) Atari DQN Experience replay class. datasets.D4RLExperienceReplay(*args[, ...]) An Experience replay class for D4RL. datasets.GenDGRLExperienceReplay(*args[, ...]) Gen-DGRL Experience Replay dataset. datasets.LeRobotExperienceReplay(*args[, ...]) Experience replay over a LeRobot dataset. datasets.MinariExperienceReplay(*args[, ...]) Minari Experience replay dataset. datasets.OpenMLExperienceReplay(*args[, ...]) An experience replay for OpenML data. datasets.OpenXExperienceReplay(*args[, ...]) Open X-Embodiment datasets experience replay. datasets.RobosetExperienceReplay(*args[, ...]) Roboset experience replay dataset. datasets.VD4RLExperienceReplay(*args[, ...]) V-D4RL experience replay dataset. datasets.lerobot_columns_to_tensordict(...) Convert a LeRobot-style columnar dict into a canonical VLA TensorDict. datasets.load_dataset(dataset_id, **kwargs) Parse a dataset ID string and return the registered dataset object. datasets.register_dataset(prefix, dataset, *) Register a dataset factory for load_dataset().",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

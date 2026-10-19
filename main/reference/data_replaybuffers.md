@@ -43,6 +43,35 @@ buffer.shutdown()
 | [`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer)(*args[, use_ray_service, ...]) | A Ray implementation of the Replay Buffer that can be extended and sampled remotely. |
 | [`RemoteTensorDictReplayBuffer`](generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer)(*args[, ...]) | A remote invocation friendly ReplayBuffer class. |
 
+## Exporting replay data
+
+[`export()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.export) converts the stored entries to an
+external dataset through a [`ReplayDatasetExporter`](generated/torchrl.data.datasets.ReplayDatasetExporter.html#torchrl.data.datasets.ReplayDatasetExporter).
+The call runs synchronously, waits for pending replay work, and pauses writes
+and sampling through the buffer during conversion. Supply `trajectory_key`
+and `step_key` to group records by episode and order each group by its step
+numbers. The exporter receives one dataset item per storage entry.
+
+```
+import torch
+from tensordict import TensorDict
+from torchrl.data import LazyTensorStorage, ReplayBuffer
+from torchrl.data.datasets import HuggingFaceDatasetAdapter
+
+rb = ReplayBuffer(storage=LazyTensorStorage(4))
+rb.extend(TensorDict({
+ "observation": torch.tensor([11, 1, 10, 0]),
+ ("collector", "traj_ids"): torch.tensor([1, 0, 1, 0]),
+ "step_count": torch.tensor([1, 1, 0, 0]),
+}, [4]))
+dataset = rb.export(
+ HuggingFaceDatasetAdapter(),
+ trajectory_key=("collector", "traj_ids"),
+ step_key="step_count",
+)
+assert dataset["observation"][:] == [0, 1, 10, 11]
+```
+
 ## Asynchronous readiness and statistics
 
 Asynchronous learners can wait for a complete batch without polling buffer

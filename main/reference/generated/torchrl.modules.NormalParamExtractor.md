@@ -2,17 +2,26 @@
 
 *class*torchrl.modules.NormalParamExtractor(*scale_mapping: str = 'biased_softplus_1.0'*, *scale_lb: Number = 0.0001*)[[source]](../../_modules/tensordict/nn/distributions/continuous.html#NormalParamExtractor)
 
-A non-parametric nn.Module that splits its input into loc and scale parameters.
+A module without parameters that splits a tensor into the location and scale of a normal distribution.
 
-The scale parameters are mapped onto positive values using the specified `scale_mapping`.
+The module splits the last dimension of its first input into two halves:
+the first half is the location, the second half goes through
+`scale_mapping` and is clamped to at least `scale_lb` to give the
+scale. With an odd size, the location gets one element more than the
+scale. Calling the module with
+more inputs returns them unchanged after the scale:
+`module(x, *others)` returns `(loc, scale, *others)`.
 
 Parameters:
 
-- **scale_mapping** (*str**,**optional*) - positive mapping function to be used with the std.
-default = `"biased_softplus_1.0"` (i.e. softplus map with bias such that fn(0.0) = 1.0)
-choices: `"softplus"`, `"exp"`, `"relu"`, `"biased_softplus_1"` or `"none"` (no mapping).
-See [`mappings()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.mappings.html#tensordict.nn.mappings) for more details.
-- **scale_lb** (*Number**,**optional*) - The minimum value of the scale (the standard deviation). Default is 1e-4.
+- **scale_mapping** (*str**,**optional*) - the function that maps the second half
+to positive values, by name: for example `"softplus"`,
+`"exp"`, `"relu"`, `"biased_softplus_<bias>"` or `"none"`
+(no mapping). See [`mappings()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.mappings.html#tensordict.nn.mappings). Defaults to
+`"biased_softplus_1.0"`, a softplus shifted so that an input of
+`0` gives a scale of `1`.
+- **scale_lb** (*Number**,**optional*) - the minimum value of the scale (the
+standard deviation). Defaults to `1e-4`.
 
 Examples
 
