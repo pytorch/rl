@@ -66,6 +66,10 @@ are called as ``factory(dataset_id, **kwargs)``.
     :toctree: generated/
     :template: rl_template.rst
 
+    datasets.ReplayDatasetExporter
+    datasets.ReplayDatasetImporter
+    datasets.ReplayDatasetAdapter
+    datasets.HuggingFaceDatasetAdapter
     datasets.AtariDQNExperienceReplay
     datasets.D4RLExperienceReplay
     datasets.GenDGRLExperienceReplay

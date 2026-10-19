@@ -132,6 +132,8 @@ utils = [
 ]
 checkpointing = ["torchsnapshot"]
 offline-data = [
+    "datasets",
+    "pyarrow>=14.0.0",
     "huggingface_hub",
     "minari",
     "requests",
