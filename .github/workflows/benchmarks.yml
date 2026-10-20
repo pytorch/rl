@@ -82,6 +82,9 @@ jobs:
     container:
       image: ${{ matrix.image }}
       options: --gpus all --shm-size=8g
+    env:
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
     steps:
       - name: Who triggered this?
         run: |
