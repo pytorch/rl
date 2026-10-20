@@ -16,7 +16,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.checkpoint import Checkpoint
-from torchrl.collectors import Evaluator
+from torchrl.collectors import bootstrap_estimate, Evaluator, paired_comparison
 from torchrl.collectors._evaluator import (
     _extract_metrics_from_trajectories,
     _freeze_vecnorm,
@@ -26,6 +26,7 @@ from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import (
     Compose,
+    RewardScaling,
     RewardSum,
     StepCounter,
     Transform,
@@ -35,7 +36,11 @@ from torchrl.modules import RandomPolicy
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers.process import ProcessLogger
 from torchrl.testing import AddPixelsTransform
-from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+from torchrl.testing.mocking_classes import (
+    ContinuousActionVecMockEnv,
+    CountingEnv,
+    CountingEnvCountPolicy,
+)
 from torchrl.weight_update import WeightStrategy
 
 
@@ -176,18 +181,31 @@ class TestEvaluatorSync:
         finally:
             evaluator.shutdown()
 
-    def test_video_recorder_dump(self, tmp_path):
+    @pytest.mark.parametrize(
+        "episode_sampling,method",
+        [
+            ("first_done", "evaluate"),
+            ("per_env", "evaluate"),
+            ("first_done", "evaluate_episodes"),
+        ],
+    )
+    def test_video_recorder_dump(self, tmp_path, episode_sampling, method):
         # Thread/same-process backend: the recorder is dumped locally by
         # walking the env transform, once per eval at the requested step.
         logger = _VideoEventsLogger(str(tmp_path))
         env = _make_video_env(logger)
         policy = _make_policy(env)
         evaluator = Evaluator(
-            env, policy, num_trajectories=2, max_steps=10, dump_video=True
+            env,
+            policy,
+            num_trajectories=2,
+            max_steps=10,
+            dump_video=True,
+            episode_sampling=episode_sampling,
         )
         try:
-            evaluator.evaluate(step=11)
-            evaluator.evaluate(step=22)
+            getattr(evaluator, method)(step=11)
+            getattr(evaluator, method)(step=22)
             records = _read_video_events(tmp_path)
             assert [record[:2] for record in records] == [
                 ["eval_video", "11"],
@@ -1421,6 +1439,195 @@ class TestEvaluatorVecNormFreeze:
             ).all(), "VecNormV2 count was updated during eval"
         finally:
             evaluator.shutdown()
+
+
+def _unit_reward(env):
+    return TransformedEnv(env, RewardScaling(loc=1.0, scale=0.0))
+
+
+class TestEvaluatorEpisodeSampling:
+    @pytest.mark.parametrize(
+        "episode_sampling,lengths",
+        [("first_done", [2, 6, 21, 2, 2, 2]), ("per_env", [2, 6, 21, 2, 6, 21])],
+    )
+    def test_episode_sampling(self, episode_sampling, lengths):
+        env = _unit_reward(
+            SerialEnv(3, [partial(CountingEnv, max_steps=m) for m in (1, 5, 20)])
+        )
+        evaluator = Evaluator(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            num_trajectories=6,
+            max_steps=100,
+            episode_sampling=episode_sampling,
+        )
+        result = evaluator.evaluate()
+        evaluator.shutdown()
+        assert result["eval/reward"] == pytest.approx(sum(lengths) / len(lengths))
+        assert result["eval/episode_length"] == pytest.approx(
+            sum(lengths) / len(lengths)
+        )
+
+    def test_evaluate_episodes(self):
+        env = _unit_reward(
+            SerialEnv(3, [partial(CountingEnv, max_steps=m) for m in (1, 5, 20)])
+        )
+        evaluator = Evaluator(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            num_trajectories=5,
+            max_steps=10,
+        )
+        episodes = evaluator.evaluate_episodes()
+        result = evaluator.evaluate()
+        evaluator.shutdown()
+        lengths = torch.tensor([2, 6, 10, 2, 6])
+        torch.testing.assert_close(episodes["episode_length"], lengths)
+        torch.testing.assert_close(episodes["episode_reward"], lengths.float())
+        torch.testing.assert_close(
+            episodes["truncated"], torch.tensor([False, False, True, False, False])
+        )
+        torch.testing.assert_close(episodes["env_index"], torch.tensor([0, 1, 2, 0, 1]))
+        assert result["eval/step"] == 0
+
+    def test_evaluate_episodes_restores_policy_mode(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, num_trajectories=2, max_steps=5)
+        policy.eval()
+        evaluator.evaluate_episodes()
+        assert not policy.training
+
+        def fail(module, args, output):
+            raise RuntimeError("policy failed")
+
+        policy.train()
+        handle = policy.module.register_forward_hook(fail)
+        with pytest.raises(RuntimeError, match="policy failed"):
+            evaluator.evaluate_episodes()
+        assert policy.training
+        handle.remove()
+        assert evaluator.evaluate_episodes().batch_size == torch.Size([2])
+        evaluator.shutdown()
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="needs CUDA"
+                    ),
+                ],
+            ),
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="needs MPS"
+                ),
+            ),
+        ],
+    )
+    def test_evaluate_episodes_policy_device(self, device):
+        env = ContinuousActionVecMockEnv(device="cpu")
+        policy = _make_policy(env)
+        expected = Evaluator(
+            env, policy, num_trajectories=4, max_steps=5
+        ).evaluate_episodes(seed=0)
+        evaluator = Evaluator(env, policy.to(device), num_trajectories=4, max_steps=5)
+        episodes = evaluator.evaluate_episodes(seed=0)
+        evaluator.shutdown()
+        torch.testing.assert_close(episodes, expected)
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="needs CUDA"
+                    ),
+                ],
+            ),
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="needs MPS"
+                ),
+            ),
+        ],
+    )
+    def test_seed(self, device):
+        env = _unit_reward(CountingEnv(max_steps=5, device=device))
+        evaluator = Evaluator(
+            env, RandomPolicy(env.action_spec), num_trajectories=8, max_steps=100
+        )
+        get_rng_state = {
+            "cpu": torch.get_rng_state,
+            "cuda": torch.cuda.get_rng_state,
+            "mps": torch.mps.get_rng_state,
+        }[device]
+        rng_state = get_rng_state()
+        lengths = [
+            evaluator.evaluate_episodes(seed=seed)["episode_length"]
+            for seed in (0, 0, 1)
+        ]
+        evaluator.shutdown()
+        assert torch.equal(get_rng_state(), rng_state)
+        torch.testing.assert_close(lengths[0], lengths[1])
+        assert not torch.equal(lengths[0], lengths[2])
+
+    def test_invalid_combinations(self):
+        with pytest.raises(ValueError, match="per_env"):
+            Evaluator(
+                _make_env,
+                policy_factory=_make_policy,
+                max_steps=10,
+                episode_sampling="per_env",
+                backend="process",
+            )
+        evaluator = Evaluator(_make_env, policy_factory=_make_policy, backend="process")
+        with pytest.raises(ValueError, match="evaluate_episodes"):
+            evaluator.evaluate_episodes()
+        evaluator.shutdown()
+        evaluator = Evaluator(_make_env(), _make_policy())
+        with pytest.raises(ValueError, match="integer max_steps"):
+            evaluator.evaluate_episodes()
+        evaluator.shutdown()
+
+
+class TestEvaluationStats:
+    @pytest.mark.parametrize(
+        "statistic,expected,upper",
+        [("mean", 12.5, 37.5), ("median", 0.0, 0.0), ("iqm", 0.0, 25.0)],
+    )
+    def test_bootstrap_estimate(self, statistic, expected, upper):
+        values = torch.tensor([[0.0] * 7 + [100.0], [7.0] * 8])
+        summary = bootstrap_estimate(
+            values, statistic=statistic, generator=torch.Generator().manual_seed(0)
+        )
+        torch.testing.assert_close(summary["estimate"], torch.tensor([expected, 7.0]))
+        torch.testing.assert_close(summary["ci_low"], torch.tensor([0.0, 7.0]))
+        torch.testing.assert_close(summary["ci_high"], torch.tensor([upper, 7.0]))
+        transposed = bootstrap_estimate(
+            values.T, 0, statistic=statistic, generator=torch.Generator().manual_seed(0)
+        )
+        assert (transposed == summary).all()
+
+    def test_paired_comparison(self):
+        first = torch.tensor([3.0, 5.0, 4.0, 6.0])
+        second = first - torch.tensor([1.0, 1.0, 0.0, -1.0])
+        result = paired_comparison(first, second)
+        torch.testing.assert_close(result["estimate"], torch.tensor(0.25))
+        torch.testing.assert_close(
+            result["probability_of_improvement"], torch.tensor(0.625)
+        )
+        assert result["ci_low"] <= 0.25 <= result["ci_high"]
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import doctest
 import functools
 import json
 import math
@@ -14,12 +15,19 @@ import sys
 import threading
 import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from itertools import islice
 
 import pytest
 import torch
 import torchrl
-from _rb_common import OLD_TORCH, ReplayBufferRNG, TensorDictReplayBufferRNG
+from _rb_common import (
+    _episode_data,
+    _ReplayRowsExporter,
+    OLD_TORCH,
+    ReplayBufferRNG,
+    TensorDictReplayBufferRNG,
+)
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import ConcatDataset, DataLoader
@@ -30,6 +38,7 @@ from torchrl.data import (
     ReplayBuffer,
     ReplayBufferEnsemble,
     Sequence,
+    StorageDataset,
     SubgoalTriplet,
     tensordict_collate,
     TensorDictPrioritizedReplayBuffer,
@@ -3892,7 +3901,394 @@ def _skip_fork_on_windows(context):
         pytest.skip("fork is not available on Windows")
 
 
+class _BlockingReplayRowsExporter(_ReplayRowsExporter):
+    def __init__(self, entered, release):
+        self.entered, self.release = entered, release
+
+    def to_external(self, dataset):
+        first = dataset[0].clone()
+        self.entered.set()
+        if not self.release.wait(timeout=5):
+            raise RuntimeError("Timed out waiting to finish export.")
+        return [first, *[dataset[index].clone() for index in range(1, len(dataset))]]
+
+
+class _ExportBoundaryWriter(RoundRobinWriter):
+    def __init__(self, entered):
+        super().__init__()
+        self.entered = entered
+
+    def extend(self, data):
+        self.entered.set()
+        return super().extend(data)
+
+
+class _ExportBoundarySampler(RandomSampler):
+    def __init__(self, entered):
+        super().__init__()
+        self.entered = entered
+
+    def sample(self, storage, batch_size):
+        self.entered.set()
+        return super().sample(storage, batch_size)
+
+
+def _write_during_replay_export(rb, ready, start, attempting, finished):
+    ready.set()
+    if not start.wait(timeout=15):
+        raise RuntimeError("Timed out waiting to write replay data.")
+    attempting.set()
+    rb.extend(TensorDict({"obs": torch.tensor([9, 9])}, [2]))
+    finished.set()
+
+
+class TestReplayBufferExport:
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_cuda_streams_finish_before_export_returns(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(1, device="cuda"))
+        rb.extend(TensorDict({"obs": torch.zeros(1, device="cuda")}, [1]))
+        torch.cuda.synchronize()
+        writer_stream, reader_stream = torch.cuda.Stream(), torch.cuda.Stream()
+        completed = torch.cuda.Event()
+        with torch.cuda.stream(writer_stream):
+            torch.cuda._sleep(20_000_000)
+            rb.extend(TensorDict({"obs": torch.full((1,), 9.0, device="cuda")}, [1]))
+
+        class Exporter(_ReplayRowsExporter):
+            def to_external(self, dataset):
+                with torch.cuda.stream(reader_stream):
+                    torch.cuda._sleep(20_000_000)
+                    rows = super().to_external(dataset)
+                    completed.record()
+                return rows
+
+        rows = rb.export(Exporter())
+        assert completed.query()
+        assert rows[0]["obs"].item() == 9
+
+    @pytest.mark.parametrize(
+        "storage_type", [ListStorage, LazyTensorStorage, LazyMemmapStorage]
+    )
+    def test_physical_data_and_transform(self, storage_type):
+        generator = torch.Generator().manual_seed(0)
+        rb = ReplayBuffer(storage=storage_type(3), generator=generator)
+        rb.extend(TensorDict({"stored": torch.arange(5)}, [5]))
+        rb.append_transform(RenameTransform(in_keys=["stored"], out_keys=["sampled"]))
+        rng_state = generator.get_state().clone()
+        shared_before = rb.storage[0]["stored"].is_shared()
+
+        rows = rb.export(_ReplayRowsExporter())
+
+        assert [row["stored"].item() for row in rows] == [3, 4, 2]
+        assert all("sampled" not in row for row in rows)
+        assert torch.equal(generator.get_state(), rng_state)
+        assert rb.write_count == 5
+        assert rb.storage[0]["stored"].is_shared() == shared_before
+        assert "sampled" in rb.sample(1)
+
+    @pytest.mark.parametrize("episodic", [False, True])
+    def test_multidimensional_storage(self, episodic):
+        rb = ReplayBuffer(storage=LazyTensorStorage(6, ndim=2), dim_extend=0)
+        data = TensorDict(
+            {
+                "obs": torch.tensor([[11, 1], [10, 0]]),
+                "episode": torch.tensor([[1, 0], [1, 0]]),
+                "step": torch.tensor([[1, 1], [0, 0]]),
+            },
+            [2, 2],
+        )
+        rb.extend(data)
+
+        kwargs = {"trajectory_key": "episode", "step_key": "step"} if episodic else {}
+        rows = rb.export(_ReplayRowsExporter(), **kwargs)
+
+        assert [row["obs"].item() for row in rows] == (
+            [0, 1, 10, 11] if episodic else [11, 1, 10, 0]
+        )
+        assert all(row.batch_size == torch.Size([]) for row in rows)
+        assert_allclose_td(rb.storage[:], data)
+
+    def test_ensemble_exports_members_separately(self):
+        rb = ReplayBufferEnsemble(ReplayBuffer(), ReplayBuffer())
+        with pytest.raises(NotImplementedError, match="member"):
+            rb.export(_ReplayRowsExporter())
+
+    def test_consumed_entries_are_exported(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(2), consume_after_n_samples=1)
+        rb.extend(TensorDict({"obs": torch.arange(2)}, [2]))
+        rb.sample(2)
+        assert len(rb) == 0
+        rows = rb.export(_ReplayRowsExporter())
+        assert [row["obs"].item() for row in rows] == [0, 1]
+
+    @pytest.mark.parametrize("ndim", [1, 2])
+    def test_empty(self, ndim):
+        rb = ReplayBuffer(storage=LazyTensorStorage(4, ndim=ndim))
+        assert rb.export(_ReplayRowsExporter()) == []
+        assert (
+            rb.export(_ReplayRowsExporter(), trajectory_key="episode", step_key="step")
+            == []
+        )
+
+    @pytest.mark.parametrize(
+        "storage_type", [ListStorage, LazyTensorStorage, LazyMemmapStorage]
+    )
+    def test_interleaved_episodes(self, storage_type):
+        rb = ReplayBuffer(storage=storage_type(4))
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.tensor([11, 1, 10, 0]),
+                    ("collector", "traj_ids"): torch.tensor([1, 0, 1, 0]),
+                    ("metadata", "step"): torch.tensor([[1], [1], [0], [0]]),
+                },
+                [4],
+            )
+        )
+        rows = rb.export(
+            _ReplayRowsExporter(),
+            trajectory_key=("collector", "traj_ids"),
+            step_key=("metadata", "step"),
+        )
+        assert [row["obs"].item() for row in rows] == [0, 1, 10, 11]
+        assert [row["collector", "traj_ids"].item() for row in rows] == [0, 0, 1, 1]
+        assert [row["metadata", "step"].item() for row in rows] == [0, 1, 0, 1]
+        assert [row["obs"].item() for row in rb.export(_ReplayRowsExporter())] == [
+            11,
+            1,
+            10,
+            0,
+        ]
+
+    def test_overwritten_and_partial_episodes(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(5))
+        rb.extend(_episode_data(range(6), [0, 1, 0, 1, 0, 1], [0, 0, 2, 1, 4, 3]))
+        rows = rb.export(
+            _ReplayRowsExporter(), trajectory_key="episode", step_key="step"
+        )
+        assert [row["obs"].item() for row in rows] == [2, 4, 1, 3, 5]
+        assert [row["step"].item() for row in rows] == [2, 4, 0, 1, 3]
+
+    @pytest.mark.parametrize(
+        "kwargs", [{"trajectory_key": "episode"}, {"step_key": "step"}]
+    )
+    def test_requires_both_keys(self, kwargs):
+        rb = ReplayBuffer()
+        with pytest.raises(ValueError, match="together"):
+            rb.export(_ReplayRowsExporter(), **kwargs)
+
+    @pytest.mark.parametrize("storage_type", [ListStorage, LazyTensorStorage])
+    @pytest.mark.parametrize(
+        ("step", "error", "message"),
+        [
+            (torch.tensor([0, 0]), RuntimeError, "duplicate"),
+            (torch.tensor([0, -1]), ValueError, "non-negative"),
+            (torch.tensor([0.0, 1.0]), TypeError, "integer"),
+            (torch.tensor([[0, 1], [2, 3]]), RuntimeError, "scalar"),
+        ],
+    )
+    def test_invalid_episode_metadata(self, storage_type, step, error, message):
+        rb = ReplayBuffer(storage=storage_type(2))
+        rb.extend(
+            TensorDict({"episode": torch.zeros(2, dtype=torch.long), "step": step}, [2])
+        )
+        with pytest.raises(error, match=message):
+            rb.export(_ReplayRowsExporter(), trajectory_key="episode", step_key="step")
+
+    @pytest.mark.parametrize("storage_type", [ListStorage, LazyTensorStorage])
+    def test_missing_episode_metadata(self, storage_type):
+        rb = ReplayBuffer(storage=storage_type(2))
+        rb.extend(TensorDict({"episode": torch.zeros(2, dtype=torch.long)}, [2]))
+        with pytest.raises(KeyError, match="step"):
+            rb.export(_ReplayRowsExporter(), trajectory_key="episode", step_key="step")
+
+    def test_episode_metadata_requires_tensordict(self):
+        rb = ReplayBuffer(storage=ListStorage(2))
+        rb.extend(torch.arange(2))
+        with pytest.raises(TypeError, match="TensorDict"):
+            rb.export(_ReplayRowsExporter(), trajectory_key="episode", step_key="step")
+
+    @pytest.mark.parametrize("shared", [False, True])
+    @pytest.mark.parametrize("operation", ["extend", "sample"])
+    def test_blocks_concurrent_operations(self, shared, operation):
+        entered = threading.Event()
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(2),
+            shared=shared,
+            writer=_ExportBoundaryWriter(entered),
+            sampler=_ExportBoundarySampler(entered),
+        )
+        rb.extend(TensorDict({"obs": torch.arange(2)}, [2]))
+        entered.clear()
+        exporting = threading.Event()
+        release = threading.Event()
+        attempting = threading.Event()
+        finished = threading.Event()
+
+        def operate():
+            attempting.set()
+            result = (
+                rb.extend(TensorDict({"obs": torch.tensor([9, 9])}, [2]))
+                if operation == "extend"
+                else rb.sample(1)
+            )
+            finished.set()
+            return result
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            export = executor.submit(
+                rb.export, _BlockingReplayRowsExporter(exporting, release)
+            )
+            try:
+                assert exporting.wait(timeout=5)
+                future = executor.submit(operate)
+                assert attempting.wait(timeout=5)
+                assert not entered.wait(timeout=0.05)
+                assert not finished.is_set()
+            finally:
+                release.set()
+            rows = export.result(timeout=5)
+            future.result(timeout=5)
+            assert entered.is_set()
+        assert [row["obs"].item() for row in rows] == [0, 1]
+        if operation == "extend":
+            assert rb.storage[0]["obs"].item() == 9
+
+    def test_waits_for_prefetch_and_submitted_update(self):
+        rb = _OrderedUpdateReplayBuffer(
+            storage=LazyTensorStorage(2),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=2,
+            prefetch=2,
+        )
+        index = rb.extend(TensorDict({"obs": torch.zeros(2, dtype=torch.long)}, [2]))
+        generation = rb.writer.generations_of(index)
+        rb.sample()
+        assert rb.prefetch_started.wait(timeout=5)
+        rb.submit_update_if_present(
+            index=index, generation=generation, patch={"obs": torch.full((2,), 9)}
+        )
+        entered = threading.Event()
+
+        class Exporter(_ReplayRowsExporter):
+            def to_external(self, dataset):
+                entered.set()
+                return super().to_external(dataset)
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                export = executor.submit(rb.export, Exporter())
+                try:
+                    assert not entered.wait(timeout=0.05)
+                    rb.release_prefetch.set()
+                    assert rb.update_started.wait(timeout=5)
+                    assert not entered.wait(timeout=0.05)
+                finally:
+                    rb.release_prefetch.set()
+                    rb.release_update.set()
+                rows = export.result(timeout=5)
+            assert [row["obs"].item() for row in rows] == [9, 9]
+            assert rb.sample()["obs"].tolist() == [0, 0]
+        finally:
+            rb.release_prefetch.set()
+            rb.release_update.set()
+            rb.shutdown()
+
+    def test_shared_buffer_blocks_producer_process(self):
+        boundary = mp.Event()
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(2),
+            shared=True,
+            writer=_ExportBoundaryWriter(boundary),
+        )
+        rb.extend(TensorDict({"obs": torch.arange(2)}, [2]))
+        boundary.clear()
+        rb.storage.as_dataset()
+        ready, start, attempting, finished = (mp.Event() for _ in range(4))
+        producer = mp.Process(
+            target=_write_during_replay_export,
+            args=(rb, ready, start, attempting, finished),
+        )
+        exporting, release = threading.Event(), threading.Event()
+
+        producer.start()
+        try:
+            assert ready.wait(timeout=15)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    rb.export, _BlockingReplayRowsExporter(exporting, release)
+                )
+                try:
+                    assert exporting.wait(timeout=5)
+                    start.set()
+                    assert attempting.wait(timeout=5)
+                    assert not boundary.wait(timeout=0.05)
+                    assert not finished.is_set()
+                finally:
+                    release.set()
+                rows = future.result(timeout=5)
+            producer.join(timeout=10)
+            assert producer.exitcode == 0
+            assert boundary.is_set()
+            assert finished.is_set()
+            assert [row["obs"].item() for row in rows] == [0, 1]
+            assert rb.storage[0]["obs"].item() == 9
+        finally:
+            start.set()
+            release.set()
+            producer.join(timeout=5)
+            if producer.is_alive():
+                producer.terminate()
+                producer.join(timeout=5)
+
+    @pytest.mark.parametrize("failure", ["exporter", "pending_update"])
+    def test_error_releases_buffer(self, failure):
+        class FailingExporter:
+            def to_external(self, dataset):
+                raise RuntimeError("conversion failed")
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(2),
+            writer=RoundRobinWriter(track_generations=True),
+            shared=True,
+        )
+        index = rb.extend(TensorDict({"obs": torch.arange(2)}, [2]))
+        error, message = RuntimeError, "conversion failed"
+        if failure == "pending_update":
+            rb.submit_update_if_present(
+                index=index,
+                generation=rb.writer.generations_of(index),
+                patch={"missing": torch.ones(2)},
+            )
+            error, message = KeyError, "missing"
+        with pytest.raises(error, match=message):
+            rb.export(FailingExporter())
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(
+                rb.extend, TensorDict({"obs": torch.tensor([9])}, [1])
+            ).result(timeout=5)
+        assert rb.storage[0]["obs"].item() == 9
+        rb.shutdown()
+
+    def test_docstring_examples(self):
+        runner = doctest.DocTestRunner()
+        test = doctest.DocTestParser().get_doctest(
+            ReplayBuffer.export.__doc__, {}, "ReplayBuffer.export", None, 0
+        )
+        assert runner.run(test).failed == 0
+
+
 class TestTorchDataInterop:
+    def test_storage_dataset_sharing_option(self):
+        storage = LazyTensorStorage(2)
+        storage.set(range(2), TensorDict({"obs": torch.arange(2)}, [2]))
+        dataset = StorageDataset(storage, share_memory=False)
+        assert not dataset[0]["obs"].is_shared()
+        assert [dataset[i]["obs"].item() for i in range(len(dataset))] == [0, 1]
+        assert storage.as_dataset()[0]["obs"].is_shared()
+        assert dataset[0]["obs"].is_shared()
+
     def test_storage_dataloader(self):
         rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.extend(TensorDict({"obs": torch.arange(20)}, [20]))
