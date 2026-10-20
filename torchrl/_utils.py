@@ -125,6 +125,22 @@ def _mp_sharing_strategy_for_spawn() -> str | None:  # noqa: F811
     return None
 
 
+@implement_for("torch", None, "2.13")
+def _warn_if_torch_deprecated() -> None:
+    warnings.warn(
+        f"TorchRL support for torch<2.13 (found torch {torch.__version__}) is "
+        "deprecated and will be removed in v0.17. torch 2.11 and 2.12 remain "
+        "supported until then for stacks that pin them, such as Isaac Lab 3.0. "
+        "Upgrade to torch>=2.13 to silence this warning.",
+        DeprecationWarning,
+    )
+
+
+@implement_for("torch", "2.13")
+def _warn_if_torch_deprecated() -> None:  # noqa: F811
+    return None
+
+
 def _triton_version_at_least(minimum: str) -> bool:
     """Return whether the installed triton distribution is at least ``minimum``.
 

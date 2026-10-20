@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import subprocess
 import sys
 import threading
 import warnings
@@ -420,6 +421,20 @@ def test_implement_for_check_versions(
     assert (
         implement_for.check_version(version, from_version, to_version) == expected_check
     )
+
+
+def test_import_warns_on_deprecated_torch():
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONWARNINGS"}
+    env["RL_WARNINGS"] = "1"
+    result = subprocess.run(
+        [sys.executable, "-c", "import torchrl"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=True,
+    )
+    warned = "TorchRL support for torch<2.13" in result.stderr
+    assert warned == (TORCH_VERSION < version.parse("2.13"))
 
 
 @pytest.mark.isolate

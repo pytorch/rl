@@ -169,9 +169,10 @@ class TestAutoReset:
         assert (tensordict_["observation"] == 0).all()
 
     @pytest.mark.skipif(
-        TORCH_VERSION < version.parse("2.5.0"),
-        reason="Dynamo cannot trace `EnvBase.device` (a class-level property "
-        "using `self.__dict__.get`) on PyTorch < 2.5.",
+        TORCH_VERSION < version.parse("2.12.0"),
+        reason="Dynamo cannot trace the `self.__dict__` accesses of the "
+        "`EnvBase` key caches (`setdefault`) and `device` property on "
+        "PyTorch < 2.12.",
     )
     def test_native_auto_reset_compile_step_and_maybe_reset(self):
         class BranchlessAutoResetCountingEnv(EnvBase):
