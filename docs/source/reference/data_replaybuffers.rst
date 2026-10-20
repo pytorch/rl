@@ -204,6 +204,15 @@ With ``B`` sampled anchors, the flat output contains
     sample, info = rb.sample(return_info=True)
     loss_mask = info["learning_mask"] & info["validity_mask"]
 
+:class:`~torchrl.data.replay_buffers.SubgoalTriplet` expands each anchor ``i``
+into four records of its own episode: the anchor, a subgoal ``k`` in
+``[i, j)``, a goal ``j > i`` and an independent policy goal. Goal offsets are
+geometric (or uniform) and truncated at the episode end, and the
+``"step_offset"`` info entry carries each record's distance to its anchor, so
+that a divide-and-conquer critic can use exact
+:math:`\gamma^{k - i}` values for one-step horizons. With ``B`` sampled
+anchors, the flat output contains ``4 * B`` records.
+
 Conditional record updates
 --------------------------
 
@@ -313,6 +322,7 @@ counting only generation-stale handles.
 
     SampleUnit
     Sequence
+    SubgoalTriplet
     Transition
     ConditionalUpdateResult
 

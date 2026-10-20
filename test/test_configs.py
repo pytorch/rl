@@ -238,6 +238,7 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
         "SamplerEnsembleConfig",
+        "SubgoalTripletConfig",
     }
 )
 
@@ -675,11 +676,12 @@ class TestDataConfigs:
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_sample_unit_configs(self):
-        """Test TransitionConfig and SequenceConfig."""
+        """Test TransitionConfig, SequenceConfig and SubgoalTripletConfig."""
         from hydra.utils import instantiate
-        from torchrl.data.replay_buffers import Sequence, Transition
+        from torchrl.data.replay_buffers import Sequence, SubgoalTriplet, Transition
         from torchrl.trainers.algorithms.configs.data import (
             SequenceConfig,
+            SubgoalTripletConfig,
             TransitionConfig,
         )
 
@@ -693,6 +695,13 @@ class TestDataConfigs:
         assert isinstance(unit, Sequence)
         assert unit.length == 8
         assert unit.episode_boundary == "stop"
+        assert unit.done_key == ("next", "done")
+
+        cfg = SubgoalTripletConfig(goal_discount=None, policy_goal_discount=0.9)
+        unit = instantiate(cfg)
+        assert isinstance(unit, SubgoalTriplet)
+        assert unit.goal_discount is None
+        assert unit.policy_goal_discount == 0.9
         assert unit.done_key == ("next", "done")
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")

@@ -52,6 +52,7 @@ from torchrl.trainers.algorithms.configs.data import (
     StorageEnsembleConfig,
     StorageEnsembleWriterConfig,
     StreamingSliceSamplerConfig,
+    SubgoalTripletConfig,
     TensorDictReplayBufferConfig,
     TensorStorageConfig,
     TransitionConfig,
@@ -437,6 +438,7 @@ __all__ = [
     # Sample units
     "SampleUnitConfig",
     "SequenceConfig",
+    "SubgoalTripletConfig",
     "TransitionConfig",
     # Samplers
     "ConsumingSamplerConfig",
@@ -790,6 +792,7 @@ def _register_configs():
     cs.store(group="writer", name="round_robin", node=RoundRobinWriterConfig)
     cs.store(group="sample_unit", name="transition", node=TransitionConfig)
     cs.store(group="sample_unit", name="sequence", node=SequenceConfig)
+    cs.store(group="sample_unit", name="subgoal_triplet", node=SubgoalTripletConfig)
 
     # =============================================================================
     # Collector Configurations
