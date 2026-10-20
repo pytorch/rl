@@ -209,7 +209,8 @@ into four records of its own episode: the anchor, a subgoal ``k`` in
 ``[i, j)``, a goal ``j > i`` and an independent policy goal. Goal offsets are
 geometric (or uniform) and truncated at the episode end, and the
 ``"step_offset"`` info entry carries each record's distance to its anchor, so
-that a divide-and-conquer critic can use exact
+that a divide-and-conquer critic such as
+:class:`~torchrl.objectives.TransitiveQLoss` can use exact
 :math:`\gamma^{k - i}` values for one-step horizons. With ``B`` sampled
 anchors, the flat output contains ``4 * B`` records.
 

@@ -150,6 +150,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     TD3LossConfig,
     TdMpc2LossConfig,
     TQCLossConfig,
+    TransitiveQLossConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
     A2CTrainerConfig,
@@ -464,6 +465,7 @@ __all__ = [
     "TD3LossConfig",
     "TdMpc2LossConfig",
     "TQCLossConfig",
+    "TransitiveQLossConfig",
     # Value functions
     "GAEConfig",
     # Trainers
@@ -743,6 +745,7 @@ def _register_configs():
     cs.store(group="loss", name="td3", node=TD3LossConfig)
     cs.store(group="loss", name="tdmpc2", node=TdMpc2LossConfig)
     cs.store(group="loss", name="tqc", node=TQCLossConfig)
+    cs.store(group="loss", name="transitive_q", node=TransitiveQLossConfig)
 
     # =============================================================================
     # Value Function Configurations
