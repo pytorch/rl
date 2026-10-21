@@ -937,13 +937,9 @@ class TestParallel:
     def test_parallel_env_shutdown_workers_unstarted_or_closed_raises(
         self, maybe_fork_ParallelEnv
     ):
-        # Regression test for bug where @_check_start on ParallelEnv._shutdown_workers
-        # caused closed/unstarted environments to spawn workers just to shut them down.
         env = maybe_fork_ParallelEnv(2, CountingEnv)
         try:
             assert env.is_closed
-            # Calling _shutdown_workers on an unstarted environment must raise RuntimeError
-            # rather than starting workers via @_check_start.
             with pytest.raises(
                 RuntimeError, match="only allowed when env.is_closed = False"
             ):
@@ -951,7 +947,6 @@ class TestParallel:
             assert env.is_closed
             assert "_workers" not in env.__dict__
 
-            # Starting the environment and then manually shutting down workers
             env.reset()
             assert not env.is_closed
             assert "_workers" in env.__dict__
@@ -959,13 +954,11 @@ class TestParallel:
             assert env.is_closed
             assert "_workers" not in env.__dict__
 
-            # Once shut down, a second call to _shutdown_workers must also raise RuntimeError
             with pytest.raises(
                 RuntimeError, match="only allowed when env.is_closed = False"
             ):
                 env._shutdown_workers()
 
-            # Subsequent close() should be idempotent and not raise with raise_if_closed=False
             env.close(raise_if_closed=False)
         finally:
             env.close(raise_if_closed=False)
