@@ -36,7 +36,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f9137fca3d0>
+<torch._C.Generator object at 0x7fe37b0ca3d0>
 ```
 
 ## Why collectors return fixed-size chunks
@@ -63,32 +63,19 @@ for data in collector:
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([200, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- collector: TensorDict(
- fields={
- traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([200]),
- device=None,
- is_shared=False),
- done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([200, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([200]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([200, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([200]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[200], fields={
+ action: i64[2],
+ collector: {traj_ids: i64[]},
+ done: bool[1],
+ next: {
+ done: bool[1],
+ observation: f32[4],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[4],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 The batch has exactly 200 transitions. Let's inspect its trajectory
@@ -168,33 +155,19 @@ print(f"Shape: {split_data.shape} → (num_trajectories, max_episode_length)")
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 63, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- collector: TensorDict(
- fields={
- mask: Tensor(shape=torch.Size([10, 63]), device=cpu, dtype=torch.bool, is_shared=False),
- traj_ids: Tensor(shape=torch.Size([10, 63]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([10, 63]),
- device=None,
- is_shared=False),
- done: Tensor(shape=torch.Size([10, 63, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([10, 63, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 63, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([10, 63, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 63, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([10, 63, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10, 63]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([10, 63, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 63, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([10, 63, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10, 63]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10,63], fields={
+ action: i64[2],
+ collector: {mask: bool[], traj_ids: i64[]},
+ done: bool[1],
+ next: {
+ done: bool[1],
+ observation: f32[4],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[4],
+ terminated: bool[1],
+ truncated: bool[1]})
 Shape: torch.Size([10, 63]) → (num_trajectories, max_episode_length)
 ```
 
@@ -359,33 +332,19 @@ print(f"Shape: {traj_data.shape} → (trajs_per_batch, max_episode_length)")
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([5, 55, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- collector: TensorDict(
- fields={
- mask: Tensor(shape=torch.Size([5, 55]), device=cpu, dtype=torch.bool, is_shared=False),
- traj_ids: Tensor(shape=torch.Size([5, 55]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([5, 55]),
- device=None,
- is_shared=False),
- done: Tensor(shape=torch.Size([5, 55, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([5, 55, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([5, 55, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([5, 55, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([5, 55, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([5, 55, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([5, 55]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([5, 55, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([5, 55, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([5, 55, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([5, 55]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[5,55], fields={
+ action: i64[2],
+ collector: {mask: bool[], traj_ids: i64[]},
+ done: bool[1],
+ next: {
+ done: bool[1],
+ observation: f32[4],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[4],
+ terminated: bool[1],
+ truncated: bool[1]})
 Shape: torch.Size([5, 55]) → (trajs_per_batch, max_episode_length)
 ```
 
@@ -524,32 +483,19 @@ print(sample)
 
 ```
 Buffer length after one batch: 200
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([32, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- collector: TensorDict(
- fields={
- traj_ids: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False),
- observation: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False)
+TensorDict(batch_size=[32], device=cpu, fields={
+ action: i64[2],
+ collector: {traj_ids: i64[]},
+ done: bool[1],
+ next: {
+ done: bool[1],
+ observation: f32[4],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[4],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 With `batch_size=32` and `slice_len=16` the sampler must draw
@@ -636,32 +582,19 @@ if len(rb_async) >= 16:
 
 ```
 Buffer length after background collection: 200
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([32, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- collector: TensorDict(
- fields={
- traj_ids: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False),
- observation: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False)
+TensorDict(batch_size=[32], device=cpu, fields={
+ action: i64[2],
+ collector: {traj_ids: i64[]},
+ done: bool[1],
+ next: {
+ done: bool[1],
+ observation: f32[4],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[4],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 When you are done, shut the collector down:
@@ -704,7 +637,7 @@ between collectors, storages and samplers for recovering episode
 boundaries from a replay buffer.
 - [TorchRL documentation](https://pytorch.org/rl/)
 
-**Total running time of the script:** (0 minutes 0.331 seconds)
+**Total running time of the script:** (0 minutes 0.340 seconds)
 
 [`Download Jupyter notebook: collector_trajectory_assembly.ipynb`](../_downloads/a2c17acd7f5b44ec53e851e28c3416ac/collector_trajectory_assembly.ipynb)
 

@@ -85,28 +85,20 @@ from torchrl.envs import TransformedEnv
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- pixels: Tensor(shape=torch.Size([3, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- pixels: Tensor(shape=torch.Size([3, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={
+ action: i64[2],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ observation: f32[4],
+ pixels: u8[400,600,3],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[4],
+ pixels: u8[400,600,3],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 We now have built an environment that renders images with its observations.
@@ -141,7 +133,7 @@ This is all we wanted to cover in the getting started tutorial.
 You should now be ready to code your
 [first training loop with TorchRL](getting-started-5.html#gs-first-training)!
 
-**Total running time of the script:** (0 minutes 0.072 seconds)
+**Total running time of the script:** (0 minutes 0.069 seconds)
 
 [`Download Jupyter notebook: getting-started-4.ipynb`](../_downloads/0edaef9fb710ac597eeeb399f4a3bd6e/getting-started-4.ipynb)
 

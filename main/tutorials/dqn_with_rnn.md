@@ -424,32 +424,24 @@ initialize them before creating an optimizer and such.
 policy(env.reset())
 ```
 
-```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False),
- action_value: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- chosen_action_value: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- embed: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.float32, is_shared=False),
- is_init: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- recurrent_state_c: Tensor(shape=torch.Size([1, 128]), device=cpu, dtype=torch.float32, is_shared=False),
- recurrent_state_h: Tensor(shape=torch.Size([1, 128]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=cpu,
- is_shared=False),
- pixels: Tensor(shape=torch.Size([1, 84, 84]), device=cpu, dtype=torch.float32, is_shared=False),
- recurrent_state_c: Tensor(shape=torch.Size([1, 128]), device=cpu, dtype=torch.float32, is_shared=False),
- recurrent_state_h: Tensor(shape=torch.Size([1, 128]), device=cpu, dtype=torch.float32, is_shared=False),
- step_count: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=cpu,
- is_shared=False)
-```
+**TensorDict** batch_size=[], device=cpu
+
+- action: i64[2]
+- action_value: f32[2]
+- chosen_action_value: f32[1]
+- done: bool[1]
+- embed: f32[128]
+- is_init: bool[1]
+- next: 2 entries
+
+- recurrent_state_c: f32[1,128]
+- recurrent_state_h: f32[1,128]
+- pixels: f32[1,84,84]
+- recurrent_state_c: f32[1,128]
+- recurrent_state_h: f32[1,128]
+- step_count: i64[1]
+- terminated: bool[1]
+- truncated: bool[1]
 
 ## DQN Loss
 
@@ -576,10 +568,10 @@ for i, _ in enumerate(collector):
 
 ```
 0%| | 0/200 [00:00<?, ?it/s]
- 25%|██▌ | 50/200 [00:00<00:01, 108.79it/s]
- 50%|█████ | 100/200 [00:00<00:00, 114.03it/s]
- 75%|███████▌ | 150/200 [00:01<00:00, 116.74it/s]
-100%|██████████| 200/200 [00:01<00:00, 118.29it/s]
+ 25%|██▌ | 50/200 [00:00<00:01, 124.04it/s]
+ 50%|█████ | 100/200 [00:00<00:00, 125.83it/s]
+ 75%|███████▌ | 150/200 [00:01<00:00, 127.21it/s]
+100%|██████████| 200/200 [00:01<00:00, 128.83it/s]
 ```
 
 Let's plot our results:
@@ -614,7 +606,7 @@ how hidden states move through `env.reset`, collection, replay,
 and the loss.
 - The TorchRL documentation can be found [here](https://pytorch.org/rl/).
 
-**Total running time of the script:** (0 minutes 6.126 seconds)
+**Total running time of the script:** (0 minutes 5.890 seconds)
 
 [`Download Jupyter notebook: dqn_with_rnn.ipynb`](../_downloads/28be785bad9a380ed2a853d865b074b9/dqn_with_rnn.ipynb)
 

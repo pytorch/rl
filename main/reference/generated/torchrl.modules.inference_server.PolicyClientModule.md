@@ -44,7 +44,7 @@ freed when its request *completes* (including errors), not when
 slot. Must be at least `1`. `None` means unbounded.
 - **interaction_type** (*InteractionType**,**optional*) - sampling mode stamped
 on every request. Defaults to `None`: the caller's active
-`interaction_type()` is read at submission
+[`interaction_type()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.interaction_type.html#tensordict.nn.interaction_type) is read at submission
 time. Pass an explicit mode whenever another thread of the
 process may set the interaction type while requests are
 submitted, since that context is process-wide (a learner
@@ -56,7 +56,7 @@ Note
 
 The interaction type travels with the request: the explicit
 `interaction_type` or, when none is given, the caller's active
-`tensordict.nn.interaction_type()` is attached to every transport
+[`tensordict.nn.interaction_type()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.interaction_type.html#tensordict.nn.interaction_type) is attached to every transport
 request, and the server executes the remote policy under it - exactly
 as a local policy would see it. The serving thread's own (process-wide)
 context is never consulted. In-process (plain callable) clients enter

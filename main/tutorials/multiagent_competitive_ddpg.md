@@ -477,52 +477,25 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 ```
 
 ```
-rollout of 5 steps: TensorDict(
- fields={
- adversary: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 5, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([10, 5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 5, 2, 14]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 5, 2]),
- device=cpu,
- is_shared=False),
- agent: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 5, 1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([10, 5, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 5, 1, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 5, 1]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- adversary: TensorDict(
- fields={
- episode_reward: Tensor(shape=torch.Size([10, 5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 5, 2, 14]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([10, 5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 5, 2]),
- device=cpu,
- is_shared=False),
- agent: TensorDict(
- fields={
- episode_reward: Tensor(shape=torch.Size([10, 5, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 5, 1, 12]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([10, 5, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 5, 1]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10, 5]),
- device=cpu,
- is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10, 5]),
- device=cpu,
- is_shared=False)
+rollout of 5 steps: TensorDict(batch_size=[10,5], device=cpu, fields={
+ adversary: [2]{
+ action: f32[2],
+ episode_reward: f32[1],
+ observation: f32[14]},
+ agent: [1]{action: f32[2], episode_reward: f32[1], observation: f32[12]},
+ done: bool[1],
+ next: {
+ adversary: [2]{
+ episode_reward: f32[1],
+ observation: f32[14],
+ reward: f32[1]},
+ agent: [1]{
+ episode_reward: f32[1],
+ observation: f32[12],
+ reward: f32[1]},
+ done: bool[1],
+ terminated: bool[1]},
+ terminated: bool[1]})
 Shape of the rollout TensorDict: torch.Size([10, 5])
 ```
 
@@ -766,60 +739,34 @@ for group, _agents in env.group_map.items():
 ```
 
 ```
-Running value and policy for group 'adversary': TensorDict(
- fields={
- adversary: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([10, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- obs_action: Tensor(shape=torch.Size([10, 2, 16]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 2, 14]), device=cpu, dtype=torch.float32, is_shared=False),
- param: Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- state_action_value: Tensor(shape=torch.Size([10, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 2]),
- device=cpu,
- is_shared=False),
- agent: TensorDict(
- fields={
- episode_reward: Tensor(shape=torch.Size([10, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 1, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 1]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10]),
- device=cpu,
- is_shared=False)
-Running value and policy for group 'agent': TensorDict(
- fields={
- adversary: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([10, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- obs_action: Tensor(shape=torch.Size([10, 2, 16]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 2, 14]), device=cpu, dtype=torch.float32, is_shared=False),
- param: Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- state_action_value: Tensor(shape=torch.Size([10, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 2]),
- device=cpu,
- is_shared=False),
- agent: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([10, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- obs_action: Tensor(shape=torch.Size([10, 1, 14]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 1, 12]), device=cpu, dtype=torch.float32, is_shared=False),
- param: Tensor(shape=torch.Size([10, 1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- state_action_value: Tensor(shape=torch.Size([10, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 1]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10]),
- device=cpu,
- is_shared=False)
+Running value and policy for group 'adversary': TensorDict(batch_size=[10], device=cpu, fields={
+ adversary: [2]{
+ action: f32[2],
+ episode_reward: f32[1],
+ obs_action: f32[16],
+ observation: f32[14],
+ param: f32[2],
+ state_action_value: f32[1]},
+ agent: [1]{episode_reward: f32[1], observation: f32[12]},
+ done: bool[1],
+ terminated: bool[1]})
+Running value and policy for group 'agent': TensorDict(batch_size=[10], device=cpu, fields={
+ adversary: [2]{
+ action: f32[2],
+ episode_reward: f32[1],
+ obs_action: f32[16],
+ observation: f32[14],
+ param: f32[2],
+ state_action_value: f32[1]},
+ agent: [1]{
+ action: f32[2],
+ episode_reward: f32[1],
+ obs_action: f32[14],
+ observation: f32[12],
+ param: f32[2],
+ state_action_value: f32[1]},
+ done: bool[1],
+ terminated: bool[1]})
 ```
 
 ## Data collector
@@ -1060,16 +1007,16 @@ for iteration, batch in enumerate(collector):
 
 ```
 episode_reward_mean_adversary = 0, episode_reward_mean_agent = 0: 0%| | 0/10 [00:00<?, ?it/s]
-episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0: 10%|█ | 1/10 [00:02<00:26, 2.92s/it]
-episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0: 20%|██ | 2/10 [00:05<00:23, 3.00s/it]
-episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0: 30%|███ | 3/10 [00:09<00:21, 3.03s/it]
-episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0: 40%|████ | 4/10 [00:12<00:18, 3.06s/it]
-episode_reward_mean_adversary = 209.0, episode_reward_mean_agent = -209.0: 50%|█████ | 5/10 [00:15<00:15, 3.10s/it]
-episode_reward_mean_adversary = 224.0, episode_reward_mean_agent = -224.0: 60%|██████ | 6/10 [00:18<00:12, 3.10s/it]
-episode_reward_mean_adversary = 1035.0, episode_reward_mean_agent = -1035.0: 70%|███████ | 7/10 [00:20<00:08, 2.82s/it]
-episode_reward_mean_adversary = 1147.0, episode_reward_mean_agent = -1147.0: 80%|████████ | 8/10 [00:22<00:05, 2.64s/it]
-episode_reward_mean_adversary = 722.0, episode_reward_mean_agent = -722.0: 90%|█████████ | 9/10 [00:25<00:02, 2.53s/it]
-episode_reward_mean_adversary = 867.0, episode_reward_mean_agent = -867.0: 100%|██████████| 10/10 [00:27<00:00, 2.47s/it]
+episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0: 10%|█ | 1/10 [00:02<00:25, 2.83s/it]
+episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0: 20%|██ | 2/10 [00:05<00:24, 3.02s/it]
+episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0: 30%|███ | 3/10 [00:09<00:21, 3.07s/it]
+episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0: 40%|████ | 4/10 [00:12<00:18, 3.11s/it]
+episode_reward_mean_adversary = 215.0, episode_reward_mean_agent = -215.0: 50%|█████ | 5/10 [00:15<00:15, 3.13s/it]
+episode_reward_mean_adversary = 1135.0, episode_reward_mean_agent = -1135.0: 60%|██████ | 6/10 [00:18<00:12, 3.12s/it]
+episode_reward_mean_adversary = 0.0, episode_reward_mean_agent = 0.0: 70%|███████ | 7/10 [00:20<00:08, 2.83s/it]
+episode_reward_mean_adversary = 2.0, episode_reward_mean_agent = -2.0: 80%|████████ | 8/10 [00:23<00:05, 2.65s/it]
+episode_reward_mean_adversary = 2.0, episode_reward_mean_agent = -2.0: 90%|█████████ | 9/10 [00:25<00:02, 2.54s/it]
+episode_reward_mean_adversary = 51.0, episode_reward_mean_agent = -51.0: 100%|██████████| 10/10 [00:27<00:00, 2.48s/it]
 ```
 
 ## Results
@@ -1164,7 +1111,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 Scenarios available in [VMAS](https://github.com/proroklab/VectorizedMultiAgentSimulator)
 
-**Total running time of the script:** (0 minutes 27.845 seconds)
+**Total running time of the script:** (0 minutes 27.979 seconds)
 
 [`Download Jupyter notebook: multiagent_competitive_ddpg.ipynb`](../_downloads/f3b53654a2b96b82010dd96f73ff5151/multiagent_competitive_ddpg.ipynb)
 

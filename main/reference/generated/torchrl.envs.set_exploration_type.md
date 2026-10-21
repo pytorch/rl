@@ -4,7 +4,7 @@ torchrl.envs.set_exploration_type(*type: InteractionType | str | None = Interact
 
 Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function.
 
-Inside the block, `interaction_type()`
+Inside the block, [`interaction_type()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.interaction_type.html#tensordict.nn.interaction_type)
 returns `type`, and every `ProbabilisticTensorDictModule` uses it
 instead of its `default_interaction_type`. When the block ends, the
 previous value comes back. By default the interaction type applies to

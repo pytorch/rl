@@ -384,7 +384,7 @@ diag_env.close()
 ```
 
 ```
-heading term per step: 0.0026570074260234833 | total reward: 0.06847114861011505
+heading term per step: 0.0026570074260234833 | total reward: 0.06847113370895386
 ```
 
 ## Training end to end
@@ -428,7 +428,7 @@ for every field and preset.
 - `examples/microduck/README.md` for the training recipe and the results
 of the multi-task runs.
 
-**Total running time of the script:** (0 minutes 8.015 seconds)
+**Total running time of the script:** (0 minutes 10.469 seconds)
 
 [`Download Jupyter notebook: microduck.ipynb`](../_downloads/87abf301cfa889a7c2c1c1bbc88875ef/microduck.ipynb)
 

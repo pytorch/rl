@@ -724,26 +724,18 @@ print("reset tensordict", td)
 ```
 
 ```
-reset tensordict TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+reset tensordict TensorDict(batch_size=[], fields={
+ done: bool[1],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ terminated: bool[1],
+ th: f32[],
+ thdot: f32[]})
 ```
 
 We can run the `env.rand_step()` to generate
@@ -758,48 +750,32 @@ print("random step tensordict", td)
 ```
 
 ```
-random step tensordict TensorDict(
- fields={
- action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+random step tensordict TensorDict(batch_size=[], fields={
+ action: f32[1],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ reward: f32[1],
+ terminated: bool[1],
+ th: f32[],
+ thdot: f32[]},
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ terminated: bool[1],
+ th: f32[],
+ thdot: f32[]})
 ```
 
 ## Transforming an environment
@@ -1008,54 +984,38 @@ print("data from rollout:", simple_rollout(100))
 ```
 
 ```
-data from rollout: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- cos: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- cos: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([100, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([100]),
- device=None,
- is_shared=False),
- reward: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- sin: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([100]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([100, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([100]),
- device=None,
- is_shared=False),
- sin: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([100]),
- device=None,
- is_shared=False)
+data from rollout: TensorDict(batch_size=[100], fields={
+ action: f32[1],
+ cos: f32[1],
+ done: bool[1],
+ next: {
+ cos: f32[1],
+ done: bool[1],
+ observation: f32[3],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ reward: f32[1],
+ sin: f32[1],
+ terminated: bool[1],
+ th: f32[1],
+ thdot: f32[1]},
+ observation: f32[3],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ sin: f32[1],
+ terminated: bool[1],
+ th: f32[1],
+ thdot: f32[1]})
 ```
 
 ## Batching computations
@@ -1077,77 +1037,53 @@ print("rand step (batch size of 10)", td)
 ```
 
 ```
-reset (batch size of 10) TensorDict(
- fields={
- cos: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False),
- sin: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False)
-rand step (batch size of 10) TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- cos: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- cos: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False),
- reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- sin: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False),
- sin: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False)
+reset (batch size of 10) TensorDict(batch_size=[10], fields={
+ cos: f32[1],
+ done: bool[1],
+ observation: f32[3],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ sin: f32[1],
+ terminated: bool[1],
+ th: f32[1],
+ thdot: f32[1]})
+rand step (batch size of 10) TensorDict(batch_size=[10], fields={
+ action: f32[1],
+ cos: f32[1],
+ done: bool[1],
+ next: {
+ cos: f32[1],
+ done: bool[1],
+ observation: f32[3],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ reward: f32[1],
+ sin: f32[1],
+ terminated: bool[1],
+ th: f32[1],
+ thdot: f32[1]},
+ observation: f32[3],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ sin: f32[1],
+ terminated: bool[1],
+ th: f32[1],
+ thdot: f32[1]})
 ```
 
 Executing a rollout with a batch of data requires us to reset the environment
@@ -1164,54 +1100,38 @@ print("rollout of len 3 (batch size of 10):", rollout)
 ```
 
 ```
-rollout of len 3 (batch size of 10): TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- cos: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- cos: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([10, 3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False),
- reward: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- sin: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([10, 3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- params: TensorDict(
- fields={
- dt: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- g: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- l: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- m: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- max_speed: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- max_torque: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False),
- sin: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- th: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- thdot: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False)
+rollout of len 3 (batch size of 10): TensorDict(batch_size=[10,3], fields={
+ action: f32[1],
+ cos: f32[1],
+ done: bool[1],
+ next: {
+ cos: f32[1],
+ done: bool[1],
+ observation: f32[3],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ reward: f32[1],
+ sin: f32[1],
+ terminated: bool[1],
+ th: f32[1],
+ thdot: f32[1]},
+ observation: f32[3],
+ params: {
+ dt: f32[],
+ g: f32[],
+ l: f32[],
+ m: f32[],
+ max_speed: f32[],
+ max_torque: f32[]},
+ sin: f32[1],
+ terminated: bool[1],
+ th: f32[1],
+ thdot: f32[1]})
 ```
 
 ## Training a simple policy
@@ -1322,68 +1242,68 @@ plot()
 ```
 0%| | 0/31 [00:00<?, ?it/s]
 reward: -6.4381, last reward: -6.6717, gradient norm: 7.013: 0%| | 0/31 [00:00<?, ?it/s]
-reward: -6.4381, last reward: -6.6717, gradient norm: 7.013: 3%|▎ | 1/31 [00:00<00:18, 1.64it/s]
-reward: -6.2590, last reward: -6.5361, gradient norm: 2.55: 3%|▎ | 1/31 [00:00<00:18, 1.64it/s]
-reward: -6.2590, last reward: -6.5361, gradient norm: 2.55: 6%|▋ | 2/31 [00:00<00:09, 2.93it/s]
-reward: -6.1138, last reward: -6.1229, gradient norm: 3.929: 6%|▋ | 2/31 [00:00<00:09, 2.93it/s]
-reward: -6.1138, last reward: -6.1229, gradient norm: 3.929: 10%|▉ | 3/31 [00:00<00:07, 3.93it/s]
-reward: -6.1932, last reward: -7.0100, gradient norm: 6.44: 10%|▉ | 3/31 [00:01<00:07, 3.93it/s]
-reward: -6.1932, last reward: -7.0100, gradient norm: 6.44: 13%|█▎ | 4/31 [00:01<00:05, 4.69it/s]
-reward: -6.5832, last reward: -4.3353, gradient norm: 3.126: 13%|█▎ | 4/31 [00:01<00:05, 4.69it/s]
-reward: -6.5832, last reward: -4.3353, gradient norm: 3.126: 16%|█▌ | 5/31 [00:01<00:04, 5.25it/s]
-reward: -6.7391, last reward: -4.1995, gradient norm: 2.576: 16%|█▌ | 5/31 [00:01<00:04, 5.25it/s]
-reward: -6.7391, last reward: -4.1995, gradient norm: 2.576: 19%|█▉ | 6/31 [00:01<00:04, 5.68it/s]
-reward: -6.8264, last reward: -5.2494, gradient norm: 7.198: 19%|█▉ | 6/31 [00:01<00:04, 5.68it/s]
-reward: -6.8264, last reward: -5.2494, gradient norm: 7.198: 23%|██▎ | 7/31 [00:01<00:04, 5.98it/s]
-reward: -6.7867, last reward: -5.3624, gradient norm: 4.171: 23%|██▎ | 7/31 [00:01<00:04, 5.98it/s]
-reward: -6.7867, last reward: -5.3624, gradient norm: 4.171: 26%|██▌ | 8/31 [00:01<00:03, 6.15it/s]
-reward: -6.9220, last reward: -4.8760, gradient norm: 1.766: 26%|██▌ | 8/31 [00:01<00:03, 6.15it/s]
-reward: -6.9220, last reward: -4.8760, gradient norm: 1.766: 29%|██▉ | 9/31 [00:01<00:03, 6.31it/s]
-reward: -6.6887, last reward: -5.4955, gradient norm: 21.92: 29%|██▉ | 9/31 [00:01<00:03, 6.31it/s]
-reward: -6.6887, last reward: -5.4955, gradient norm: 21.92: 32%|███▏ | 10/31 [00:01<00:03, 6.40it/s]
-reward: -6.7179, last reward: -4.7035, gradient norm: 3.056: 32%|███▏ | 10/31 [00:02<00:03, 6.40it/s]
-reward: -6.7179, last reward: -4.7035, gradient norm: 3.056: 35%|███▌ | 11/31 [00:02<00:03, 6.42it/s]
-reward: -6.5741, last reward: -4.2936, gradient norm: 2.083: 35%|███▌ | 11/31 [00:02<00:03, 6.42it/s]
-reward: -6.5741, last reward: -4.2936, gradient norm: 2.083: 39%|███▊ | 12/31 [00:02<00:02, 6.49it/s]
-reward: -6.7024, last reward: -4.7707, gradient norm: 1.039: 39%|███▊ | 12/31 [00:02<00:02, 6.49it/s]
-reward: -6.7024, last reward: -4.7707, gradient norm: 1.039: 42%|████▏ | 13/31 [00:02<00:02, 6.53it/s]
-reward: -6.3238, last reward: -5.9996, gradient norm: 14.73: 42%|████▏ | 13/31 [00:02<00:02, 6.53it/s]
-reward: -6.3238, last reward: -5.9996, gradient norm: 14.73: 45%|████▌ | 14/31 [00:02<00:02, 6.55it/s]
-reward: -6.2495, last reward: -7.7481, gradient norm: 3.358: 45%|████▌ | 14/31 [00:02<00:02, 6.55it/s]
-reward: -6.2495, last reward: -7.7481, gradient norm: 3.358: 48%|████▊ | 15/31 [00:02<00:02, 6.49it/s]
-reward: -6.3425, last reward: -8.7920, gradient norm: 14.18: 48%|████▊ | 15/31 [00:02<00:02, 6.49it/s]
-reward: -6.3425, last reward: -8.7920, gradient norm: 14.18: 52%|█████▏ | 16/31 [00:02<00:02, 6.54it/s]
-reward: -6.0427, last reward: -9.2459, gradient norm: 4.408: 52%|█████▏ | 16/31 [00:03<00:02, 6.54it/s]
-reward: -6.0427, last reward: -9.2459, gradient norm: 4.408: 55%|█████▍ | 17/31 [00:03<00:02, 6.59it/s]
-reward: -5.8613, last reward: -4.6345, gradient norm: 27.46: 55%|█████▍ | 17/31 [00:03<00:02, 6.59it/s]
-reward: -5.8613, last reward: -4.6345, gradient norm: 27.46: 58%|█████▊ | 18/31 [00:03<00:01, 6.60it/s]
-reward: -5.8230, last reward: -6.0143, gradient norm: 33.68: 58%|█████▊ | 18/31 [00:03<00:01, 6.60it/s]
-reward: -5.8230, last reward: -6.0143, gradient norm: 33.68: 61%|██████▏ | 19/31 [00:03<00:01, 6.64it/s]
-reward: -5.7731, last reward: -5.6127, gradient norm: 25.3: 61%|██████▏ | 19/31 [00:03<00:01, 6.64it/s]
-reward: -5.7731, last reward: -5.6127, gradient norm: 25.3: 65%|██████▍ | 20/31 [00:03<00:01, 6.64it/s]
-reward: -5.8158, last reward: -5.7852, gradient norm: 13.66: 65%|██████▍ | 20/31 [00:03<00:01, 6.64it/s]
-reward: -5.8158, last reward: -5.7852, gradient norm: 13.66: 68%|██████▊ | 21/31 [00:03<00:01, 6.66it/s]
-reward: -5.9687, last reward: -4.9258, gradient norm: 10.83: 68%|██████▊ | 21/31 [00:03<00:01, 6.66it/s]
-reward: -5.9687, last reward: -4.9258, gradient norm: 10.83: 71%|███████ | 22/31 [00:03<00:01, 6.64it/s]
-reward: -5.9617, last reward: -4.2573, gradient norm: 1.98: 71%|███████ | 22/31 [00:03<00:01, 6.64it/s]
-reward: -5.9617, last reward: -4.2573, gradient norm: 1.98: 74%|███████▍ | 23/31 [00:03<00:01, 6.60it/s]
-reward: -6.1261, last reward: -7.9520, gradient norm: 53.99: 74%|███████▍ | 23/31 [00:04<00:01, 6.60it/s]
-reward: -6.1261, last reward: -7.9520, gradient norm: 53.99: 77%|███████▋ | 24/31 [00:04<00:01, 6.57it/s]
-reward: -6.1183, last reward: -7.9438, gradient norm: 1.678: 77%|███████▋ | 24/31 [00:04<00:01, 6.57it/s]
-reward: -6.1183, last reward: -7.9438, gradient norm: 1.678: 81%|████████ | 25/31 [00:04<00:00, 6.64it/s]
-reward: -5.9948, last reward: -8.6588, gradient norm: 12.05: 81%|████████ | 25/31 [00:04<00:00, 6.64it/s]
-reward: -5.9948, last reward: -8.6588, gradient norm: 12.05: 84%|████████▍ | 26/31 [00:04<00:00, 6.70it/s]
-reward: -6.2913, last reward: -7.3637, gradient norm: 4.09: 84%|████████▍ | 26/31 [00:04<00:00, 6.70it/s]
-reward: -6.2913, last reward: -7.3637, gradient norm: 4.09: 87%|████████▋ | 27/31 [00:04<00:00, 6.73it/s]
-reward: -6.2270, last reward: -7.3009, gradient norm: 13.6: 87%|████████▋ | 27/31 [00:04<00:00, 6.73it/s]
-reward: -6.2270, last reward: -7.3009, gradient norm: 13.6: 90%|█████████ | 28/31 [00:04<00:00, 6.74it/s]
-reward: -6.1598, last reward: -8.9761, gradient norm: 8.041: 90%|█████████ | 28/31 [00:04<00:00, 6.74it/s]
-reward: -6.1598, last reward: -8.9761, gradient norm: 8.041: 94%|█████████▎| 29/31 [00:04<00:00, 6.75it/s]
-reward: -6.0858, last reward: -7.5394, gradient norm: 2.045: 94%|█████████▎| 29/31 [00:04<00:00, 6.75it/s]
-reward: -6.0858, last reward: -7.5394, gradient norm: 2.045: 97%|█████████▋| 30/31 [00:04<00:00, 6.76it/s]
-reward: -6.0550, last reward: -8.1112, gradient norm: 8.922: 97%|█████████▋| 30/31 [00:05<00:00, 6.76it/s]
-reward: -6.0550, last reward: -8.1112, gradient norm: 8.922: 100%|██████████| 31/31 [00:05<00:00, 6.75it/s]
-reward: -6.0550, last reward: -8.1112, gradient norm: 8.922: 100%|██████████| 31/31 [00:05<00:00, 6.06it/s]
+reward: -6.4381, last reward: -6.6717, gradient norm: 7.013: 3%|▎ | 1/31 [00:00<00:06, 4.95it/s]
+reward: -6.2590, last reward: -6.5361, gradient norm: 2.55: 3%|▎ | 1/31 [00:00<00:06, 4.95it/s]
+reward: -6.2590, last reward: -6.5361, gradient norm: 2.55: 6%|▋ | 2/31 [00:00<00:04, 5.90it/s]
+reward: -6.1138, last reward: -6.1229, gradient norm: 3.929: 6%|▋ | 2/31 [00:00<00:04, 5.90it/s]
+reward: -6.1138, last reward: -6.1229, gradient norm: 3.929: 10%|▉ | 3/31 [00:00<00:04, 6.44it/s]
+reward: -6.1932, last reward: -7.0100, gradient norm: 6.44: 10%|▉ | 3/31 [00:00<00:04, 6.44it/s]
+reward: -6.1932, last reward: -7.0100, gradient norm: 6.44: 13%|█▎ | 4/31 [00:00<00:03, 6.91it/s]
+reward: -6.5832, last reward: -4.3353, gradient norm: 3.126: 13%|█▎ | 4/31 [00:00<00:03, 6.91it/s]
+reward: -6.5832, last reward: -4.3353, gradient norm: 3.126: 16%|█▌ | 5/31 [00:00<00:03, 7.20it/s]
+reward: -6.7391, last reward: -4.1995, gradient norm: 2.576: 16%|█▌ | 5/31 [00:00<00:03, 7.20it/s]
+reward: -6.7391, last reward: -4.1995, gradient norm: 2.576: 19%|█▉ | 6/31 [00:00<00:03, 7.38it/s]
+reward: -6.8264, last reward: -5.2494, gradient norm: 7.198: 19%|█▉ | 6/31 [00:01<00:03, 7.38it/s]
+reward: -6.8264, last reward: -5.2494, gradient norm: 7.198: 23%|██▎ | 7/31 [00:01<00:03, 7.51it/s]
+reward: -6.7867, last reward: -5.3624, gradient norm: 4.171: 23%|██▎ | 7/31 [00:01<00:03, 7.51it/s]
+reward: -6.7867, last reward: -5.3624, gradient norm: 4.171: 26%|██▌ | 8/31 [00:01<00:03, 7.61it/s]
+reward: -6.9220, last reward: -4.8760, gradient norm: 1.766: 26%|██▌ | 8/31 [00:01<00:03, 7.61it/s]
+reward: -6.9220, last reward: -4.8760, gradient norm: 1.766: 29%|██▉ | 9/31 [00:01<00:02, 7.67it/s]
+reward: -6.6887, last reward: -5.4955, gradient norm: 21.92: 29%|██▉ | 9/31 [00:01<00:02, 7.67it/s]
+reward: -6.6887, last reward: -5.4955, gradient norm: 21.92: 32%|███▏ | 10/31 [00:01<00:02, 7.70it/s]
+reward: -6.7179, last reward: -4.7035, gradient norm: 3.056: 32%|███▏ | 10/31 [00:01<00:02, 7.70it/s]
+reward: -6.7179, last reward: -4.7035, gradient norm: 3.056: 35%|███▌ | 11/31 [00:01<00:02, 7.78it/s]
+reward: -6.5741, last reward: -4.2936, gradient norm: 2.083: 35%|███▌ | 11/31 [00:01<00:02, 7.78it/s]
+reward: -6.5741, last reward: -4.2936, gradient norm: 2.083: 39%|███▊ | 12/31 [00:01<00:02, 7.83it/s]
+reward: -6.7024, last reward: -4.7707, gradient norm: 1.039: 39%|███▊ | 12/31 [00:01<00:02, 7.83it/s]
+reward: -6.7024, last reward: -4.7707, gradient norm: 1.039: 42%|████▏ | 13/31 [00:01<00:02, 7.83it/s]
+reward: -6.3238, last reward: -5.9996, gradient norm: 14.73: 42%|████▏ | 13/31 [00:01<00:02, 7.83it/s]
+reward: -6.3238, last reward: -5.9996, gradient norm: 14.73: 45%|████▌ | 14/31 [00:01<00:02, 7.83it/s]
+reward: -6.2495, last reward: -7.7481, gradient norm: 3.358: 45%|████▌ | 14/31 [00:02<00:02, 7.83it/s]
+reward: -6.2495, last reward: -7.7481, gradient norm: 3.358: 48%|████▊ | 15/31 [00:02<00:02, 7.88it/s]
+reward: -6.3425, last reward: -8.7920, gradient norm: 14.18: 48%|████▊ | 15/31 [00:02<00:02, 7.88it/s]
+reward: -6.3425, last reward: -8.7920, gradient norm: 14.18: 52%|█████▏ | 16/31 [00:02<00:01, 7.90it/s]
+reward: -6.0427, last reward: -9.2459, gradient norm: 4.408: 52%|█████▏ | 16/31 [00:02<00:01, 7.90it/s]
+reward: -6.0427, last reward: -9.2459, gradient norm: 4.408: 55%|█████▍ | 17/31 [00:02<00:01, 7.92it/s]
+reward: -5.8613, last reward: -4.6345, gradient norm: 27.46: 55%|█████▍ | 17/31 [00:02<00:01, 7.92it/s]
+reward: -5.8613, last reward: -4.6345, gradient norm: 27.46: 58%|█████▊ | 18/31 [00:02<00:01, 7.94it/s]
+reward: -5.8230, last reward: -6.0143, gradient norm: 33.68: 58%|█████▊ | 18/31 [00:02<00:01, 7.94it/s]
+reward: -5.8230, last reward: -6.0143, gradient norm: 33.68: 61%|██████▏ | 19/31 [00:02<00:01, 7.94it/s]
+reward: -5.7731, last reward: -5.6127, gradient norm: 25.3: 61%|██████▏ | 19/31 [00:02<00:01, 7.94it/s]
+reward: -5.7731, last reward: -5.6127, gradient norm: 25.3: 65%|██████▍ | 20/31 [00:02<00:01, 7.95it/s]
+reward: -5.8158, last reward: -5.7852, gradient norm: 13.66: 65%|██████▍ | 20/31 [00:02<00:01, 7.95it/s]
+reward: -5.8158, last reward: -5.7852, gradient norm: 13.66: 68%|██████▊ | 21/31 [00:02<00:01, 7.93it/s]
+reward: -5.9687, last reward: -4.9258, gradient norm: 10.83: 68%|██████▊ | 21/31 [00:02<00:01, 7.93it/s]
+reward: -5.9687, last reward: -4.9258, gradient norm: 10.83: 71%|███████ | 22/31 [00:02<00:01, 7.94it/s]
+reward: -5.9617, last reward: -4.2573, gradient norm: 1.98: 71%|███████ | 22/31 [00:03<00:01, 7.94it/s]
+reward: -5.9617, last reward: -4.2573, gradient norm: 1.98: 74%|███████▍ | 23/31 [00:03<00:01, 7.94it/s]
+reward: -6.1261, last reward: -7.9520, gradient norm: 53.99: 74%|███████▍ | 23/31 [00:03<00:01, 7.94it/s]
+reward: -6.1261, last reward: -7.9520, gradient norm: 53.99: 77%|███████▋ | 24/31 [00:03<00:00, 7.92it/s]
+reward: -6.1183, last reward: -7.9438, gradient norm: 1.678: 77%|███████▋ | 24/31 [00:03<00:00, 7.92it/s]
+reward: -6.1183, last reward: -7.9438, gradient norm: 1.678: 81%|████████ | 25/31 [00:03<00:00, 7.92it/s]
+reward: -5.9948, last reward: -8.6588, gradient norm: 12.05: 81%|████████ | 25/31 [00:03<00:00, 7.92it/s]
+reward: -5.9948, last reward: -8.6588, gradient norm: 12.05: 84%|████████▍ | 26/31 [00:03<00:00, 7.94it/s]
+reward: -6.2913, last reward: -7.3637, gradient norm: 4.09: 84%|████████▍ | 26/31 [00:03<00:00, 7.94it/s]
+reward: -6.2913, last reward: -7.3637, gradient norm: 4.09: 87%|████████▋ | 27/31 [00:03<00:00, 7.94it/s]
+reward: -6.2270, last reward: -7.3009, gradient norm: 13.6: 87%|████████▋ | 27/31 [00:03<00:00, 7.94it/s]
+reward: -6.2270, last reward: -7.3009, gradient norm: 13.6: 90%|█████████ | 28/31 [00:03<00:00, 7.82it/s]
+reward: -6.1598, last reward: -8.9761, gradient norm: 8.041: 90%|█████████ | 28/31 [00:03<00:00, 7.82it/s]
+reward: -6.1598, last reward: -8.9761, gradient norm: 8.041: 94%|█████████▎| 29/31 [00:03<00:00, 7.81it/s]
+reward: -6.0858, last reward: -7.5394, gradient norm: 2.045: 94%|█████████▎| 29/31 [00:03<00:00, 7.81it/s]
+reward: -6.0858, last reward: -7.5394, gradient norm: 2.045: 97%|█████████▋| 30/31 [00:03<00:00, 7.84it/s]
+reward: -6.0550, last reward: -8.1112, gradient norm: 8.922: 97%|█████████▋| 30/31 [00:04<00:00, 7.84it/s]
+reward: -6.0550, last reward: -8.1112, gradient norm: 8.922: 100%|██████████| 31/31 [00:04<00:00, 7.83it/s]
+reward: -6.0550, last reward: -8.1112, gradient norm: 8.922: 100%|██████████| 31/31 [00:04<00:00, 7.67it/s]
 ```
 
 ## Conclusion
@@ -1401,7 +1321,7 @@ We saw how these methods and classes interact with the
 to write custom transformations;
 - How to train a policy on a fully differentiable simulator.
 
-**Total running time of the script:** (0 minutes 5.326 seconds)
+**Total running time of the script:** (0 minutes 4.244 seconds)
 
 [`Download Jupyter notebook: pendulum.ipynb`](../_downloads/36eee5b78ddb0e674d19a3401b49da68/pendulum.ipynb)
 

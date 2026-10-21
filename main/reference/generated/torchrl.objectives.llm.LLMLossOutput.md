@@ -44,7 +44,7 @@ The device of the tensorclass, or `None` if its leaves may be on different devic
 It is read-only: use [`to()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to move the
 tensorclass to another device.
 
-dumps(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Self
+dumps(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
 
 Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -87,6 +87,12 @@ file. Defaults to `None`, which writes an archive if
 - **compression** (*str**or**int**,**optional*) - the compression of the
 archive entries. Defaults to `None`, which stores them
 uncompressed.
+- **atomic** (*bool**,**optional*) - if `True`, the directory is written
+next to `prefix` and then renamed to it, so that an error or
+a crash during the write leaves `prefix` as it was. Not
+supported on Windows for a directory. An archive is always
+written this way.
+`memmap()` gives the details. Defaults to `False`.
 
 Returns:
 
@@ -244,7 +250,10 @@ Reads a CSV file into a tensordict, with one entry per column.
 Requires pandas or pyarrow: the file is read with
 `pandas.read_csv()` when pandas is installed, and with
 `pyarrow.csv.read_csv` otherwise. The columns are converted as in
-`from_pandas()`. `to_csv()` writes such a file.
+`from_pandas()`. `to_csv()` writes such a file. Through
+pandas, a string column is one value for the whole batch (see the
+note in `from_pandas()`); through pyarrow, it is a
+[`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) with one value per row.
 
 Parameters:
 
@@ -493,13 +502,7 @@ Examples
 ... _ = data.to_h5(path)
 ... td = TensorDict.from_h5(path)
 ... print(td)
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
 ```
 
 from_json(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *lines: bool = False*, ***kwargs*) → Self
@@ -510,7 +513,11 @@ The file holds an array of records (`[{"a": 1, "b": 2.0}, ...]`),
 or one record per line with `lines=True` (JSON Lines). Each field
 becomes an entry with one value per record. The file is read with
 `pandas.read_json()` when pandas is installed, and with the
-`json` module otherwise. To convert a single JSON object, load
+`json` module otherwise. Through pandas, a string field is one
+value for the whole batch (see the note in `from_pandas()`);
+through the `json` module, it is a
+[`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) with one value per record. To
+convert a single JSON object, load
 it with `json.load()` and pass it to `from_dict()`.
 [`to_json()`](torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.to_json) writes such a file.
 
@@ -856,10 +863,22 @@ from_pandas(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None
 Converts a pandas DataFrame to a tensordict, with one entry per column.
 
 The batch size is `[num_rows]`. Numeric and boolean columns become
-tensors, string and object columns become non-tensor data, a
+tensors, a string or object column becomes one
+[`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole column, a
 categorical column becomes the tensor of its codes, and a datetime
 column becomes an `int64` tensor of nanoseconds.
 `to_pandas()` converts back.
+
+Note
+
+A string or object column is one value for the whole batch, so
+`td[i]["name"]` gives the values of every row, not the value of
+row `i`. To get one value per row, set the column again as a
+list: `td["name"] = df["name"].tolist()` stores a
+[`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack), whose `td[i]["name"]` is
+the value of row `i`. It builds one object per row, about 20
+microseconds each, so it is much slower than reading the column
+for large frames.
 
 Parameters:
 
@@ -906,13 +925,7 @@ Examples
 >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
 >>> td = TensorDict.from_pandas(df)
 >>> print(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
- b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={a: i64[], b: f64[]})
 ```
 
 from_parquet(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *columns: list[str] | None = None*, ***kwargs*) → Self
@@ -922,7 +935,10 @@ Reads a Parquet file into a tensordict, with one entry per column.
 Requires pyarrow or pandas: the file is read with
 `pyarrow.parquet.read_table` when pyarrow is installed, and with
 `pandas.read_parquet()` otherwise. The columns are converted as in
-`from_pandas()`. `to_parquet()` writes such a file.
+`from_pandas()`. `to_parquet()` writes such a file. Through
+pyarrow, a string column is a [`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack)
+with one value per row; through pandas, it is one value for the whole
+batch (see the note in `from_pandas()`).
 
 Parameters:
 
@@ -1408,13 +1424,7 @@ Examples
 ... _ = data.to_zarr(path)
 ... td = TensorDict.from_zarr(path)
 ... print(td)
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
 ```
 
 fromkeys(*value: Any = 0*)
@@ -1777,7 +1787,7 @@ Examples
 'LazyStackedTensorDict'
 ```
 
-memmap(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Self
+memmap(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
 
 Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
@@ -1843,6 +1853,25 @@ or a `zipfile` constant. A compressed leaf is
 decompressed in memory when it is loaded, instead of being
 memory-mapped. Only valid for an archive. Defaults to `None`,
 which stores the entries uncompressed.
+- **atomic** (*bool**,**optional*) - if `True`, the files are written to a
+new directory next to `prefix`, which is then renamed to
+`prefix`, so that an error or a crash during the write
+leaves `prefix` as it was. The new directory is removed if
+the write fails (but not after a crash). An existing directory
+at `prefix` is replaced as a whole once the new one is
+complete, so files that the tensordict does not write are
+removed: it must be empty or hold a saved tensordict (a
+`meta.json` file). Readers see the old or the new directory,
+except for the short time between two renames, during which
+`prefix` is missing. The write needs about twice the disk
+space of the tensordict while it runs, and a leaf that is
+already memory-mapped to a file is copied, which needs
+`copy_existing=True`. The files are not synced to the disk,
+so this guards against a killed process, not against a power
+failure. Not supported with `return_early=True`, nor for a
+directory on Windows, where a directory that holds open files
+cannot be renamed. An archive is always written this way.
+Defaults to `False`.
 
 Returns:
 
@@ -1853,11 +1882,16 @@ A new memory-mapped tensordict, or a
 Raises:
 
 - **RuntimeError** - if a leaf already has a file elsewhere and
- `copy_existing=False`, or if a file exists and
- `existsok=False`.
+ `copy_existing=False`, if a file exists and
+ `existsok=False`, or with `atomic=True`, if `prefix` is
+ a non-empty directory and `existsok=False`, or if it holds
+ no saved tensordict.
+- **NotADirectoryError** - if `atomic=True` and `prefix` is a file.
 - **ValueError** - if `compression` is given without an archive, or if
- an archive is requested without `prefix`.
-- **NotImplementedError** - if `return_early=True` for an archive.
+ an archive or `atomic=True` is requested without `prefix`.
+- **NotImplementedError** - if `return_early=True` for an archive or
+ with `atomic=True`, or `atomic=True` for a directory on
+ Windows.
 
 Note
 
@@ -1891,7 +1925,7 @@ MemoryMappedTensor True
 ['meta.json', 'next', 'obs.memmap']
 ```
 
-memmap_(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*) → Self
+memmap_(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *atomic: bool = False*) → Self
 
 Writes every leaf to a memory-mapped file in place, and returns `self`.
 
@@ -1941,6 +1975,26 @@ in file and directory names (`"a/b"` is written to
 If `False`, keys are used as file names unchanged, as in the
 legacy layout: do not use it with keys you do not trust.
 `None` is the same as `True`. Defaults to `True`.
+- **atomic** (*bool**,**optional*) - if `True`, the files are written to a
+new directory next to `prefix`, which is then renamed to
+`prefix`, so that an error or a crash during the write
+leaves `prefix` as it was. The new directory is removed if
+the write fails (but not after a crash). An existing directory
+at `prefix` is replaced as a whole once the new one is
+complete, so files that the tensordict does not write are
+removed: it must be empty or hold a saved tensordict (a
+`meta.json` file). Readers see the old or the new directory,
+except for the short time between two renames, during which
+`prefix` is missing. The write needs about twice the disk
+space of the tensordict while it runs, and a leaf that is
+already memory-mapped to a file is copied, which needs
+`copy_existing=True`. The files are not synced to the disk,
+so this guards against a killed process, not against a power
+failure. If the write fails, the leaves already converted map
+deleted files, so a retry needs `copy_existing=True`. Not
+supported with `return_early=True`, nor on Windows, where a
+directory that holds open files cannot be renamed. Defaults
+to `False`.
 
 Returns:
 
@@ -1949,7 +2003,7 @@ Returns:
 
 Raises:
 
-**RuntimeError** - if a leaf already has a file elsewhere and
+- **RuntimeError** - if a leaf already has a file elsewhere and
  `copy_existing=False`, if a file exists and
  `existsok=False`, if the tensordict is in shared memory
  (see [`share_memory_()`](torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.share_memory_)), or if it is a
@@ -1957,7 +2011,14 @@ Raises:
  [`TensorDictStore`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore), a
  [`LazyStackedTensorDictStore`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore) or one of
  their elements. Use `memmap()` to make a memory-mapped
- copy of those.
+ copy of those. With `atomic=True`, also if `prefix` is a
+ non-empty directory and `existsok=False`, or if it holds no
+ saved tensordict.
+- **NotADirectoryError** - if `atomic=True` and `prefix` is a file.
+- **ValueError** - if `atomic=True` and there is no directory to write
+ to.
+- **NotImplementedError** - if `return_early=True` with
+ `atomic=True`, or `atomic=True` on Windows.
 
 Examples
 
@@ -2115,10 +2176,11 @@ ranks. The result has shape `(*batch_size, F)` for `dim=-1`, where
 contiguous for any `dim`. [`PackLayout.unpack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PackLayout.html#tensordict.PackLayout.unpack) inverts it.
 
 Packing along the last dim copies the data once, with one
-[`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat). Along another dim the result can take a second
-copy: [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) keeps the channels-last strides that moving
-the feature dim gives a 4-d or 5-d result, and the result is then made
-contiguous.
+[`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat), unless the leaves are channels-last:
+[`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) keeps their strides, and making the result
+contiguous takes a second copy. Along another dim the result can take
+a second copy too, since moving the feature dim makes a 4-d or 5-d
+result channels-last.
 
 All the leaves must share one dtype and one device. Non-tensor data
 cannot be packed: drop it with `filter_non_tensor_data()` first.
@@ -2170,7 +2232,7 @@ rename_keys(*mapping*, ***, *strict: bool = True*)
 
 Returns a tensorclass with several keys renamed at once.
 
-Works as `rename_keys()`, which describes
+Works as [`rename_keys()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.rename_keys.html#tensordict.TensorDictBase.rename_keys), which describes
 `mapping` and `strict`, with two differences: each destination must be
 a field of the class, or the call raises an `AttributeError`, and a
 field that the renaming empties is kept.
@@ -2188,7 +2250,7 @@ Examples
 tensor([1., 1., 1.])
 ```
 
-save(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Self
+save(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
 
 Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -2231,6 +2293,12 @@ file. Defaults to `None`, which writes an archive if
 - **compression** (*str**or**int**,**optional*) - the compression of the
 archive entries. Defaults to `None`, which stores them
 uncompressed.
+- **atomic** (*bool**,**optional*) - if `True`, the directory is written
+next to `prefix` and then renamed to it, so that an error or
+a crash during the write leaves `prefix` as it was. Not
+supported on Windows for a directory. An archive is always
+written this way.
+`memmap()` gives the details. Defaults to `False`.
 
 Returns:
 
@@ -2313,6 +2381,7 @@ Raises:
 - **AttributeError** - if `key` is not a field of the class.
 - **RuntimeError** - if the tensorclass is locked, also with
  `inplace=True`.
+- **ValueError** - if `value` is the tensorclass itself.
 
 Examples
 

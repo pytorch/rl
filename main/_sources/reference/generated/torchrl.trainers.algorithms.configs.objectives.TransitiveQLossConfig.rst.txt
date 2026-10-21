@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.TransitiveQLossConfig
+====================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: TransitiveQLossConfig

@@ -70,16 +70,12 @@ print(tdreset[0])
 ```
 
 ```
-TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ done: bool[1],
+ observation: f32[67],
+ observation_stand: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 ## Policy
@@ -118,20 +114,15 @@ Let's check that our sequence outputs actions for a single env (stand).
 seq(env1.reset())
 ```
 
-```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-```
+**TensorDict** batch_size=[]
+
+- action: f32[21]
+- done: bool[1]
+- hidden: f32[64]
+- observation: f32[67]
+- observation_stand: f32[67]
+- terminated: bool[1]
+- truncated: bool[1]
 
 Let's check that our sequence outputs actions for a single env (walk).
 
@@ -139,20 +130,15 @@ Let's check that our sequence outputs actions for a single env (walk).
 seq(env2.reset())
 ```
 
-```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-```
+**TensorDict** batch_size=[]
+
+- action: f32[21]
+- done: bool[1]
+- hidden: f32[64]
+- observation: f32[67]
+- observation_walk: f32[67]
+- terminated: bool[1]
+- truncated: bool[1]
 
 This also works with the stack: now the stand and walk keys have
 disappeared, because they're not shared by all tensordicts. But the
@@ -163,25 +149,23 @@ backbone was executed in a vectorized way - not in a loop - which is more effici
 seq(tdreset)
 ```
 
-```
-LazyStackedTensorDict(
- fields={
- action: Tensor(shape=torch.Size([2, 21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([2, 67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- exclusive_fields={
- 0 ->
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- 1 ->
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0)
-```
+**LazyStackedTensorDict** batch_size=[2], stack_dim=0
+
+- action: f32[21]
+- done: bool[1]
+- hidden: f32[64]
+- observation: f32[67]
+- terminated: bool[1]
+- truncated: bool[1]
+
+*exclusive_fields*
+
+- 0: 1 entry
+
+- observation_stand: f32[67]
+- 1: 1 entry
+
+- observation_walk: f32[67]
 
 ## Executing diverse tasks in parallel
 
@@ -231,41 +215,25 @@ print(tdreset[1]) # should be different
 ```
 
 ```
-LazyStackedTensorDict(
- fields={
- done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([2, 67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- exclusive_fields={
- 0 ->
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- 1 ->
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0)
-TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={
+ done: bool[1],
+ observation: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]}, exclusive_fields={
+ 0: {observation_stand: f32[67]},
+ 1: {observation_walk: f32[67]}})
+TensorDict(batch_size=[], fields={
+ done: bool[1],
+ observation: f32[67],
+ observation_stand: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]})
+TensorDict(batch_size=[], fields={
+ done: bool[1],
+ observation: f32[67],
+ observation_walk: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 Let's pass the output through our network.
@@ -283,126 +251,76 @@ print(tdreset[1]) # next_observation has now been written
 ```
 
 ```
-LazyStackedTensorDict(
- fields={
- action: Tensor(shape=torch.Size([2, 21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([2, 67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- exclusive_fields={
- 0 ->
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- 1 ->
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0)
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-LazyStackedTensorDict(
- fields={
- action: Tensor(shape=torch.Size([2, 21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- next: LazyStackedTensorDict(
- fields={
- done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([2, 67]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float64, is_shared=False),
- terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- exclusive_fields={
- 0 ->
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- 1 ->
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0),
- observation: Tensor(shape=torch.Size([2, 67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- exclusive_fields={
- 0 ->
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- 1 ->
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0)
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.float32, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float64, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.float32, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float64, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={
+ action: f32[21],
+ done: bool[1],
+ hidden: f32[64],
+ observation: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]}, exclusive_fields={
+ 0: {observation_stand: f32[67]},
+ 1: {observation_walk: f32[67]}})
+TensorDict(batch_size=[], fields={
+ action: f32[21],
+ done: bool[1],
+ hidden: f32[64],
+ observation: f32[67],
+ observation_stand: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]})
+TensorDict(batch_size=[], fields={
+ action: f32[21],
+ done: bool[1],
+ hidden: f32[64],
+ observation: f32[67],
+ observation_walk: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]})
+LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={
+ action: f32[21],
+ done: bool[1],
+ hidden: f32[64],
+ next: {
+ done: bool[1],
+ observation: f32[67],
+ reward: f64[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]}, exclusive_fields={
+ 0: {observation_stand: f32[67]},
+ 1: {observation_walk: f32[67]}})
+TensorDict(batch_size=[], fields={
+ action: f32[21],
+ done: bool[1],
+ hidden: f32[64],
+ next: {
+ done: bool[1],
+ observation: f32[67],
+ observation_stand: f32[67],
+ reward: f64[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[67],
+ observation_stand: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]})
+TensorDict(batch_size=[], fields={
+ action: f32[21],
+ done: bool[1],
+ hidden: f32[64],
+ next: {
+ done: bool[1],
+ observation: f32[67],
+ observation_walk: f32[67],
+ reward: f64[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[67],
+ observation_walk: f32[67],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 ## Rollout
@@ -415,41 +333,30 @@ td_rollout = env.rollout(100, policy=seq, return_contiguous=False)
 td_rollout[:, 0] # tensordict of the first step: only the common keys are shown
 ```
 
-```
-LazyStackedTensorDict(
- fields={
- action: Tensor(shape=torch.Size([2, 21]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- hidden: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- next: LazyStackedTensorDict(
- fields={
- done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([2, 67]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float64, is_shared=False),
- terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- exclusive_fields={
- 0 ->
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- 1 ->
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0),
- observation: Tensor(shape=torch.Size([2, 67]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- exclusive_fields={
- 0 ->
- observation_stand: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False),
- 1 ->
- observation_walk: Tensor(shape=torch.Size([67]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0)
-```
+**LazyStackedTensorDict** batch_size=[2], stack_dim=0
+
+- action: f32[21]
+- done: bool[1]
+- hidden: f32[64]
+- next: 5 entries
+
+- done: bool[1]
+- observation: f32[67]
+- reward: f64[1]
+- terminated: bool[1]
+- truncated: bool[1]
+- observation: f32[67]
+- terminated: bool[1]
+- truncated: bool[1]
+
+*exclusive_fields*
+
+- 0: 1 entry
+
+- observation_stand: f32[67]
+- 1: 1 entry
+
+- observation_walk: f32[67]
 
 ```
 td_rollout[0] # tensordict of the first env: the stand obs is present
@@ -458,7 +365,7 @@ env.close()
 del env
 ```
 
-**Total running time of the script:** (0 minutes 4.576 seconds)
+**Total running time of the script:** (0 minutes 4.255 seconds)
 
 [`Download Jupyter notebook: multi_task.ipynb`](../_downloads/9b5fe5a65e76c28e02edf59221b0dc86/multi_task.ipynb)
 

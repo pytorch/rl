@@ -235,7 +235,10 @@ Reads a CSV file into a tensordict, with one entry per column.
 Requires pandas or pyarrow: the file is read with
 `pandas.read_csv()` when pandas is installed, and with
 `pyarrow.csv.read_csv` otherwise. The columns are converted as in
-`from_pandas()`. `to_csv()` writes such a file.
+`from_pandas()`. `to_csv()` writes such a file. Through
+pandas, a string column is one value for the whole batch (see the
+note in `from_pandas()`); through pyarrow, it is a
+[`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) with one value per row.
 
 Parameters:
 
@@ -435,13 +438,7 @@ Examples
 ... _ = data.to_h5(path)
 ... td = TensorDict.from_h5(path)
 ... print(td)
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
 ```
 
 *classmethod*from_json(*source: str*) → RobotDatasetMetadata[[source]](../../_modules/torchrl/data/vla/metadata.html#RobotDatasetMetadata.from_json)
@@ -733,10 +730,22 @@ from_pandas(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None
 Converts a pandas DataFrame to a tensordict, with one entry per column.
 
 The batch size is `[num_rows]`. Numeric and boolean columns become
-tensors, string and object columns become non-tensor data, a
+tensors, a string or object column becomes one
+[`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole column, a
 categorical column becomes the tensor of its codes, and a datetime
 column becomes an `int64` tensor of nanoseconds.
 `to_pandas()` converts back.
+
+Note
+
+A string or object column is one value for the whole batch, so
+`td[i]["name"]` gives the values of every row, not the value of
+row `i`. To get one value per row, set the column again as a
+list: `td["name"] = df["name"].tolist()` stores a
+[`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack), whose `td[i]["name"]` is
+the value of row `i`. It builds one object per row, about 20
+microseconds each, so it is much slower than reading the column
+for large frames.
 
 Parameters:
 
@@ -783,13 +792,7 @@ Examples
 >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
 >>> td = TensorDict.from_pandas(df)
 >>> print(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
- b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={a: i64[], b: f64[]})
 ```
 
 from_parquet(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *columns: list[str] | None = None*, ***kwargs*) → Self
@@ -799,7 +802,10 @@ Reads a Parquet file into a tensordict, with one entry per column.
 Requires pyarrow or pandas: the file is read with
 `pyarrow.parquet.read_table` when pyarrow is installed, and with
 `pandas.read_parquet()` otherwise. The columns are converted as in
-`from_pandas()`. `to_parquet()` writes such a file.
+`from_pandas()`. `to_parquet()` writes such a file. Through
+pyarrow, a string column is a [`NonTensorStack`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack)
+with one value per row; through pandas, it is one value for the whole
+batch (see the note in `from_pandas()`).
 
 Parameters:
 
@@ -1285,13 +1291,7 @@ Examples
 ... _ = data.to_zarr(path)
 ... td = TensorDict.from_zarr(path)
 ... print(td)
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
 ```
 
 fromkeys(*value: Any = 0*)

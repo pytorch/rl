@@ -9,6 +9,7 @@ Loss modules for offline reinforcement learning.
 | [`DiscreteIQLLoss`](generated/torchrl.objectives.DiscreteIQLLoss.html#torchrl.objectives.DiscreteIQLLoss)(*args, **kwargs) | TorchRL implementation of the discrete IQL loss. |
 | [`TD3BCLoss`](generated/torchrl.objectives.TD3BCLoss.html#torchrl.objectives.TD3BCLoss)(*args, **kwargs) | TD3+BC Loss Module. |
 | [`FQLLoss`](generated/torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss)(*args, **kwargs) | Flow Q-learning for normalized continuous actions. |
+| [`TransitiveQLoss`](generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss)(*args, **kwargs) | Transitive RL loss for offline goal-conditioned RL. |
 
 ## Flow Q-learning
 
@@ -35,3 +36,11 @@ encoder receives gradients only from its own objective.
 
 Inference passes the one-step policy directly to TorchRL collectors.
 Exploration remains stochastic at evaluation, as in the reference implementation.
+
+## Transitive RL
+
+[`TransitiveQLoss`](generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss) implements Transitive RL (Park et al., ICLR 2026,
+[https://arxiv.org/abs/2510.22512](https://arxiv.org/abs/2510.22512)), a divide-and-conquer critic for offline
+goal-conditioned RL. It reads the flat batches of a replay buffer sampling with
+`SubgoalTriplet`;
+`sota-implementations/transitive_rl/` trains it on OGBench.

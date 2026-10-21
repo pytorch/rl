@@ -189,6 +189,16 @@ sample, info = rb.sample(return_info=True)
 loss_mask = info["learning_mask"] & info["validity_mask"]
 ```
 
+`SubgoalTriplet` expands each anchor `i`
+into four records of its own episode: the anchor, a subgoal `k` in
+`[i, j)`, a goal `j > i` and an independent policy goal. Goal offsets are
+geometric (or uniform) and truncated at the episode end, and the
+`"step_offset"` info entry carries each record's distance to its anchor, so
+that a divide-and-conquer critic such as
+[`TransitiveQLoss`](generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss) can use exact
+\(\gamma^{k - i}\) values for one-step horizons. With `B` sampled
+anchors, the flat output contains `4 * B` records.
+
 ## Conditional record updates
 
 Round-robin writers recycle storage slots, so a physical index captured at
@@ -292,6 +302,7 @@ counting only generation-stale handles.
 | [`SampleUnit`](generated/torchrl.data.SampleUnit.html#torchrl.data.SampleUnit)() | Expands sampled anchors into the records a batch is made of. |
 | --- | --- |
 | [`Sequence`](generated/torchrl.data.Sequence.html#torchrl.data.Sequence)(length[, episode_boundary, ...]) | Expands anchors into a window of records around each anchor. |
+| [`SubgoalTriplet`](generated/torchrl.data.SubgoalTriplet.html#torchrl.data.SubgoalTriplet)(*[, goal_discount, ...]) | Expands anchors into in-trajectory `(state, subgoal, goal, policy goal)` records. |
 | [`Transition`](generated/torchrl.data.Transition.html#torchrl.data.Transition)() | The identity sample unit: every anchor is one transition. |
 | [`ConditionalUpdateResult`](generated/torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)(updated[, ...]) | Result of [`ReplayBuffer.update_if_present()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.update_if_present). |
 

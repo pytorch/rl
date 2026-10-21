@@ -172,18 +172,7 @@ print(data)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.int64, is_shared=False),
- b: TensorDict(
- fields={
- c: Tensor(shape=torch.Size([3, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={a: i64[4], b: {c: i64[5]}})
 ```
 
 The first call to [`extend()`](../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend) will
@@ -242,8 +231,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmp0_0xuvip/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmp0_0xuvip/b/c.memmap
+the 'a' tensor is stored in /tmp/tmpy6c9esug/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmpy6c9esug/b/c.memmap
 samples: a= tensor([[ 0, 1, 2, 3],
  [ 8, 9, 10, 11],
  [ 0, 1, 2, 3],
@@ -288,19 +277,10 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-sample: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([12, 4]), device=cpu, dtype=torch.int64, is_shared=False),
- b: TensorDict(
- fields={
- c: Tensor(shape=torch.Size([12, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([12]),
- device=cpu,
- is_shared=False),
- index: Tensor(shape=torch.Size([12]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([12]),
- device=cpu,
- is_shared=False)
+sample: TensorDict(batch_size=[12], device=cpu, fields={
+ a: i64[4],
+ b: {c: i64[5]},
+ index: i64[]})
 ```
 
 Our sample now has an extra `"index"` key that indicates what indices
@@ -347,12 +327,9 @@ print("sample:", sample)
 
 ```
 The buffer has 10 elements
-sample: MyData(
- images=Tensor(shape=torch.Size([12, 64, 64, 3]), device=cpu, dtype=torch.int64, is_shared=False),
- labels=Tensor(shape=torch.Size([12]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([12]),
- device=cpu,
- is_shared=False)
+sample: MyData(batch_size=[12], device=cpu, fields={
+ images: i64[64,64,3],
+ labels: i64[]})
 ```
 
 As expected. the data has the proper class and shape!
@@ -452,14 +429,10 @@ buffer_lazy.extend(data)
 buffer_lazy.sample()
 ```
 
-```
-MyData(
- images=Tensor(shape=torch.Size([128, 64, 64, 3]), device=cpu, dtype=torch.int64, is_shared=False),
- labels=Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([128]),
- device=cpu,
- is_shared=False)
-```
+**MyData** batch_size=[128], device=cpu
+
+- images: i64[64,64,3]
+- labels: i64[]
 
 This batch of data has the size that we wanted it to have (128).
 
@@ -477,12 +450,9 @@ print(buffer_lazy.sample())
 ```
 
 ```
-MyData(
- images=Tensor(shape=torch.Size([128, 64, 64, 3]), device=cpu, dtype=torch.int64, is_shared=False),
- labels=Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([128]),
- device=cpu,
- is_shared=False)
+MyData(batch_size=[128], device=cpu, fields={
+ images: i64[64,64,3],
+ labels: i64[]})
 ```
 
 ### Iterating over the buffer with a fixed batch-size
@@ -500,12 +470,9 @@ del buffer_lazy
 ```
 
 ```
-MyData(
- images=Tensor(shape=torch.Size([128, 64, 64, 3]), device=cpu, dtype=torch.int64, is_shared=False),
- labels=Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([128]),
- device=cpu,
- is_shared=False)
+MyData(batch_size=[128], device=cpu, fields={
+ images: i64[64,64,3],
+ labels: i64[]})
 ```
 
 Due to the fact that our sampling technique is entirely random and does not
@@ -562,30 +529,8 @@ del buffer_lazy
 ```
 
 ```
-sampling 3 elements: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.int64, is_shared=False),
- b: TensorDict(
- fields={
- c: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([3]),
- device=cpu,
- is_shared=False)},
- batch_size=torch.Size([3]),
- device=cpu,
- is_shared=False)
-sampling 5 elements: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),
- b: TensorDict(
- fields={
- c: Tensor(shape=torch.Size([5, 8]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([5]),
- device=cpu,
- is_shared=False)},
- batch_size=torch.Size([5]),
- device=cpu,
- is_shared=False)
+sampling 3 elements: TensorDict(batch_size=[3], device=cpu, fields={a: i64[4], b: {c: i64[8]}})
+sampling 5 elements: TensorDict(batch_size=[5], device=cpu, fields={a: i64[4], b: {c: i64[8]}})
 ```
 
 ## Prioritized Replay buffers
@@ -805,28 +750,20 @@ print(env.rollout(3))
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- pixels: Tensor(shape=torch.Size([3, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- pixels_trsf: Tensor(shape=torch.Size([3, 1, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False),
- pixels: Tensor(shape=torch.Size([3, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- pixels_trsf: Tensor(shape=torch.Size([3, 1, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={
+ action: i64[2],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ pixels: u8[400,600,3],
+ pixels_trsf: f32[1,64,64],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ pixels: u8[400,600,3],
+ pixels_trsf: f32[1,64,64],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 We have just created an environment that produces pixels. These images
@@ -859,26 +796,18 @@ collector.shutdown()
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- pixels: Tensor(shape=torch.Size([10, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False),
- pixels: Tensor(shape=torch.Size([10, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10], fields={
+ action: i64[2],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ pixels: u8[400,600,3],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ pixels: u8[400,600,3],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 We create a replay buffer with the same transform as the environment.
@@ -915,29 +844,21 @@ print(rb.sample())
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([16, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- done: Tensor(shape=torch.Size([16, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- index: Tensor(shape=torch.Size([16]), device=cpu, dtype=torch.int64, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([16, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- pixels: Tensor(shape=torch.Size([16, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- pixels_trsf: Tensor(shape=torch.Size([16, 1, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([16, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([16, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([16, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([16]),
- device=cpu,
- is_shared=False),
- pixels: Tensor(shape=torch.Size([16, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- pixels_trsf: Tensor(shape=torch.Size([16, 1, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([16, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([16, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([16]),
- device=cpu,
- is_shared=False)
+TensorDict(batch_size=[16], device=cpu, fields={
+ action: i64[2],
+ done: bool[1],
+ index: i64[],
+ next: {
+ done: bool[1],
+ pixels: u8[400,600,3],
+ pixels_trsf: f32[1,64,64],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ pixels: u8[400,600,3],
+ pixels_trsf: f32[1,64,64],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 ### A more complex examples: using CatFrames
@@ -983,34 +904,21 @@ collector.shutdown()
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([10, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- collector: TensorDict(
- fields={
- traj_ids: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False),
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- pixels: Tensor(shape=torch.Size([10, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- pixels_trsf: Tensor(shape=torch.Size([10, 4, 1, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False),
- pixels: Tensor(shape=torch.Size([10, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- pixels_trsf: Tensor(shape=torch.Size([10, 4, 1, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10], fields={
+ action: i64[2],
+ collector: {traj_ids: i64[]},
+ done: bool[1],
+ next: {
+ done: bool[1],
+ pixels: u8[400,600,3],
+ pixels_trsf: f32[4,1,64,64],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ pixels: u8[400,600,3],
+ pixels_trsf: f32[4,1,64,64],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 The buffer transform looks pretty much like the environment one, but with
@@ -1046,35 +954,22 @@ print(s)
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([1, 10, 2]), device=cpu, dtype=torch.int64, is_shared=False),
- collector: TensorDict(
- fields={
- traj_ids: Tensor(shape=torch.Size([1, 10]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([1, 10]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([1, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- index: Tensor(shape=torch.Size([1, 10]), device=cpu, dtype=torch.int64, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- pixels: Tensor(shape=torch.Size([1, 10, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- pixels_trsf: Tensor(shape=torch.Size([1, 10, 4, 1, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([1, 10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([1, 10]),
- device=cpu,
- is_shared=False),
- pixels: Tensor(shape=torch.Size([1, 10, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- pixels_trsf: Tensor(shape=torch.Size([1, 10, 4, 1, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([1, 10]),
- device=cpu,
- is_shared=False)
+TensorDict(batch_size=[1,10], device=cpu, fields={
+ action: i64[2],
+ collector: {traj_ids: i64[]},
+ done: bool[1],
+ index: i64[],
+ next: {
+ done: bool[1],
+ pixels: u8[400,600,3],
+ pixels_trsf: f32[4,1,64,64],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ pixels: u8[400,600,3],
+ pixels_trsf: f32[4,1,64,64],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 After a bit of processing (excluding non-used keys etc), we see that the
@@ -1135,7 +1030,7 @@ gc.collect()
 episode are grouped tensor([4, 4, 2, 2, 1, 1, 3, 3], dtype=torch.int32)
 steps are successive tensor([0, 1, 0, 1, 0, 1, 0, 1])
 
-4519
+4507
 ```
 
 ### Sequence sampling and trajectory queries
@@ -1304,7 +1199,7 @@ trajectory queries, consuming samples, statistics, and generation-aware
 updates.
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.931 seconds)
+**Total running time of the script:** (0 minutes 0.875 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 

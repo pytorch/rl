@@ -95,18 +95,14 @@ print(loss_vals)
 ```
 
 ```
-TensorDict(
- fields={
- loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- pred_value: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- pred_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- target_value: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
- target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- td_error: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ loss_actor: f32[],
+ loss_value: f32[],
+ pred_value: f32[100],
+ pred_value_max: f32[],
+ target_value: f32[100],
+ target_value_max: f32[],
+ td_error: f32[100]})
 ```
 
 ## LossModule's output
@@ -245,7 +241,7 @@ To further explore the topic, have a look at:
 - The [Coding a DDPG loss tutorial](coding_ddpg.html#coding-ddpg);
 - Losses in action in [PPO](coding_ppo.html#coding-ppo) or [DQN](coding_dqn.html#coding-dqn).
 
-**Total running time of the script:** (0 minutes 0.155 seconds)
+**Total running time of the script:** (0 minutes 0.047 seconds)
 
 [`Download Jupyter notebook: getting-started-2.ipynb`](../_downloads/ae2b99ca949badb94260561dacc8c210/getting-started-2.ipynb)
 

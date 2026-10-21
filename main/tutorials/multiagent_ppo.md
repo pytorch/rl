@@ -431,56 +431,29 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 ```
 
 ```
-rollout of three steps: TensorDict(
- fields={
- agents: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([60, 5, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- info: TensorDict(
- fields={
- agent_collisions: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- final_rew: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- pos_rew: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([60, 5, 3]),
- device=cpu,
- is_shared=False),
- observation: Tensor(shape=torch.Size([60, 5, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([60, 5, 3]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([60, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- agents: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- info: TensorDict(
- fields={
- agent_collisions: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- final_rew: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- pos_rew: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([60, 5, 3]),
- device=cpu,
- is_shared=False),
- observation: Tensor(shape=torch.Size([60, 5, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([60, 5, 3]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([60, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- terminated: Tensor(shape=torch.Size([60, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([60, 5]),
- device=cpu,
- is_shared=False),
- terminated: Tensor(shape=torch.Size([60, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([60, 5]),
- device=cpu,
- is_shared=False)
+rollout of three steps: TensorDict(batch_size=[60,5], device=cpu, fields={
+ agents: [3]{
+ action: f32[2],
+ done: bool[1],
+ episode_reward: f32[1],
+ info: {agent_collisions: f32[1], final_rew: f32[1], pos_rew: f32[1]},
+ observation: f32[18],
+ terminated: bool[1]},
+ done: bool[1],
+ next: {
+ agents: [3]{
+ done: bool[1],
+ episode_reward: f32[1],
+ info: {
+ agent_collisions: f32[1],
+ final_rew: f32[1],
+ pos_rew: f32[1]},
+ observation: f32[18],
+ reward: f32[1],
+ terminated: bool[1]},
+ done: bool[1],
+ terminated: bool[1]},
+ terminated: bool[1]})
 Shape of the rollout TensorDict: torch.Size([60, 5])
 ```
 
@@ -677,59 +650,29 @@ print("Running value:", critic(env.reset()))
 ```
 
 ```
-Running policy: TensorDict(
- fields={
- agents: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([60, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- action_log_prob: Tensor(shape=torch.Size([60, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- info: TensorDict(
- fields={
- agent_collisions: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- final_rew: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- pos_rew: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([60, 3]),
- device=cpu,
- is_shared=False),
- loc: Tensor(shape=torch.Size([60, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([60, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False),
- scale: Tensor(shape=torch.Size([60, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([60, 3]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([60, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- terminated: Tensor(shape=torch.Size([60, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([60]),
- device=cpu,
- is_shared=False)
-Running value: TensorDict(
- fields={
- agents: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- info: TensorDict(
- fields={
- agent_collisions: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- final_rew: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- pos_rew: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([60, 3]),
- device=cpu,
- is_shared=False),
- observation: Tensor(shape=torch.Size([60, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False),
- state_value: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([60, 3]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([60, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- terminated: Tensor(shape=torch.Size([60, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([60]),
- device=cpu,
- is_shared=False)
+Running policy: TensorDict(batch_size=[60], device=cpu, fields={
+ agents: [3]{
+ action: f32[2],
+ action_log_prob: f32[],
+ done: bool[1],
+ episode_reward: f32[1],
+ info: {agent_collisions: f32[1], final_rew: f32[1], pos_rew: f32[1]},
+ loc: f32[2],
+ observation: f32[18],
+ scale: f32[2],
+ terminated: bool[1]},
+ done: bool[1],
+ terminated: bool[1]})
+Running value: TensorDict(batch_size=[60], device=cpu, fields={
+ agents: [3]{
+ done: bool[1],
+ episode_reward: f32[1],
+ info: {agent_collisions: f32[1], final_rew: f32[1], pos_rew: f32[1]},
+ observation: f32[18],
+ state_value: f32[1],
+ terminated: bool[1]},
+ done: bool[1],
+ terminated: bool[1]})
 ```
 
 ## Data collector
@@ -892,11 +835,11 @@ for tensordict_data in collector:
 
 ```
 episode_reward_mean = 0: 0%| | 0/5 [00:00<?, ?it/s]
-episode_reward_mean = -0.6136067509651184: 20%|██ | 1/5 [00:05<00:22, 5.61s/it]
-episode_reward_mean = 0.16750605404376984: 40%|████ | 2/5 [00:11<00:16, 5.64s/it]
-episode_reward_mean = 0.6685259342193604: 60%|██████ | 3/5 [00:16<00:11, 5.57s/it]
-episode_reward_mean = 1.5515292882919312: 80%|████████ | 4/5 [00:22<00:05, 5.56s/it]
-episode_reward_mean = 1.7370444536209106: 100%|██████████| 5/5 [00:27<00:00, 5.54s/it]
+episode_reward_mean = -0.8506518602371216: 20%|██ | 1/5 [00:05<00:22, 5.73s/it]
+episode_reward_mean = 0.12038782238960266: 40%|████ | 2/5 [00:11<00:17, 5.72s/it]
+episode_reward_mean = 0.6696065068244934: 60%|██████ | 3/5 [00:17<00:11, 5.72s/it]
+episode_reward_mean = 1.266162395477295: 80%|████████ | 4/5 [00:22<00:05, 5.73s/it]
+episode_reward_mean = 1.8113263845443726: 100%|██████████| 5/5 [00:28<00:00, 5.78s/it]
 ```
 
 ## Results
@@ -998,7 +941,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 Scenarios available in [VMAS](https://github.com/proroklab/VectorizedMultiAgentSimulator)
 
-**Total running time of the script:** (0 minutes 28.119 seconds)
+**Total running time of the script:** (0 minutes 28.958 seconds)
 
 [`Download Jupyter notebook: multiagent_ppo.ipynb`](../_downloads/a977047786179278d12b52546e1c0da8/multiagent_ppo.ipynb)
 

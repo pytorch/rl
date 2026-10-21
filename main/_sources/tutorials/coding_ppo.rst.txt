@@ -565,28 +565,20 @@ that matches this trajectory length:
 
  .. code-block:: none
 
-    rollout of three steps: TensorDict(
-        fields={
-            action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-            done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-            next: TensorDict(
-                fields={
-                    done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                    observation: Tensor(shape=torch.Size([3, 11]), device=cpu, dtype=torch.float32, is_shared=False),
-                    reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                    step_count: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-                    terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                    truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=cpu,
-                is_shared=False),
-            observation: Tensor(shape=torch.Size([3, 11]), device=cpu, dtype=torch.float32, is_shared=False),
-            step_count: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-            terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-            truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-        batch_size=torch.Size([3]),
-        device=cpu,
-        is_shared=False)
+    rollout of three steps: TensorDict(batch_size=[3], device=cpu, fields={
+        action: f32[1],
+        done: bool[1],
+        next: {
+            done: bool[1],
+            observation: f32[11],
+            reward: f32[1],
+            step_count: i64[1],
+            terminated: bool[1],
+            truncated: bool[1]},
+        observation: f32[11],
+        step_count: i64[1],
+        terminated: bool[1],
+        truncated: bool[1]})
     Shape of the rollout TensorDict: torch.Size([3])
 
 
@@ -790,31 +782,23 @@ and where to write it.
 
  .. code-block:: none
 
-    Running policy: TensorDict(
-        fields={
-            action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-            action_log_prob: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-            loc: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-            observation: Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
-            scale: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-            step_count: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
-            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
-        batch_size=torch.Size([]),
-        device=cpu,
-        is_shared=False)
-    Running value: TensorDict(
-        fields={
-            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-            observation: Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
-            state_value: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-            step_count: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
-            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
-        batch_size=torch.Size([]),
-        device=cpu,
-        is_shared=False)
+    Running policy: TensorDict(batch_size=[], device=cpu, fields={
+        action: f32[1],
+        action_log_prob: f32[],
+        done: bool[1],
+        loc: f32[1],
+        observation: f32[11],
+        scale: f32[1],
+        step_count: i64[1],
+        terminated: bool[1],
+        truncated: bool[1]})
+    Running value: TensorDict(batch_size=[], device=cpu, fields={
+        done: bool[1],
+        observation: f32[11],
+        state_value: f32[1],
+        step_count: i64[1],
+        terminated: bool[1],
+        truncated: bool[1]})
 
 
 
@@ -1119,7 +1103,7 @@ The steps include:
 
  .. code-block:: none
 
-      0%|          | 0/10000 [00:00<?, ?it/s]     10%|█         | 1000/10000 [00:02<00:19, 463.99it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.0896 (init= 9.0896), step count (max): 15, lr policy:  0.0003:  10%|█         | 1000/10000 [00:02<00:19, 463.99it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.0896 (init= 9.0896), step count (max): 15, lr policy:  0.0003:  20%|██        | 2000/10000 [00:04<00:16, 473.45it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.1475 (init= 9.0896), step count (max): 21, lr policy:  0.0003:  20%|██        | 2000/10000 [00:04<00:16, 473.45it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.1475 (init= 9.0896), step count (max): 21, lr policy:  0.0003:  30%|███       | 3000/10000 [00:06<00:14, 470.30it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.1734 (init= 9.0896), step count (max): 20, lr policy:  0.0003:  30%|███       | 3000/10000 [00:06<00:14, 470.30it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.1734 (init= 9.0896), step count (max): 20, lr policy:  0.0003:  40%|████      | 4000/10000 [00:08<00:12, 476.86it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.1877 (init= 9.0896), step count (max): 24, lr policy:  0.0002:  40%|████      | 4000/10000 [00:08<00:12, 476.86it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.1877 (init= 9.0896), step count (max): 24, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:10<00:10, 480.68it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2122 (init= 9.0896), step count (max): 30, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:10<00:10, 480.68it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2122 (init= 9.0896), step count (max): 30, lr policy:  0.0002:  60%|██████    | 6000/10000 [00:12<00:08, 483.80it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2297 (init= 9.0896), step count (max): 28, lr policy:  0.0001:  60%|██████    | 6000/10000 [00:12<00:08, 483.80it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2297 (init= 9.0896), step count (max): 28, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:14<00:06, 485.39it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2324 (init= 9.0896), step count (max): 34, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:14<00:06, 485.39it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2324 (init= 9.0896), step count (max): 34, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:16<00:04, 486.46it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2524 (init= 9.0896), step count (max): 41, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:16<00:04, 486.46it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2524 (init= 9.0896), step count (max): 41, lr policy:  0.0001:  90%|█████████ | 9000/10000 [00:18<00:02, 485.21it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2497 (init= 9.0896), step count (max): 42, lr policy:  0.0000:  90%|█████████ | 9000/10000 [00:18<00:02, 485.21it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2497 (init= 9.0896), step count (max): 42, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:20<00:00, 485.93it/s]    eval cumulative reward:  129.6153 (init:  129.6153), eval step-count: 13, average reward= 9.2607 (init= 9.0896), step count (max): 44, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:20<00:00, 485.93it/s]
+      0%|          | 0/10000 [00:00<?, ?it/s]     10%|█         | 1000/10000 [00:02<00:20, 440.36it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.0871 (init= 9.0871), step count (max): 18, lr policy:  0.0003:  10%|█         | 1000/10000 [00:02<00:20, 440.36it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.0871 (init= 9.0871), step count (max): 18, lr policy:  0.0003:  20%|██        | 2000/10000 [00:04<00:18, 432.28it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.1213 (init= 9.0871), step count (max): 13, lr policy:  0.0003:  20%|██        | 2000/10000 [00:04<00:18, 432.28it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.1213 (init= 9.0871), step count (max): 13, lr policy:  0.0003:  30%|███       | 3000/10000 [00:06<00:16, 431.75it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.1650 (init= 9.0871), step count (max): 15, lr policy:  0.0003:  30%|███       | 3000/10000 [00:06<00:16, 431.75it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.1650 (init= 9.0871), step count (max): 15, lr policy:  0.0003:  40%|████      | 4000/10000 [00:09<00:13, 441.19it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.1841 (init= 9.0871), step count (max): 17, lr policy:  0.0002:  40%|████      | 4000/10000 [00:09<00:13, 441.19it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.1841 (init= 9.0871), step count (max): 17, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:11<00:11, 452.73it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2027 (init= 9.0871), step count (max): 22, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:11<00:11, 452.73it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2027 (init= 9.0871), step count (max): 22, lr policy:  0.0002:  60%|██████    | 6000/10000 [00:13<00:08, 451.12it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2186 (init= 9.0871), step count (max): 30, lr policy:  0.0001:  60%|██████    | 6000/10000 [00:13<00:08, 451.12it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2186 (init= 9.0871), step count (max): 30, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:15<00:06, 446.20it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2342 (init= 9.0871), step count (max): 32, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:15<00:06, 446.20it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2342 (init= 9.0871), step count (max): 32, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:17<00:04, 455.85it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2497 (init= 9.0871), step count (max): 33, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:17<00:04, 455.85it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2497 (init= 9.0871), step count (max): 33, lr policy:  0.0001:  90%|█████████ | 9000/10000 [00:19<00:02, 464.74it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2502 (init= 9.0871), step count (max): 41, lr policy:  0.0000:  90%|█████████ | 9000/10000 [00:19<00:02, 464.74it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2502 (init= 9.0871), step count (max): 41, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:22<00:00, 468.46it/s]    eval cumulative reward:  148.6375 (init:  148.6375), eval step-count: 15, average reward= 9.2513 (init= 9.0871), step count (max): 36, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:22<00:00, 468.46it/s]
 
 
 
@@ -1190,7 +1174,7 @@ If you want to experiment with this tutorial a bit more, you can apply the follo
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 21.544 seconds)
+   **Total running time of the script:** (0 minutes 22.758 seconds)
 
 
 .. _sphx_glr_download_tutorials_coding_ppo.py:

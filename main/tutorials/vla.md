@@ -134,7 +134,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f9137fca3d0>
+<torch._C.Generator object at 0x7fe37b0ca3d0>
 ```
 
 ## The canonical VLA schema
@@ -168,24 +168,13 @@ obs = make_observation()
 obs
 ```
 
-```
-TensorDict(
- fields={
- language_instruction: NonTensorStack(
- ['pick up object 0', 'pick up object 1', 'pick up ...,
- batch_size=torch.Size([8]),
- device=None),
- observation: TensorDict(
- fields={
- image: Tensor(shape=torch.Size([8, 3, 16, 16]), device=cpu, dtype=torch.uint8, is_shared=False),
- state: Tensor(shape=torch.Size([8, 6]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([8]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([8]),
- device=None,
- is_shared=False)
-```
+**TensorDict** batch_size=[8]
+
+- language_instruction: NonTensorStack
+- observation: 2 entries
+
+- image: u8[3,16,16]
+- state: f32[6]
 
 ## Action chunking and normalization
 
@@ -324,7 +313,7 @@ The behavior-cloning loss drops sharply as the policy fits the expert chunks:
 ```
 
 ```
-(1.6689702272415161, 0.07800987362861633)
+(1.6689702272415161, 0.07800992578268051)
 ```
 
 ## Chunked inference
@@ -531,7 +520,7 @@ swap [`TinyVLA`](../reference/generated/torchrl.modules.vla.TinyVLA.html#torchrl
 - SimpleVLA-RL (GRPO fine-tuning): [https://arxiv.org/abs/2509.09674](https://arxiv.org/abs/2509.09674)
 - The [VLA reference documentation](../reference/vla.html#ref-vla).
 
-**Total running time of the script:** (0 minutes 0.468 seconds)
+**Total running time of the script:** (0 minutes 0.410 seconds)
 
 [`Download Jupyter notebook: vla.ipynb`](../_downloads/4f2ab836eee1cdeaf65dd37f30e821be/vla.ipynb)
 

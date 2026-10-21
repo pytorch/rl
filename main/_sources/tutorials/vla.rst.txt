@@ -179,7 +179,7 @@ transforms, behavior cloning, chunked execution, RL fine-tuning.
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f9137fca3d0>
+    <torch._C.Generator object at 0x7fe37b0ca3d0>
 
 
 
@@ -226,29 +226,14 @@ therefore looks like this:
 
 
 
-.. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. raw:: html
 
-
-    TensorDict(
-        fields={
-            language_instruction: NonTensorStack(
-                ['pick up object 0', 'pick up object 1', 'pick up ...,
-                batch_size=torch.Size([8]),
-                device=None),
-            observation: TensorDict(
-                fields={
-                    image: Tensor(shape=torch.Size([8, 3, 16, 16]), device=cpu, dtype=torch.uint8, is_shared=False),
-                    state: Tensor(shape=torch.Size([8, 6]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([8]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([8]),
-        device=None,
-        is_shared=False)
-
-
+    <div class="output_subarea output_html rendered_html output_result">
+    <div style="font-family:monospace;line-height:1.4"><details open><summary><b>TensorDict</b> <span style="opacity:0.7">batch_size=[8]</span></summary><ul style="list-style:none;margin:0;padding-left:1.5em"><li>language_instruction: <span style="opacity:0.7">NonTensorStack</span></li><li><details open><summary>observation: <span style="opacity:0.7">2 entries</span></summary><ul style="list-style:none;margin:0;padding-left:1.5em"><li>image: <span style="opacity:0.7">u8[3,16,16]</span></li><li>state: <span style="opacity:0.7">f32[6]</span></li></ul></details></li></ul></details></div>
+    </div>
+    <br />
+    <br />
 
 .. GENERATED FROM PYTHON SOURCE LINES 175-219
 
@@ -455,7 +440,7 @@ The behavior-cloning loss drops sharply as the policy fits the expert chunks:
  .. code-block:: none
 
 
-    (1.6689702272415161, 0.07800987362861633)
+    (1.6689702272415161, 0.07800992578268051)
 
 
 
@@ -763,7 +748,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.468 seconds)
+   **Total running time of the script:** (0 minutes 0.410 seconds)
 
 
 .. _sphx_glr_download_tutorials_vla.py:

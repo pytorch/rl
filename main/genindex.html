@@ -1895,6 +1895,8 @@ document.write(`
       <ul>
         <li><a href="reference/generated/torchrl.objectives.TD3BCLoss.html#torchrl.objectives.TD3BCLoss.actor_loss">(torchrl.objectives.TD3BCLoss method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss.actor_loss">(torchrl.objectives.TransitiveQLoss method)</a>
+</li>
       </ul></li>
       <li><a href="reference/generated/torchrl.objectives.TdMpc2Loss.html#torchrl.objectives.TdMpc2Loss.actor_loss_from_latents">actor_loss_from_latents() (torchrl.objectives.TdMpc2Loss method)</a>
 </li>
@@ -5559,6 +5561,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.objectives.TdMpc2Loss.html#torchrl.objectives.TdMpc2Loss.default_keys">(torchrl.objectives.TdMpc2Loss attribute)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss.default_keys">(torchrl.objectives.TransitiveQLoss attribute)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE.default_keys">(torchrl.objectives.value.GAE attribute)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase.default_keys">(torchrl.objectives.value.ValueEstimatorBase attribute)</a>
@@ -7085,6 +7089,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.expand">(torchrl.data.StackedComposite method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.SubgoalTriplet.html#torchrl.data.SubgoalTriplet.expand">(torchrl.data.SubgoalTriplet method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec.expand">(torchrl.data.TensorSpec method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.Transition.html#torchrl.data.Transition.expand">(torchrl.data.Transition method)</a>
@@ -8180,6 +8186,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.TdMpc2Loss.html#torchrl.objectives.TdMpc2Loss.forward">(torchrl.objectives.TdMpc2Loss method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.TQCLoss.html#torchrl.objectives.TQCLoss.forward">(torchrl.objectives.TQCLoss method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss.forward">(torchrl.objectives.TransitiveQLoss method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE.forward">(torchrl.objectives.value.GAE method)</a>
 </li>
@@ -11494,6 +11502,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.TD3Loss.html#torchrl.objectives.TD3Loss.in_keys">(torchrl.objectives.TD3Loss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.TdMpc2Loss.html#torchrl.objectives.TdMpc2Loss.in_keys">(torchrl.objectives.TdMpc2Loss property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss.in_keys">(torchrl.objectives.TransitiveQLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE.in_keys">(torchrl.objectives.value.GAE property)</a>
 </li>
@@ -15398,12 +15408,12 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor">OnlineDTActor (class in torchrl.modules)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss">OnlineDTLoss (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer">OnPolicyTrainer (class in torchrl.trainers.algorithms)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig">OnPolicyTrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction.open_gripper">open_gripper() (torchrl.envs.transforms.RobotMacroAction class method)</a>
@@ -15493,13 +15503,19 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.objectives.ACTLoss.html#torchrl.objectives.ACTLoss.out_keys">(torchrl.objectives.ACTLoss property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.BCLoss.html#torchrl.objectives.BCLoss.out_keys">(torchrl.objectives.BCLoss property)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss.out_keys">(torchrl.objectives.ClipPPOLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss.out_keys">(torchrl.objectives.CQLLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.out_keys">(torchrl.objectives.CrossQLoss property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss.out_keys">(torchrl.objectives.DDPGLoss property)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.DiffusionBCLoss.html#torchrl.objectives.DiffusionBCLoss.out_keys">(torchrl.objectives.DiffusionBCLoss property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss.out_keys">(torchrl.objectives.DQNLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.DTLoss.html#torchrl.objectives.DTLoss.out_keys">(torchrl.objectives.DTLoss property)</a>
 </li>
@@ -16396,6 +16412,8 @@ document.write(`
 
       <ul>
         <li><a href="reference/generated/torchrl.objectives.TD3BCLoss.html#torchrl.objectives.TD3BCLoss.qvalue_loss">(torchrl.objectives.TD3BCLoss method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss.qvalue_loss">(torchrl.objectives.TransitiveQLoss method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.modules.QValueActor.html#torchrl.modules.QValueActor">QValueActor (class in torchrl.modules)</a>
@@ -22806,6 +22824,10 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html#torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig">StreamingSliceSamplerConfig (class in torchrl.trainers.algorithms.configs.data)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.SubgoalTriplet.html#torchrl.data.SubgoalTriplet">SubgoalTriplet (class in torchrl.data)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.data.SubgoalTripletConfig.html#torchrl.trainers.algorithms.configs.data.SubgoalTripletConfig">SubgoalTripletConfig (class in torchrl.trainers.algorithms.configs.data)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayEvalWorker.html#torchrl.collectors.distributed.RayEvalWorker.submit">submit() (torchrl.collectors.distributed.RayEvalWorker method)</a>
 
       <ul>
@@ -24583,6 +24605,10 @@ document.write(`
       <li><a href="reference/generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper">TransformersWrapper (class in torchrl.modules.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.Transition.html#torchrl.data.Transition">Transition (class in torchrl.data)</a>
+</li>
+      <li><a href="reference/generated/torchrl.objectives.TransitiveQLoss.html#torchrl.objectives.TransitiveQLoss">TransitiveQLoss (class in torchrl.objectives)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.objectives.TransitiveQLossConfig.html#torchrl.trainers.algorithms.configs.objectives.TransitiveQLossConfig">TransitiveQLossConfig (class in torchrl.trainers.algorithms.configs.objectives)</a>
 </li>
       <li><a href="reference/services_workflow.html#torchrl.transport_backend">transport_backend() (in module torchrl)</a>
 </li>

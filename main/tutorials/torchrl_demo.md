@@ -53,7 +53,7 @@ print(
 ```
 
 ```
-Collected 98 steps, total reward: 98
+Collected 110 steps, total reward: 110
 ```
 
 That's it! We wrapped a Gym environment, created a Q-value actor with an
@@ -89,14 +89,7 @@ print(data)
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([4, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- obs: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4], fields={action: f32[2], obs: f32[3], reward: f32[1]})
 ```
 
 TensorDicts support all the operations you'd expect from PyTorch tensors.
@@ -118,22 +111,8 @@ print("Stacked shape:", stacked.batch_size)
 ```
 
 ```
-First element: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- obs: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-Slice: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- obs: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+First element: TensorDict(batch_size=[], fields={action: f32[2], obs: f32[3], reward: f32[1]})
+Slice: TensorDict(batch_size=[2], fields={action: f32[2], obs: f32[3], reward: f32[1]})
 Stacked shape: torch.Size([2, 4])
 ```
 
@@ -155,19 +134,9 @@ print(nested)
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([4, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: TensorDict(
- fields={
- pixels: Tensor(shape=torch.Size([4, 3, 84, 84]), device=cpu, dtype=torch.float32, is_shared=False),
- vector: Tensor(shape=torch.Size([4, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4], fields={
+ action: f32[2],
+ observation: {pixels: f32[3,84,84], vector: f32[10]}})
 ```
 
 ## Environments
@@ -229,35 +198,23 @@ print("Step output:", td)
 ```
 
 ```
-Reset output: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-Step output: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+Reset output: TensorDict(batch_size=[], fields={
+ done: bool[1],
+ observation: f32[3],
+ terminated: bool[1],
+ truncated: bool[1]})
+Step output: TensorDict(batch_size=[], fields={
+ action: f32[1],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ observation: f32[3],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ observation: f32[3],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 Notice that [`step()`](../reference/generated/torchrl.envs.EnvBase.html#id4) returns the same TensorDict
@@ -356,13 +313,7 @@ print(td) # Now has "action" key
 ```
 
 ```
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([4, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- observation: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4], fields={action: f32[2], observation: f32[3]})
 ```
 
 This pattern has a powerful benefit: modules become composable. You can
@@ -470,11 +421,11 @@ collector.shutdown()
 ```
 
 ```
-Collected batch: torch.Size([200]), reward: -6.64
-Collected batch: torch.Size([200]), reward: -7.00
-Collected batch: torch.Size([200]), reward: -6.94
-Collected batch: torch.Size([200]), reward: -7.22
-Collected batch: torch.Size([200]), reward: -6.92
+Collected batch: torch.Size([200]), reward: -5.78
+Collected batch: torch.Size([200]), reward: -6.70
+Collected batch: torch.Size([200]), reward: -7.04
+Collected batch: torch.Size([200]), reward: -7.08
+Collected batch: torch.Size([200]), reward: -6.82
 ```
 
 For asynchronous collection (useful when training takes longer than
@@ -525,7 +476,7 @@ print("Prioritized sample indices:", info["index"][:5], "...") # First 5 indices
 ```
 
 ```
-Prioritized sample indices: tensor([22, 42, 15, 83, 47]) ...
+Prioritized sample indices: tensor([29, 40, 2, 6, 62]) ...
 ```
 
 ## Loss Functions
@@ -647,10 +598,10 @@ env.close()
 ```
 
 ```
-Step 0: loss=1.038
-Step 5: loss=0.690
-Step 10: loss=0.386
-Step 15: loss=0.262
+Step 0: loss=0.984
+Step 5: loss=0.693
+Step 10: loss=0.415
+Step 15: loss=0.302
 ```
 
 This is a minimal example - a production DQN would include target network
@@ -690,7 +641,7 @@ folder contains production-ready implementations of:
 - [GitHub](https://github.com/pytorch/rl)
 - [Contributing Guide](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md)
 
-**Total running time of the script:** (0 minutes 5.426 seconds)
+**Total running time of the script:** (0 minutes 5.721 seconds)
 
 [`Download Jupyter notebook: torchrl_demo.ipynb`](../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb)
 

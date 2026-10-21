@@ -83,26 +83,18 @@ print("rollout with transform:", rollout)
 ```
 
 ```
-rollout with transform: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([32, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- r3m_vec: Tensor(shape=torch.Size([32, 2048]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False),
- r3m_vec: Tensor(shape=torch.Size([32, 2048]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False)
+rollout with transform: TensorDict(batch_size=[32], device=cpu, fields={
+ action: f32[8],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ r3m_vec: f32[2048],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ r3m_vec: f32[2048],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 For fine tuning, we integrate the transform in the policy after making the parameters
@@ -129,26 +121,18 @@ print("rollout, fine tuning:", rollout)
 ```
 
 ```
-rollout, fine tuning: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([32, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- pixels: Tensor(shape=torch.Size([32, 480, 480, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False),
- r3m_vec: Tensor(shape=torch.Size([32, 2048]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False)
+rollout, fine tuning: TensorDict(batch_size=[32], device=cpu, fields={
+ action: f32[8],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ pixels: u8[480,480,3],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ r3m_vec: f32[2048],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 The easiness with which we have swapped the transform from the env to the policy
@@ -185,26 +169,18 @@ print("stored data:", storage._storage)
 ```
 
 ```
-stored data: TensorDict(
- fields={
- action: MemoryMappedTensor(shape=torch.Size([1000, 8]), device=cpu, dtype=torch.float32, is_shared=True),
- done: MemoryMappedTensor(shape=torch.Size([1000, 1]), device=cpu, dtype=torch.bool, is_shared=True),
- next: TensorDict(
- fields={
- done: MemoryMappedTensor(shape=torch.Size([1000, 1]), device=cpu, dtype=torch.bool, is_shared=True),
- pixels: MemoryMappedTensor(shape=torch.Size([1000, 480, 480, 3]), device=cpu, dtype=torch.uint8, is_shared=True),
- reward: MemoryMappedTensor(shape=torch.Size([1000, 1]), device=cpu, dtype=torch.float32, is_shared=True),
- terminated: MemoryMappedTensor(shape=torch.Size([1000, 1]), device=cpu, dtype=torch.bool, is_shared=True),
- truncated: MemoryMappedTensor(shape=torch.Size([1000, 1]), device=cpu, dtype=torch.bool, is_shared=True)},
- batch_size=torch.Size([1000]),
- device=cpu,
- is_shared=False),
- pixels: MemoryMappedTensor(shape=torch.Size([1000, 480, 480, 3]), device=cpu, dtype=torch.uint8, is_shared=True),
- terminated: MemoryMappedTensor(shape=torch.Size([1000, 1]), device=cpu, dtype=torch.bool, is_shared=True),
- truncated: MemoryMappedTensor(shape=torch.Size([1000, 1]), device=cpu, dtype=torch.bool, is_shared=True)},
- batch_size=torch.Size([1000]),
- device=cpu,
- is_shared=False)
+stored data: TensorDict(batch_size=[1000], device=cpu, fields={
+ action: f32[8],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ pixels: u8[480,480,3],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ pixels: u8[480,480,3],
+ terminated: bool[1],
+ truncated: bool[1]})
 ```
 
 When sampling, the data will go through the R3M transform, giving us the processed data that we wanted.
@@ -216,30 +192,22 @@ print("data after sampling:", batch)
 ```
 
 ```
-data after sampling: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([32, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- pixels: Tensor(shape=torch.Size([32, 480, 480, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
- reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False),
- r3m_vec: Tensor(shape=torch.Size([32, 2048]), device=cpu, dtype=torch.float32, is_shared=False),
- terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
- batch_size=torch.Size([32]),
- device=cpu,
- is_shared=False)
-Directory '/tmp/tmprv8f3i5x' deleted successfully.
+data after sampling: TensorDict(batch_size=[32], device=cpu, fields={
+ action: f32[8],
+ done: bool[1],
+ next: {
+ done: bool[1],
+ pixels: u8[480,480,3],
+ reward: f32[1],
+ terminated: bool[1],
+ truncated: bool[1]},
+ r3m_vec: f32[2048],
+ terminated: bool[1],
+ truncated: bool[1]})
+Directory '/tmp/tmp4vtqvgyi' deleted successfully.
 ```
 
-**Total running time of the script:** (0 minutes 9.842 seconds)
+**Total running time of the script:** (0 minutes 12.160 seconds)
 
 [`Download Jupyter notebook: pretrained_models.ipynb`](../_downloads/3ba23a9a93590a43a3046afd5406df88/pretrained_models.ipynb)
 
