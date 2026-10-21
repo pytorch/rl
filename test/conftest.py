@@ -18,11 +18,11 @@ import numpy as np
 
 import pytest
 import torch
+from tensordict.nn import set_interaction_type
 
 # Note: torchrl is imported lazily inside fixtures because this conftest must
 # load even when torchrl is not installed (see test/test_setup.py and the
 # test-setup-minimal CI job).
-_has_tensordict = importlib.util.find_spec("tensordict") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
 
 CALL_TIMES = defaultdict(float)
@@ -87,11 +87,6 @@ def reset_interaction_type():
     interleaved exits can leave a stale mode that silently disables
     exploration in later tests run by the same process.
     """
-    if not _has_tensordict:
-        yield
-        return
-    from tensordict.nn import set_interaction_type
-
     with set_interaction_type(None):
         yield
 
