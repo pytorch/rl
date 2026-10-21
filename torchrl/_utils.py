@@ -127,6 +127,8 @@ def _mp_sharing_strategy_for_spawn() -> str | None:  # noqa: F811
 
 @implement_for("torch", None, "2.13")
 def _warn_if_torch_deprecated() -> None:
+    if mp.current_process().name != "MainProcess":
+        return
     warnings.warn(
         f"TorchRL support for torch<2.13 (found torch {torch.__version__}) is "
         "deprecated and will be removed in v0.17. torch 2.11 and 2.12 remain "
