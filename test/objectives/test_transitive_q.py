@@ -206,8 +206,28 @@ class TestTransitiveQLoss:
         loss = TransitiveQLoss(make_actor(), make_critics(GoalSumLogit), alpha=0.5)
         masked = loss(batch)
         reference = loss(records[valid].exclude("validity_mask"))
-        for key in ("loss_qvalue", "loss_actor"):
+        for key in ("loss_qvalue", "loss_actor", "q_mean"):
             torch.testing.assert_close(masked[key], reference[key])
+
+    def test_q_extrema_skip_invalid_anchors(self):
+        """q_min and q_max ignore anchors holding the extreme critic values when masked out."""
+        loss = TransitiveQLoss(make_actor(), make_critics(GoalSumLogit))
+        batch = make_batch([0, 0, 0], [2, 2, 2])
+        batch["observation"][0, 2] = 10.0
+        batch["observation"][1, 2] = -10.0
+        batch["validity_mask"] = (
+            torch.tensor([False, False, True]).unsqueeze(-1).expand(3, 4)
+        )
+        out = loss(batch)
+        expected = torch.sigmoid(batch["observation"][2, 2].sum())
+        torch.testing.assert_close(out["q_min"], expected)
+        torch.testing.assert_close(out["q_max"], expected)
+
+    def test_batch_without_step_offset_is_rejected(self):
+        loss = TransitiveQLoss(make_actor(), make_critics(LinearLogit))
+        batch = make_batch([0, 1], [2, 3]).exclude("step_offset").reshape(-1)
+        with pytest.raises(KeyError, match="step_offset"):
+            loss(batch)
 
     def test_oracle_ensemble_size_must_match(self):
         with pytest.raises(ValueError, match="as many members as the critic"):

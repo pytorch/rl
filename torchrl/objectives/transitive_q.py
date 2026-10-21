@@ -51,8 +51,10 @@ class TransitiveQLoss(LossModule):
     in this order, the anchor record :math:`s_i`, the subgoal record
     :math:`s_k`, the goal record :math:`s_j` and a policy-goal record. The
     flat ``[4 * B]`` batches sampled with
-    :class:`~torchrl.data.replay_buffers.SubgoalTriplet` are accepted as is.
-    Each record carries its ``"step_offset"`` from the anchor.
+    :class:`~torchrl.data.replay_buffers.SubgoalTriplet` are accepted as is: a
+    one-dimensional batch is read as consecutive groups of four records, so it
+    must follow the unit's layout. Each record carries its ``"step_offset"``
+    from the anchor, and a batch without that entry is rejected.
 
     The goal fed to the critic is read from the goal record at the
     ``achieved_goal`` key (the full observation by default), so that the
@@ -284,6 +286,21 @@ class TransitiveQLoss(LossModule):
             value = value.movedim(0, -1)
         return self._reduce_loss(value, state, reduction="mean")
 
+    def _extrema(
+        self, value: torch.Tensor, state: TensorDictBase
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Min and max over the valid anchors of ``state``, with any ensemble dimension leading."""
+        if value.ndim > state.ndim:
+            value = value.movedim(0, -1)
+        low = high = value
+        for mask_key in self._loss_mask_keys():
+            mask = state.get(mask_key, default=None)
+            if mask is not None:
+                mask = self._expand_loss_mask(mask, value)
+                low = torch.where(mask, low, torch.full_like(low, torch.inf))
+                high = torch.where(mask, high, torch.full_like(high, -torch.inf))
+        return low.min(), high.max()
+
     def qvalue_loss(
         self, tensordict: TensorDictBase
     ) -> tuple[torch.Tensor, torch.Tensor | None, dict]:
@@ -331,10 +348,11 @@ class TransitiveQLoss(LossModule):
                 self.oracle_qvalue_network_params,
             )
             loss_oracle = self._mean(self._bce(oracle_logits, q.detach()), state)
+        q_min, q_max = self._extrema(q.detach(), state)
         metadata = {
             "q_mean": self._mean(q, state).detach(),
-            "q_min": q.min().detach(),
-            "q_max": q.max().detach(),
+            "q_min": q_min,
+            "q_max": q_max,
             "target_mean": self._mean(target, state),
         }
         return loss_qvalue, loss_oracle, metadata
@@ -376,6 +394,12 @@ class TransitiveQLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
+        if self.tensor_keys.step_offset not in tensordict.keys(include_nested=True):
+            raise KeyError(
+                f"TransitiveQLoss reads the {self.tensor_keys.step_offset!r} entry "
+                "that SubgoalTriplet writes; sample the batch with SubgoalTriplet "
+                "or provide the entry."
+            )
         if tensordict.ndim == 1 and tensordict.shape[0] % 4 == 0:
             tensordict = tensordict.unflatten(0, (tensordict.shape[0] // 4, 4))
         if tensordict.ndim < 2 or tensordict.shape[-1] != 4:
