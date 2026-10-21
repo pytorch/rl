@@ -50,4 +50,5 @@ Transitive RL
 :class:`TransitiveQLoss` implements Transitive RL (Park et al., ICLR 2026,
 https://arxiv.org/abs/2510.22512), a divide-and-conquer critic for offline
 goal-conditioned RL. It reads the flat batches of a replay buffer sampling with
-:class:`~torchrl.data.replay_buffers.SubgoalTriplet`.
+:class:`~torchrl.data.replay_buffers.SubgoalTriplet`;
+``sota-implementations/transitive_rl/`` trains it on OGBench.
