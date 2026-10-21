@@ -193,6 +193,18 @@ def _isaaclab_native_rollout(seed: int, max_steps: int = 4):
     return _isaaclab_rollout(seed, native_autoreset=True, max_steps=max_steps)
 
 
+def _assert_rollouts_match(rollout, other):
+    """Assert that two Isaac Lab rollouts agree up to GPU physics noise.
+
+    Newton physics (Isaac Lab 3.x) is not bitwise reproducible across
+    processes: observations of identically seeded rollouts differ by up to
+    about 1.5e-4, while actions, done flags, rewards and the positions of the
+    NaN terminal observations match. The tolerance stays far below the error
+    of a wrong reset.
+    """
+    assert_allclose_td(rollout, other, rtol=1e-3, atol=1e-3)
+
+
 def _isaaclab_transition_keys(rollout):
     return _isaaclab_rollout_keys(rollout)
 
@@ -754,7 +766,7 @@ class TestIsaacLab:
         rollout1 = _isaaclab_native_rollout(seed)
 
         assert rollout0["next", "done"].any()
-        assert_allclose_td(rollout0, rollout1, rtol=1e-6, atol=1e-6)
+        _assert_rollouts_match(rollout0, rollout1)
 
     @pytest.mark.parametrize("seed", [0, 1])
     def test_isaaclab_native_autoreset_rollout_matches_default_signals(self, seed):
@@ -767,12 +779,7 @@ class TestIsaacLab:
         done_native = rollout_native["next", "done"].squeeze(-1)
         assert torch.isnan(rollout["next", "policy"][done]).all()
         assert torch.isnan(rollout_native["next", "policy"][done_native]).all()
-        assert_allclose_td(
-            rollout.select(*keys),
-            rollout_native.select(*keys),
-            rtol=1e-6,
-            atol=1e-6,
-        )
+        _assert_rollouts_match(rollout.select(*keys), rollout_native.select(*keys))
 
     @pytest.mark.parametrize("seed", [0, 1])
     def test_isaaclab_native_autoreset_rollout_reset_obs_continuity(self, seed):
