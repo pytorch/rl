@@ -16,7 +16,7 @@ apt-get install -y vim git wget cmake
 
 printf "* Installing glfw - glew - osmesa part 1\n"
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libx11-dev \
-  libegl-dev \
+  libegl-dev libglew-dev \
   librhash0 # For cmake
 
 #printf "* Installing glfw - glew - osmesa part 2\n"
@@ -105,7 +105,7 @@ conda env config vars set \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
   MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
   MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin \
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin \
   TOKENIZERS_PARALLELISM=true
 
 # make env variables apparent
