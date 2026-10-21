@@ -85,8 +85,10 @@ class TransitiveQLoss(LossModule):
     Keyword Args:
         oracle_qvalue_network (TensorDictModule or list of TensorDictModule, optional):
             a critic with the same keys as ``qvalue_network`` whose ``goal``
-            entry carries the ``policy_goal`` representation. It is trained to
-            match the critic and replaces it for policy extraction. Defaults to
+            entry carries the ``policy_goal`` representation, with as many
+            members as the critic ensemble. Each member is trained to match the
+            critic member of the same index, and the oracle replaces the critic
+            for policy extraction. Defaults to
             ``None`` (the policy is extracted from the critic, and
             ``policy_goal`` must match ``achieved_goal``).
         num_qvalue_nets (int, optional): ensemble size used when a single
@@ -221,6 +223,12 @@ class TransitiveQLoss(LossModule):
                 if isinstance(oracle_qvalue_network, (list, tuple))
                 else num_qvalue_nets
             )
+            if num_oracle != num_qvalue_nets:
+                raise ValueError(
+                    "oracle_qvalue_network must have as many members as the critic "
+                    f"ensemble ({num_qvalue_nets}), got {num_oracle}: each oracle "
+                    "member is distilled from the critic member of the same index."
+                )
             self.convert_to_functional(
                 oracle_qvalue_network, "oracle_qvalue_network", num_oracle
             )

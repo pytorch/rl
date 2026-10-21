@@ -16,7 +16,7 @@ from torch import nn
 from torchrl.data import LazyTensorStorage, SubgoalTriplet, TensorDictReplayBuffer
 from torchrl.envs.utils import ExplorationType
 from torchrl.modules import IndependentNormal, ProbabilisticActor
-from torchrl.objectives import TransitiveQLoss
+from torchrl.objectives import SoftUpdate, TransitiveQLoss
 
 OBS, ACT = 3, 2
 
@@ -41,6 +41,17 @@ class GoalSumLogit(nn.Module):
 
     def forward(self, observation, goal, action):
         return self.scale * goal.sum(-1, keepdim=True)
+
+
+class LinearLogit(nn.Module):
+    """A trainable critic on the concatenated inputs."""
+
+    def __init__(self, goal_dim: int = OBS):
+        super().__init__()
+        self.net = nn.Linear(OBS + goal_dim + ACT, 1)
+
+    def forward(self, observation, goal, action):
+        return self.net(torch.cat([observation, goal, action], -1))
 
 
 class ZeroMeanActor(nn.Module):
@@ -197,6 +208,52 @@ class TestTransitiveQLoss:
         reference = loss(records[valid].exclude("validity_mask"))
         for key in ("loss_qvalue", "loss_actor"):
             torch.testing.assert_close(masked[key], reference[key])
+
+    def test_oracle_ensemble_size_must_match(self):
+        with pytest.raises(ValueError, match="as many members as the critic"):
+            TransitiveQLoss(
+                make_actor(),
+                make_critics(LinearLogit),
+                oracle_qvalue_network=make_critics(LinearLogit) * 2,
+            )
+
+    def test_compile_matches_eager(self):
+        """Compiled updates follow the eager losses, gradients and target parameters."""
+        torch.manual_seed(0)
+        losses = []
+        for _ in range(2):
+            torch.manual_seed(0)
+            loss = TransitiveQLoss(
+                make_actor(),
+                make_critics(LinearLogit),
+                oracle_qvalue_network=make_critics(LinearLogit),
+                distance_weight=1.0,
+            )
+            loss.set_keys(policy_goal=("goals", "oracle"))
+            losses.append(loss)
+        losses[1].load_state_dict(losses[0].state_dict())
+        updaters = [SoftUpdate(loss, tau=0.05) for loss in losses]
+        optimizers = [torch.optim.Adam(loss.parameters(), lr=1e-2) for loss in losses]
+        torch._dynamo.reset()
+        calls = (losses[0], torch.compile(losses[1], fullgraph=True))
+        for _ in range(3):
+            batch = make_batch([0, 1, 2, 3], [1, 3, 5, 7], torch.randn(4, 4, OBS))
+            results, gradients = [], []
+            for loss, call, optimizer, updater in zip(
+                losses, calls, optimizers, updaters
+            ):
+                result = call(batch.clone())
+                optimizer.zero_grad(set_to_none=True)
+                sum(v for k, v in result.items() if k.startswith("loss_")).backward()
+                gradients.append([p.grad.clone() for p in loss.parameters()])
+                results.append(result.detach())
+                optimizer.step()
+                updater.step()
+            torch.testing.assert_close(results[0], results[1], atol=1e-5, rtol=1e-4)
+            torch.testing.assert_close(gradients[0], gradients[1], atol=1e-5, rtol=1e-4)
+            torch.testing.assert_close(
+                losses[0].state_dict(), losses[1].state_dict(), atol=1e-5, rtol=1e-4
+            )
 
 
 if __name__ == "__main__":
