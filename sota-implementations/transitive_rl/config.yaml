@@ -38,15 +38,15 @@ optim:
   lr: 0.0003
 
 compile:
-  compile: false
+  compile: true
   compile_mode:
-  cudagraphs: false
+  cudagraphs: true
 
 evaluation:
   interval: 100000
-  num_tasks: 5
+  num_tasks:
   episodes: 15
-  max_steps: 1000
+  max_steps:
 
 hydra:
   job:

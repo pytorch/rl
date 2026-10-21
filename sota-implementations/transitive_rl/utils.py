@@ -130,8 +130,18 @@ def load_dataset(cfg: DictConfig) -> tuple[TensorDict, gym.Env]:
 
 
 def make_replay_buffer(cfg: DictConfig, device: torch.device):
-    """Return the replay buffer, the evaluation env and the policy-goal dimension."""
+    """Return the replay buffer, the evaluation env and the policy-goal dimension.
+
+    A null ``cfg.evaluation.num_tasks`` or ``cfg.evaluation.max_steps`` is set
+    from the env: its OGBench evaluation tasks (one task for envs without any)
+    and its time limit, as the reference evaluation runs each episode until the
+    env ends it.
+    """
     data, raw_env = load_dataset(cfg)
+    if cfg.evaluation.num_tasks is None:
+        cfg.evaluation.num_tasks = len(getattr(raw_env.unwrapped, "task_infos", [None]))
+    if cfg.evaluation.max_steps is None:
+        cfg.evaluation.max_steps = raw_env.spec.max_episode_steps
     replay = TensorDictReplayBuffer(
         storage=LazyTensorStorage(data.numel(), device=device),
         batch_size=cfg.optim.batch_size,

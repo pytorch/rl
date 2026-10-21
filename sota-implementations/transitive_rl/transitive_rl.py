@@ -5,6 +5,29 @@
 """Transitive RL (Park et al., 2026) on OGBench goal-conditioned datasets.
 
 Reference: https://arxiv.org/abs/2510.22512
+
+``config.yaml`` holds the scene-play settings. The reference implementation
+(github.com/aoberai/trl, ``hyperparameters.sh``) tunes three values per
+dataset; pass them as overrides, e.g. ``dataset.name=cube-single-play-oraclerep-v0
+loss.distance_weight=0.7``:
+
+=============================  =========================  ==============  =================
+dataset (``-oraclerep-v0``)    ``loss.distance_weight``   ``loss.alpha``  ``loss.discount``
+=============================  =========================  ==============  =================
+scene-play                     1.0                        1               0.99
+cube-single-play               0.7                        1               0.99
+cube-double-play               1.0                        10              0.99
+puzzle-3x3-play                0.5                        2               0.99
+puzzle-4x4-play                2.0                        2               0.99
+antmaze-large-navigate         0.0                        0.7             0.99
+antsoccer-arena-navigate       0.5                        0.3             0.99
+pointmaze-medium-navigate      0.7                        10              0.99
+humanoidmaze-medium-navigate   0.0                        0.1             0.995
+humanoidmaze-large-navigate    0.1                        0.1             0.995
+=============================  =========================  ==============  =================
+
+The reference runs puzzle-4x5, puzzle-4x6 and humanoidmaze-giant with larger
+networks and a different goal sampling, which this script does not set up.
 """
 from __future__ import annotations
 
@@ -31,8 +54,9 @@ def main(cfg: DictConfig) -> None:
     replay, eval_env, goal_dim = make_replay_buffer(cfg, device)
     eval_env.set_seed(cfg.seed)
     policy, loss_module, updater = make_agent(cfg, replay, goal_dim, device)
+    cudagraphs = cfg.compile.cudagraphs and device.type == "cuda"
     optimizer = torch.optim.Adam(
-        loss_module.parameters(), lr=cfg.optim.lr, capturable=cfg.compile.cudagraphs
+        loss_module.parameters(), lr=cfg.optim.lr, capturable=cudagraphs
     )
 
     def update(batch):
@@ -46,10 +70,10 @@ def main(cfg: DictConfig) -> None:
 
     if cfg.compile.compile:
         compile_mode = cfg.compile.compile_mode or (
-            "default" if cfg.compile.cudagraphs else "reduce-overhead"
+            "default" if cudagraphs else "reduce-overhead"
         )
         update = compile_with_warmup(update, mode=compile_mode, warmup=1)
-    if cfg.compile.cudagraphs:
+    if cudagraphs:
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
     output_dir = Path(HydraConfig.get().runtime.output_dir)
     logger = get_logger(

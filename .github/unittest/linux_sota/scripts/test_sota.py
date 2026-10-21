@@ -36,6 +36,7 @@ commands = {
   optim.steps=10 optim.batch_size=8 'network.hidden=[32,32]' \
   evaluation.interval=10 evaluation.num_tasks=1 evaluation.episodes=1 \
   evaluation.max_steps=5 log_interval=1 \
+  compile.compile=false compile.cudagraphs=false \
   hydra.run.dir=$SOTA_LOG_DIR/transitive_rl
 """,
     "tdmpc2": """python sota-implementations/tdmpc2_trainer/train.py \
