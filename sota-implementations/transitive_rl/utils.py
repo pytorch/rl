@@ -51,8 +51,11 @@ class SuccessReader(default_info_dict_reader):
 class GoalObservation(gym.Wrapper):
     """Expose the OGBench evaluation goal, reported in the reset info, next to a float32 observation.
 
-    Envs that report no goal use their reset observation, which only serves the
-    synthetic smoke-test setup.
+    OGBench reports the goal of an evaluation episode only in the info returned
+    by ``reset``, while the policy reads it at every step, so this wrapper keeps
+    it as a constant observation entry for the whole episode. Envs that report no
+    goal use their reset observation, which only serves the synthetic smoke-test
+    setup.
     """
 
     def __init__(self, env: gym.Env, goal_dim: int):
