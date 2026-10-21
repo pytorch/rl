@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import pickle
@@ -2502,6 +2503,41 @@ class TestStreamingSliceSampler:
 
 class TestStalenessAwareSampler:
     """Tests for StalenessAwareSampler."""
+
+    @pytest.mark.parametrize("batch_size", [4, 12])
+    @pytest.mark.parametrize("restore", [False, True])
+    def test_replay_generator(self, batch_size, restore):
+        version_key = ("collector", "policy_version")
+        buffers = []
+        for _ in range(2):
+            sampler = StalenessAwareSampler(max_staleness=5, version_key=version_key)
+            sampler.consumer_version = 9
+            buffer = TensorDictReplayBuffer(
+                storage=LazyTensorStorage(10),
+                sampler=sampler,
+                generator=torch.Generator().manual_seed(123),
+                batch_size=batch_size,
+            )
+            buffer.extend(
+                TensorDict(
+                    {"id": torch.arange(10), version_key: torch.arange(10)}, [10]
+                )
+            )
+            buffers.append(buffer)
+
+        first, second = buffers
+        if restore:
+            first.sample()
+            second.load_state_dict(copy.deepcopy(first.state_dict()))
+
+        with torch.random.fork_rng(devices=[]):
+            torch.manual_seed(10)
+            expected = first.sample()["id"]
+            torch.manual_seed(20)
+            actual = second.sample()["id"]
+
+        assert torch.equal(actual, expected)
+        assert (actual >= 4).all()
 
     def _make_buffer_with_versions(self, n_entries=100, version_range=(0, 5)):
         """Create a replay buffer populated with data containing policy_version."""
