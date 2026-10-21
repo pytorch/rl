@@ -461,8 +461,11 @@ class SubgoalTriplet(SampleUnit):
     steps between each record and its anchor (``0`` for the anchor), so that
     losses can read the ``k - i`` and ``j - k`` horizons from the data. An
     anchor sampled on the last record of its episode is moved one step back,
-    since no goal lies after it; ``"validity_mask"`` is ``False`` for the four
-    records of an anchor whose episode has a single record.
+    since no goal lies after it, which doubles the sampling weight of each
+    episode's second-to-last record; ``"anchor_index"`` keeps the sampled index,
+    so prioritized replay updates the priority the sampler drew.
+    ``"validity_mask"`` is ``False`` for the four records of an anchor whose
+    episode has a single record.
 
     This unit requires a :class:`~torchrl.data.replay_buffers.TensorStorage`
     backed by a TensorDict with a one-dimensional batch, since episode
@@ -565,17 +568,17 @@ class SubgoalTriplet(SampleUnit):
             )
         if isinstance(index, tuple):
             (index,) = index
-        anchor = index.to(torch.long)
-        device = anchor.device
+        sampled = index.to(torch.long)
+        device = sampled.device
         generator = getattr(storage, "_rng", None)
         if generator is not None and generator.device.type != device.type:
             generator = None
         boundary = self._episode_boundaries(storage, self.done_key, device)
-        dist_from_start, dist_to_stop = boundary.distances(anchor)
+        dist_from_start, dist_to_stop = boundary.distances(sampled)
         length = boundary.length
 
         at_end = (dist_to_stop == 0) & (dist_from_start > 0)
-        anchor = torch.where(at_end, anchor - 1, anchor) % length
+        anchor = torch.where(at_end, sampled - 1, sampled) % length
         dist_to_stop = torch.where(at_end, torch.ones_like(dist_to_stop), dist_to_stop)
         valid = dist_to_stop > 0
         horizon = dist_to_stop.clamp_min(1)
@@ -605,7 +608,7 @@ class SubgoalTriplet(SampleUnit):
 
         expanded_info = self._repeat_info(info, self.num_records)
         expanded_info["step_offset"] = offsets.flatten()
-        expanded_info["anchor_index"] = anchor.repeat_interleave(self.num_records)
+        expanded_info["anchor_index"] = sampled.repeat_interleave(self.num_records)
         expanded_info["validity_mask"] = valid.repeat_interleave(self.num_records)
         indices = (anchor.unsqueeze(-1) + offsets) % length
         return indices.flatten(), expanded_info

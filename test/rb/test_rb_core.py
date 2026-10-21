@@ -4696,7 +4696,7 @@ class TestSubgoalTriplet:
         records = rb.storage[index].unflatten(0, (-1, 4))
         assert records["step"][:, 0].tolist() == [3, 2]
         assert records["step"][:, 2].tolist() == [4, 3]
-        assert info["anchor_index"][::4].tolist() == [3, 7]
+        assert info["anchor_index"][::4].tolist() == [4, 8]
 
     def test_goal_offset_distribution(self):
         torch.manual_seed(0)
@@ -4712,8 +4712,13 @@ class TestSubgoalTriplet:
             0.5 - 0.5 * mean_inverse_goal, abs=0.01
         )
 
-    def test_priority_update_targets_anchors(self):
-        """Prioritized replay writes the anchor's priority, not its goal records'."""
+    @pytest.mark.parametrize("anchor", [2, 9], ids=["interior", "episode_end"])
+    def test_priority_update_targets_anchors(self, anchor):
+        """Prioritized replay writes the sampled anchor's priority, not its goal records'.
+
+        An anchor drawn on the last record of its episode reads its records from
+        the previous step, but its priority stays on the drawn index.
+        """
         torch.manual_seed(0)
         unit = SubgoalTriplet(goal_discount=0.5)
         rb = TensorDictPrioritizedReplayBuffer(
@@ -4726,14 +4731,14 @@ class TestSubgoalTriplet:
         done = torch.zeros(20, 1, dtype=torch.bool)
         done[[9, 19]] = True
         rb.extend(TensorDict({("next", "done"): done}, batch_size=[20]))
-        index, info = unit.expand(torch.tensor([2]), {}, rb.storage)
+        index, info = unit.expand(torch.tensor([anchor]), {}, rb.storage)
         batch = rb.storage[index]
         batch.update(info)
         batch["index"] = index
         batch["td_error"] = torch.tensor([1e-3, 1e-3, 1e3, 1e3])
         rb.update_tensordict_priority(batch)
         _, info = rb.sample(return_info=True)
-        assert (info["anchor_index"][::4] == 2).float().mean() > 0.9
+        assert (info["anchor_index"][::4] == anchor).float().mean() > 0.9
 
     def test_buffer_generator_controls_sampling(self):
         """Seeding the buffer reproduces its batches whatever the global seed."""
