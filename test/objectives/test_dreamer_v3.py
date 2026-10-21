@@ -2093,9 +2093,11 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         baseline_td = fake_data.select(*value_model.in_keys, strict=False)
         value_model(baseline_td)
         advantage = (fake_data["lambda_target"] - baseline_td["state_value"]).detach()
-        log_prob = _match_trailing_dim(
-            fake_data["action_log_prob"], fake_data["lambda_target"]
+        actor_inputs = fake_data.select(*actor_model.in_keys, strict=False).detach()
+        log_prob = actor_model.get_dist(actor_inputs).log_prob(
+            fake_data["action"].detach()
         )
+        log_prob = _match_trailing_dim(log_prob, fake_data["lambda_target"])
         expected = -(log_prob * advantage / 10.0).mean()
         torch.testing.assert_close(loss_td["loss_actor"], expected)
         torch.testing.assert_close(
