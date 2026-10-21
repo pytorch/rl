@@ -239,6 +239,7 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiSyncCollectorConfig",
         "SamplerEnsembleConfig",
         "SubgoalTripletConfig",
+        "TransitiveQLossConfig",
     }
 )
 
@@ -2585,6 +2586,56 @@ class TestLossConfigs:
             assert loss.target_entropy.item() == pytest.approx(expected_entropy)
         else:
             assert type(loss) is SACLoss
+
+    def test_transitive_q_loss_config(self):
+        from hydra.utils import instantiate
+        from torchrl.modules import (
+            IndependentNormal,
+            MLP,
+            NormalParamExtractor,
+            ProbabilisticActor,
+        )
+        from torchrl.objectives import TransitiveQLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import TransitiveQLossConfig
+
+        actor = ProbabilisticActor(
+            TensorDictSequential(
+                TensorDictModule(
+                    MLP(in_features=6, out_features=4, num_cells=[8]),
+                    in_keys=["observation", "goal"],
+                    out_keys=["param"],
+                ),
+                TensorDictModule(
+                    NormalParamExtractor(),
+                    in_keys=["param"],
+                    out_keys=["loc", "scale"],
+                ),
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=IndependentNormal,
+        )
+        critic = TensorDictModuleConfig(
+            module=MLPConfig(in_features=8, out_features=1, num_cells=[8]),
+            in_keys=["observation", "goal", "action"],
+            out_keys=["state_action_value"],
+        )
+        cfg = TransitiveQLossConfig(
+            actor_network=actor,
+            qvalue_network=[critic, critic],
+            discount=0.9,
+            expectile=0.6,
+        )
+        loss = instantiate(cfg)
+        assert type(loss) is TransitiveQLoss
+        assert loss.discount == 0.9
+        assert loss.expectile == 0.6
+        weights = loss.qvalue_network_params["module", "0", "weight"]
+        assert weights.shape[0] == 2
+        assert not torch.equal(weights[0], weights[1])
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_dqn_loss_config(self):

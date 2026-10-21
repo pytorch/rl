@@ -476,7 +476,8 @@ class SubgoalTriplet(SampleUnit):
     Reference: Park, Oberai, Atreya, Levine. "Transitive RL: Value Learning
     via Divide and Conquer." ICLR 2026. https://arxiv.org/abs/2510.22512
 
-    See also :class:`~torchrl.trainers.algorithms.configs.data.SubgoalTripletConfig`.
+    See also :class:`~torchrl.trainers.algorithms.configs.data.SubgoalTripletConfig`
+    and :class:`~torchrl.objectives.TransitiveQLoss`.
 
     Keyword Args:
         goal_discount (float or None, optional): distribution of the goal
