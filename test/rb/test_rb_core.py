@@ -9,6 +9,7 @@ import contextlib
 import doctest
 import functools
 import json
+import math
 import pickle
 import sys
 import threading
@@ -38,6 +39,7 @@ from torchrl.data import (
     ReplayBufferEnsemble,
     Sequence,
     StorageDataset,
+    SubgoalTriplet,
     tensordict_collate,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -4642,6 +4644,119 @@ class TestTorchDataInterop:
             list(loader)
         with pytest.raises(RuntimeError, match="cannot share"):
             pickle.dumps(rb.as_dataset())
+
+
+class TestSubgoalTriplet:
+    @staticmethod
+    def _buffer(lengths, unit, capacity=None, batch_size=4096, open_last=False):
+        """Episodes of the given lengths; each record stores its episode and in-episode step.
+
+        With ``open_last``, the last episode is still being written (no done flag).
+        """
+        episode = torch.cat(
+            [torch.full((n,), e, dtype=torch.long) for e, n in enumerate(lengths)]
+        )
+        step = torch.cat([torch.arange(n) for n in lengths])
+        done = torch.cat([torch.arange(n) == n - 1 for n in lengths]).unsqueeze(-1)
+        done[-1] = not open_last
+        data = TensorDict(
+            {"episode": episode, "step": step, ("next", "done"): done},
+            batch_size=[len(step)],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(capacity or len(step)),
+            batch_size=batch_size,
+            sample_unit=unit,
+        )
+        rb.extend(data)
+        return rb
+
+    @pytest.mark.parametrize("goal_discount", [0.9, None])
+    def test_records_ordered_within_episode(self, goal_discount):
+        """Holds across the write seam of a wrapped buffer whose newest episode is open."""
+        torch.manual_seed(0)
+        rb = self._buffer(
+            [7, 20, 3, 12],
+            SubgoalTriplet(goal_discount=goal_discount),
+            capacity=30,
+            open_last=True,
+        )
+        batch = rb.sample().unflatten(0, (-1, 4))
+        assert (batch["episode"] == batch["episode"][:, :1]).all()
+        state, subgoal, goal, policy_goal = batch["step"].unbind(-1)
+        assert (state <= subgoal).all() and (subgoal < goal).all()
+        assert (state < policy_goal).all()
+        assert (batch["step_offset"] == batch["step"] - state.unsqueeze(-1)).all()
+        assert batch["validity_mask"].all()
+
+    def test_final_anchor_moves_back(self):
+        unit = SubgoalTriplet()
+        rb = self._buffer([5, 4], unit)
+        index, info = unit.expand(torch.tensor([4, 8]), {}, rb.storage)
+        records = rb.storage[index].unflatten(0, (-1, 4))
+        assert records["step"][:, 0].tolist() == [3, 2]
+        assert records["step"][:, 2].tolist() == [4, 3]
+        assert info["anchor_index"][::4].tolist() == [4, 8]
+
+    def test_goal_offset_distribution(self):
+        torch.manual_seed(0)
+        unit = SubgoalTriplet(goal_discount=0.9)
+        rb = self._buffer([2000], unit)
+        _, info = unit.expand(torch.zeros(20000, dtype=torch.long), {}, rb.storage)
+        offsets = info["step_offset"].view(-1, 4).float()
+        assert offsets[:, 2].mean() == pytest.approx(10.0, rel=0.05)
+        assert offsets[:, 3].mean() == pytest.approx(1000.0, rel=0.05)
+        p = 0.1
+        mean_inverse_goal = -p * math.log(p) / (1 - p)
+        assert (offsets[:, 1] / offsets[:, 2]).mean() == pytest.approx(
+            0.5 - 0.5 * mean_inverse_goal, abs=0.01
+        )
+
+    @pytest.mark.parametrize("anchor", [2, 9], ids=["interior", "episode_end"])
+    def test_priority_update_targets_anchors(self, anchor):
+        """Prioritized replay writes the sampled anchor's priority, not its goal records'.
+
+        An anchor drawn on the last record of its episode reads its records from
+        the previous step, but its priority stays on the drawn index.
+        """
+        torch.manual_seed(0)
+        unit = SubgoalTriplet(goal_discount=0.5)
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=1.0,
+            beta=1.0,
+            storage=LazyTensorStorage(20),
+            batch_size=1000,
+            sample_unit=unit,
+        )
+        done = torch.zeros(20, 1, dtype=torch.bool)
+        done[[9, 19]] = True
+        rb.extend(TensorDict({("next", "done"): done}, batch_size=[20]))
+        index, info = unit.expand(torch.tensor([anchor]), {}, rb.storage)
+        batch = rb.storage[index]
+        batch.update(info)
+        batch["index"] = index
+        batch["td_error"] = torch.tensor([1e-3, 1e-3, 1e3, 1e3])
+        rb.update_tensordict_priority(batch)
+        _, info = rb.sample(return_info=True)
+        assert (info["anchor_index"][::4] == anchor).float().mean() > 0.9
+
+    def test_buffer_generator_controls_sampling(self):
+        """Seeding the buffer reproduces its batches whatever the global seed."""
+        batches = []
+        for global_seed in (1, 2):
+            rb = self._buffer(
+                [12, 18], SubgoalTriplet(goal_discount=0.9), batch_size=16
+            )
+            rb.set_rng(torch.Generator().manual_seed(0))
+            torch.manual_seed(global_seed)
+            batches.append(rb.sample()["step"])
+        assert torch.equal(*batches)
+
+    def test_single_record_episode_is_invalid(self):
+        unit = SubgoalTriplet()
+        rb = self._buffer([1, 6], unit)
+        _, info = unit.expand(torch.tensor([0, 1]), {}, rb.storage)
+        assert info["validity_mask"].view(-1, 4).all(-1).tolist() == [False, True]
 
 
 if __name__ == "__main__":

@@ -478,6 +478,7 @@ Replay Buffer and Storage Configurations
     SliceSamplerConfig
     SliceSamplerWithoutReplacementConfig
     StreamingSliceSamplerConfig
+    SubgoalTripletConfig
     ListStorageConfig
     TensorStorageConfig
     LazyTensorStorageConfig

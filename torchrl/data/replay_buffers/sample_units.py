@@ -17,7 +17,7 @@ from torchrl.data.replay_buffers.utils import _ReplayBoundaryIndex
 if TYPE_CHECKING:
     from torchrl.data.replay_buffers.storages import Storage
 
-__all__ = ["SampleUnit", "Transition", "Sequence"]
+__all__ = ["SampleUnit", "Transition", "Sequence", "SubgoalTriplet"]
 
 
 class SampleUnit(abc.ABC):
@@ -71,6 +71,58 @@ class SampleUnit(abc.ABC):
             (possibly augmented) info dictionary.
         """
         ...
+
+    def _check_storage(self, storage: Storage) -> None:
+        if not isinstance(storage, TensorStorage):
+            raise TypeError(
+                f"{type(self).__name__} requires a TensorDict-backed TensorStorage "
+                f"(e.g. LazyTensorStorage or LazyMemmapStorage written with "
+                f"TensorDict data) to recover episode boundaries and the write "
+                f"cursor; got {type(storage).__name__}."
+            )
+        contents = getattr(storage, "_storage", None)
+        if contents is not None and not is_tensor_collection(contents):
+            raise TypeError(
+                f"{type(self).__name__} requires the TensorStorage to hold a "
+                f"TensorDict (or other tensor collection) so that the "
+                f"'{self.done_key}' entry can be read; the storage holds "
+                f"{type(contents).__name__} instead."
+            )
+
+    @staticmethod
+    def _repeat_info(info: dict[str, Any], repeats: int) -> dict[str, Any]:
+        """Repeats every per-anchor entry of ``info``; scalar metadata is kept as is."""
+        return {
+            k: v
+            if torch.as_tensor(v).ndim == 0
+            else torch.as_tensor(v).repeat_interleave(repeats, dim=0)
+            for k, v in info.items()
+        }
+
+    @staticmethod
+    def _episode_boundaries(
+        storage: Storage, done_key: NestedKey | None, device: torch.device
+    ) -> _ReplayBoundaryIndex:
+        """Episode boundaries of ``storage``, read from its ``done_key`` entry.
+
+        Without a ``done_key`` the storage holds a single episode.
+        """
+        done = (
+            storage.get(done_key)
+            if done_key is not None
+            else torch.zeros(storage.shape, dtype=torch.bool, device=device)
+        )
+        while done.ndim > storage.ndim and done.shape[-1] == 1:
+            done = done.squeeze(-1)
+        return _ReplayBoundaryIndex(
+            end=done,
+            at_capacity=storage._is_full,
+            cursor=getattr(storage, "_last_cursor_index", None),
+            device=device,
+            storage=storage,
+            source=("end", done_key),
+            cache_values=True,
+        )
 
 
 class Transition(SampleUnit):
@@ -290,23 +342,6 @@ class Sequence(SampleUnit):
             return cursor % written
         return written - 1
 
-    def _check_storage(self, storage: Storage) -> None:
-        if not isinstance(storage, TensorStorage):
-            raise TypeError(
-                f"{type(self).__name__} requires a TensorDict-backed TensorStorage "
-                f"(e.g. LazyTensorStorage or LazyMemmapStorage written with "
-                f"TensorDict data) to recover episode boundaries and the write "
-                f"cursor; got {type(storage).__name__}."
-            )
-        contents = getattr(storage, "_storage", None)
-        if contents is not None and not is_tensor_collection(contents):
-            raise TypeError(
-                f"{type(self).__name__} requires the TensorStorage to hold a "
-                f"TensorDict (or other tensor collection) so that the "
-                f"'{self.done_key}' entry can be read; the storage holds "
-                f"{type(contents).__name__} instead."
-            )
-
     def expand(
         self,
         index: torch.Tensor | tuple,
@@ -335,14 +370,7 @@ class Sequence(SampleUnit):
         device = anchor.device
         total = self.burn_in + self.length + self.bootstrap
 
-        expanded_info = {}
-        for k, v in info.items():
-            val = torch.as_tensor(v)
-            if val.ndim == 0:
-                # scalar metadata is not per-anchor: leave it untouched
-                expanded_info[k] = v
-            else:
-                expanded_info[k] = val.repeat_interleave(total, dim=0)
+        expanded_info = self._repeat_info(info, total)
 
         steps = torch.arange(total, device=device, dtype=torch.long)
         learning = (steps >= self.burn_in) & (steps < self.burn_in + self.length)
@@ -357,22 +385,7 @@ class Sequence(SampleUnit):
         offset = ((steps - self.burn_in) * self.dilation).unsqueeze(0).expand(B, total)
 
         if self.episode_boundary in ("pad", "stop"):
-            done = (
-                storage.get(self.done_key)
-                if self.done_key is not None
-                else torch.zeros(storage.shape, dtype=torch.bool, device=device)
-            )
-            while done.ndim > storage.ndim and done.shape[-1] == 1:
-                done = done.squeeze(-1)
-            boundary = _ReplayBoundaryIndex(
-                end=done,
-                at_capacity=storage._is_full,
-                cursor=getattr(storage, "_last_cursor_index", None),
-                device=device,
-                storage=storage,
-                source=("end", self.done_key),
-                cache_values=True,
-            )
+            boundary = self._episode_boundaries(storage, self.done_key, device)
             dist_from_start, dist_to_stop = boundary.distances(anchor)
             max_len = boundary.length
 
@@ -422,4 +435,180 @@ class Sequence(SampleUnit):
             lane = anchor[:, 1:].unsqueeze(1).expand(B, total, storage.ndim - 1)
             coordinates = torch.cat([indices.unsqueeze(-1), lane], -1).flatten(0, 1)
             return tuple(coordinates.unbind(-1)), expanded_info
+        return indices.flatten(), expanded_info
+
+
+class SubgoalTriplet(SampleUnit):
+    """Expands anchors into in-trajectory ``(state, subgoal, goal, policy goal)`` records.
+
+    Each anchor ``i`` expands into four records of its own episode, in this
+    order:
+
+    - the anchor ``i`` itself;
+    - a subgoal ``k`` drawn uniformly in ``[i, j)``;
+    - a goal ``j > i``;
+    - a policy goal ``g > i`` drawn independently of ``j``.
+
+    This is the sampling scheme of Transitive RL (Park et al., 2026), whose
+    divide-and-conquer critic update regresses ``Q(s_i, a_i, s_j)`` toward
+    ``Q(s_i, a_i, s_k) Q(s_k, a_k, s_j)``. Restricting ``k`` to states the
+    trajectory actually visited between ``i`` and ``j`` is what keeps the
+    update from exploiting arbitrary subgoals.
+
+    If the buffer samples ``B`` anchors, the batch holds ``4 * B`` records.
+    ``batch.unflatten(0, (B, 4))`` recovers one row per anchor. The unit
+    reports a per-record ``"step_offset"`` info entry holding the distance in
+    steps between each record and its anchor (``0`` for the anchor), so that
+    losses can read the ``k - i`` and ``j - k`` horizons from the data. An
+    anchor sampled on the last record of its episode is moved one step back,
+    since no goal lies after it, which doubles the sampling weight of each
+    episode's second-to-last record; ``"anchor_index"`` keeps the sampled index,
+    so prioritized replay updates the priority the sampler drew.
+    ``"validity_mask"`` is ``False`` for the four records of an anchor whose
+    episode has a single record.
+
+    This unit requires a :class:`~torchrl.data.replay_buffers.TensorStorage`
+    backed by a TensorDict with a one-dimensional batch, since episode
+    boundaries are read from the stored ``done_key`` entry. Offsets are drawn
+    from the buffer's generator when it has one on the anchors' device, so
+    seeding the buffer makes its batches reproducible.
+
+    Reference: Park, Oberai, Atreya, Levine. "Transitive RL: Value Learning
+    via Divide and Conquer." ICLR 2026. https://arxiv.org/abs/2510.22512
+
+    See also :class:`~torchrl.trainers.algorithms.configs.data.SubgoalTripletConfig`.
+
+    Keyword Args:
+        goal_discount (float or None, optional): distribution of the goal
+            offset ``j - i``. A float ``gamma`` in ``(0, 1)`` draws the offset
+            from a geometric distribution with success probability
+            ``1 - gamma``, truncated at the episode end. ``None`` draws ``j``
+            uniformly among the records after ``i``. Defaults to ``0.99``.
+        policy_goal_discount (float or None, optional): same as
+            ``goal_discount`` for the policy goal. Defaults to ``None``
+            (uniform).
+        done_key (NestedKey, optional): the key of the end-of-episode flag.
+            Defaults to ``("next", "done")``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+        >>> from torchrl.data.replay_buffers import SubgoalTriplet
+        >>> done = torch.zeros(20, 1, dtype=torch.bool)
+        >>> done[9] = done[19] = True
+        >>> data = TensorDict(
+        ...     {"step": torch.arange(20), ("next", "done"): done}, batch_size=[20]
+        ... )
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(20),
+        ...     batch_size=8,
+        ...     sample_unit=SubgoalTriplet(goal_discount=0.9),
+        ... )
+        >>> _ = rb.extend(data)
+        >>> batch = rb.sample().unflatten(0, (8, 4))
+        >>> batch.shape
+        torch.Size([8, 4])
+        >>> state, subgoal, goal = batch["step"].unbind(-1)[:3]
+        >>> bool(((state <= subgoal) & (subgoal < goal)).all())
+        True
+        >>> bool((batch["step_offset"][:, 2] == goal - state).all())
+        True
+    """
+
+    num_records = 4
+
+    def __init__(
+        self,
+        *,
+        goal_discount: float | None = 0.99,
+        policy_goal_discount: float | None = None,
+        done_key: NestedKey = ("next", "done"),
+    ):
+        for name, value in (
+            ("goal_discount", goal_discount),
+            ("policy_goal_discount", policy_goal_discount),
+        ):
+            if value is not None and not 0.0 < value < 1.0:
+                raise ValueError(f"{name} must be in (0, 1) or None, got {value}.")
+        if not isinstance(done_key, str):
+            done_key = tuple(done_key)
+        self.goal_discount = goal_discount
+        self.policy_goal_discount = policy_goal_discount
+        self.done_key = done_key
+
+    @staticmethod
+    def _offsets(
+        horizon: torch.Tensor,
+        discount: float | None,
+        generator: torch.Generator | None,
+    ) -> torch.Tensor:
+        """Draws offsets in ``[1, horizon]`` (``horizon >= 1``)."""
+        if discount is None:
+            uniform = torch.rand(
+                horizon.shape, device=horizon.device, generator=generator
+            )
+            return 1 + (uniform * horizon).long().clamp_max(horizon - 1)
+        geometric = torch.empty(horizon.shape, device=horizon.device).geometric_(
+            1.0 - discount, generator=generator
+        )
+        return torch.minimum(geometric.long(), horizon)
+
+    def expand(
+        self,
+        index: torch.Tensor | tuple,
+        info: dict[str, Any],
+        storage: Storage,
+    ) -> tuple[torch.Tensor | tuple, dict[str, Any]]:
+        self._check_storage(storage)
+        if storage.ndim != 1:
+            raise TypeError(
+                f"{type(self).__name__} requires a one-dimensional storage, got "
+                f"{storage.ndim} dimensions."
+            )
+        if isinstance(index, tuple):
+            (index,) = index
+        sampled = index.to(torch.long)
+        device = sampled.device
+        generator = getattr(storage, "_rng", None)
+        if generator is not None and generator.device.type != device.type:
+            generator = None
+        boundary = self._episode_boundaries(storage, self.done_key, device)
+        dist_from_start, dist_to_stop = boundary.distances(sampled)
+        length = boundary.length
+
+        at_end = (dist_to_stop == 0) & (dist_from_start > 0)
+        anchor = torch.where(at_end, sampled - 1, sampled) % length
+        dist_to_stop = torch.where(at_end, torch.ones_like(dist_to_stop), dist_to_stop)
+        valid = dist_to_stop > 0
+        horizon = dist_to_stop.clamp_min(1)
+
+        goal_offset = self._offsets(horizon, self.goal_discount, generator)
+        subgoal_offset = (
+            (
+                torch.rand(goal_offset.shape, device=device, generator=generator)
+                * goal_offset
+            )
+            .long()
+            .clamp_max(goal_offset - 1)
+        )
+        policy_goal_offset = self._offsets(
+            horizon, self.policy_goal_discount, generator
+        )
+        offsets = torch.stack(
+            [
+                torch.zeros_like(goal_offset),
+                subgoal_offset,
+                goal_offset,
+                policy_goal_offset,
+            ],
+            -1,
+        )
+        offsets = torch.where(valid.unsqueeze(-1), offsets, torch.zeros_like(offsets))
+
+        expanded_info = self._repeat_info(info, self.num_records)
+        expanded_info["step_offset"] = offsets.flatten()
+        expanded_info["anchor_index"] = sampled.repeat_interleave(self.num_records)
+        expanded_info["validity_mask"] = valid.repeat_interleave(self.num_records)
+        indices = (anchor.unsqueeze(-1) + offsets) % length
         return indices.flatten(), expanded_info
