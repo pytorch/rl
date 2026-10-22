@@ -6,8 +6,11 @@ IsaacLab Integration
 .. _ref_isaaclab:
 
 This guide covers how to use TorchRL components with
-`IsaacLab <https://isaac-sim.github.io/IsaacLab/v2.3.0/>`_
+`IsaacLab <https://isaac-sim.github.io/IsaacLab/v3.0.0/>`_
 (NVIDIA's GPU-accelerated robotics simulation platform).
+
+TorchRL is tested against Isaac Lab 3.0. Isaac Lab 2.x ships torch 2.7,
+which is below the torch version TorchRL requires.
 
 For general IsaacLab installation and cluster setup (not specific to TorchRL), see the
 `knowledge_base/ISAACLAB.md <https://github.com/pytorch/rl/blob/main/knowledge_base/ISAACLAB.md>`_ file.
