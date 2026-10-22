@@ -128,7 +128,7 @@ class IsaacLabWrapper(GymWrapper):
 
     Example:
         >>> # This code block ensures that the Isaac app is started in headless mode
-        >>> from scripts_isaaclab.app import AppLauncher
+        >>> from isaaclab.app import AppLauncher
         >>> import argparse
 
         >>> parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")

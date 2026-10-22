@@ -452,6 +452,8 @@ class GymLikeEnv(_EnvWrapper):
             action = tensordict.select(*self.action_keys).to_dict()
         if self._convert_actions_to_numpy:
             action = self.read_action(action)
+        elif isinstance(action, torch.Tensor):
+            action = action.detach()
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
