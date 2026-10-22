@@ -134,7 +134,10 @@ class RandomProjectionHash(SipHash):
             variable must be set before the code is run (changing this value during code
             execution is without effect).
 
-        init_method: TODO
+        init_method (Callable[[torch.Tensor], torch.Tensor or None] or None, optional): a
+            callable used to initialize the random projection buffer. It is applied as
+            ``init_method(self.transform)`` after the projection buffer is materialized.
+            Defaults to ``torch.nn.init.normal_`` when ``None``.
     """
 
     _N_COMPONENTS_DEFAULT = 16
