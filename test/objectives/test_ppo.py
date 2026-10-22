@@ -1624,6 +1624,37 @@ class TestPPO(LossModuleTestBase):
             out["loss_objective"], -(ratio_behav * advantage - kl.unsqueeze(-1)).mean()
         )
 
+    def test_ppo_kl_pen_beta_update_keeps_gradient(self):
+        # beta adapts in place after the penalty is computed; the gradient of
+        # loss_objective must still use the beta that produced its value
+        torch.manual_seed(self.seed)
+        batch = 16
+        td = self._create_mock_data_ppo(batch=batch)
+        td["advantage"] = torch.randn(batch, 1)
+        td["value_target"] = torch.randn(batch, 1)
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        betas, losses, grads = [], [], []
+        # increment=1.0 keeps beta fixed and gives the reference gradient
+        for increment in (1.0, 2.0):
+            loss_fn = KLPENPPOLoss(
+                actor,
+                value,
+                beta=1.0,
+                dtarg=1e-6,
+                increment=increment,
+                entropy_bonus=False,
+            )
+            torch.manual_seed(self.seed)
+            loss = loss_fn(td.clone())["loss_objective"]
+            grads.append(autograd.grad(loss, list(actor.parameters())))
+            losses.append(loss.detach())
+            betas.append(loss_fn.beta.item())
+        assert betas == [1.0, 2.0]
+        torch.testing.assert_close(losses[1], losses[0])
+        for grad, grad_ref in zip(grads[1], grads[0]):
+            torch.testing.assert_close(grad, grad_ref)
+
     def test_ppo_delay_actor_requires_functional(self):
         actor = self._create_mock_actor()
         value = self._create_mock_value()
