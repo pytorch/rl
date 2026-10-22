@@ -16,10 +16,12 @@ primer required by :class:`~torchrl.modules.LSTMModule` or
 The main rule to keep in mind is simple: if the loss should replay
 sequences, sample sequences. For replay-buffer training, use
 :class:`~torchrl.data.replay_buffers.SliceSampler` or another trajectory-aware sampler so
-the loss receives contiguous time chunks with ``is_init`` boundaries
-preserved. The rest of this page explains what the automated path wires up,
-and what to check when building a custom loop, custom replay transform, or
-manually constructed training batch.
+the loss receives contiguous time chunks. ``is_init`` must then be ``True``
+at every slice start — not only at episode starts — or hidden state leaks
+across concatenated traj ids (see :ref:`ref_slice_is_init` below). The rest
+of this page explains what the automated path wires up, and what to check
+when building a custom loop, custom replay transform, or manually
+constructed training batch.
 
 Minimal recurrent PPO wiring
 ----------------------------
@@ -192,6 +194,12 @@ The path at a glance
     Replay buffer    (stores (B, T, ...) trajectories with is_init preserved)
             │
             ▼
+    SliceSampler     (default init_key="is_init")
+            │
+            ├─ samples mid-episode windows (stored is_init often all-false)
+            └─ ORs True at every slice start so LSTMModule can split
+            │
+            ▼
     Loss / GAE       (recurrent mode)
         with set_recurrent_mode(True):
             value_net(sampled_batch)
@@ -210,7 +218,8 @@ What ``is_init`` means
 set by :class:`~torchrl.envs.transforms.InitTracker` to ``True`` on the *first* step
 of every trajectory and ``False`` everywhere else. A trajectory begins
 at an explicit :meth:`~torchrl.envs.EnvBase.reset` or right after a
-``done`` from the previous step.
+``done`` from the previous step. After slice sampling, the first timestep
+of each slice must also be ``True`` (see :ref:`ref_slice_is_init`).
 
 If you do not append :class:`~torchrl.envs.transforms.InitTracker` to your env,
 ``is_init`` will be absent and :class:`~torchrl.modules.LSTMModule` will
@@ -219,7 +228,9 @@ custom replay buffer / transform drops or rewrites the true boundary
 signal), the LSTM has no way to know when a new trajectory has started.
 In that case the hidden state will silently carry forward across episode
 boundaries — usually the most painful class of recurrent bug to diagnose
-because rewards still look plausible. (:ref:`Trajectory boundaries
+because rewards still look plausible. The same silent failure happens after
+slice sampling when mid-episode windows keep their stored all-false
+``is_init`` (see :ref:`ref_slice_is_init`). (:ref:`Trajectory boundaries
 <ref_traj_boundaries>` documents which markers samplers use to recover
 episode boundaries and the cases where a boundary is unrecoverable.)
 
@@ -280,6 +291,66 @@ starts at ``t*+1``. The corresponding ``is_init`` slot is true.
   ``is_init``, none of these paths sees the boundary and the LSTM treats
   the post-done timesteps as a continuation of the pre-done trajectory.
 
+.. _ref_slice_is_init:
+
+Slice sampling and ``is_init``
+------------------------------
+
+:class:`~torchrl.envs.transforms.InitTracker` writes ``is_init=True`` only
+at *episode* starts (reset, or the step after ``done``). A
+:class:`~torchrl.data.replay_buffers.SliceSampler` window can start in the
+middle of an episode, in which case every stored ``is_init`` flag in that
+window is ``False``. Concatenating such slices — the default flat sampler
+output, or a ``[B, T]`` batch whose time dim packs several traj ids —
+then looks like one long trajectory to
+:class:`~torchrl.modules.LSTMModule`. Hidden state from the last step of
+slice A is fed into the first step of unrelated slice B.
+
+The contract is: **after slice sampling, mark the first timestep of each
+slice as** ``is_init=True``. :class:`~torchrl.data.replay_buffers.SliceSampler`
+does this by default (``init_key="is_init"``): it ORs a ``True`` at every
+slice start onto the flags stored in the buffer, so episode-internal
+resets that fall inside a slice are preserved. Pass ``init_key=None`` only
+when the consumer must not treat slice starts as resets (DreamerV3 RSSM).
+
+If you build the training batch yourself, or you sampled with
+``init_key=None``, apply the same OR on the user side. For a
+``[num_slices, T]`` batch::
+
+    sampled["is_init"][:, 0] = True
+
+For a flat concatenated sample, the sampler also writes
+``("next", "truncated")`` at each slice end. Shifting that marker onto
+``is_init`` marks the next slice start::
+
+    is_init = sampled["is_init"].clone()
+    truncated = sampled["next", "truncated"]
+    is_init[0] = True
+    is_init[1:] |= truncated[:-1]
+    sampled["is_init"] = is_init
+
+Do not OR ``truncated`` into ``is_init`` in place without the shift:
+``truncated`` sits at slice *ends*, ``is_init`` at slice *starts*.
+
+:class:`~torchrl.modules.LSTMModule` then uses ``is_init`` in two ways:
+
+- **Sequential mode** (collection): zeros the incoming hidden so a fresh
+  trajectory does not inherit the previous one's state::
+
+      is_init_expand = expand_as_right(is_init, hidden0)
+      hidden0 = torch.where(is_init_expand, zeros, hidden0)
+      hidden1 = torch.where(is_init_expand, zeros, hidden1)
+
+- **Recurrent mode** (loss / GAE): the module splits the time dimension
+  wherever ``is_init[..., 1:]`` is set and, at each split, restarts from
+  the *stored* hidden at that position (the value collected with the
+  slice). Mid-episode slices therefore keep their stored recurrent state
+  instead of being zeroed.
+
+Without the slice-start OR, a present-but-all-false ``is_init`` is the
+silent failure mode: no ``KeyError``, plausible rewards, hidden state
+leaking across unrelated traj ids.
+
 Hidden outputs and recurrent backends
 -------------------------------------
 
@@ -329,7 +400,9 @@ Common debugging symptoms
     sequence-aware sampler, verify that the recurrent loss path is wrapped
     in ``with set_recurrent_mode(True):``, and check that ``is_init`` is
     preserved through your replay buffer (some transforms drop unknown
-    keys).
+    keys). If the sampler windows start mid-episode, also check that slice
+    starts are ``is_init=True`` (SliceSampler's default ``init_key``); an
+    all-false ``is_init`` on concatenated slices is this same leak.
 
 **Symptom: shapes mismatch in** ``LSTMModule._lstm`` **with cryptic transpose errors.**
     The module expects the tensordict-native hidden layout
@@ -363,8 +436,13 @@ What to check, in order
    primer's keys (use :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer`).
 5. Replay-buffer training uses :class:`~torchrl.data.replay_buffers.SliceSampler` or
    another trajectory-aware sampler when the loss consumes sequences.
-6. Loss / advantage code runs under ``with set_recurrent_mode(True):``.
-7. The replay buffer preserves ``is_init`` (and any custom recurrent
+6. After sampling, slice starts are ``is_init=True`` (SliceSampler's
+   default ``init_key="is_init"``). A mid-episode slice with all-false
+   ``is_init`` will leak hidden state across concatenated traj ids; OR
+   the first timestep of each slice, or shift ``("next", "truncated")``
+   onto ``is_init`` (see :ref:`ref_slice_is_init`).
+7. Loss / advantage code runs under ``with set_recurrent_mode(True):``.
+8. The replay buffer preserves ``is_init`` (and any custom recurrent
    keys) through its transforms.
 
 See also
