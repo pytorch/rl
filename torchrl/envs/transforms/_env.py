@@ -862,6 +862,8 @@ class StepCounter(Transform):
     .. note:: To ensure compatibility with environments that have multiple
         done_key(s), this transform will write a step_count entry for
         every done entry within the tensordict.
+        Truncation is propagated to nested done entries only from their own
+        parent group, not from independent sibling groups.
 
     Examples:
         >>> import gymnasium
@@ -1143,6 +1145,11 @@ class StepCounter(Transform):
                 continue
             # Find a parent truncated key to propagate from
             for parent_key in self.truncated_keys:
+                if (
+                    isinstance(parent_key, tuple)
+                    and nested_key[: len(parent_key) - 1] != parent_key[:-1]
+                ):
+                    continue
                 parent_truncated = next_tensordict.get(parent_key, None)
                 if parent_truncated is not None:
                     # Insert extra dims (e.g. agent dims) so the parent is
@@ -1164,6 +1171,11 @@ class StepCounter(Transform):
                     continue
                 # Find a parent done key to propagate from
                 for parent_key in self.done_keys:
+                    if (
+                        isinstance(parent_key, tuple)
+                        and nested_key[: len(parent_key) - 1] != parent_key[:-1]
+                    ):
+                        continue
                     parent_done = next_tensordict.get(parent_key, None)
                     if parent_done is not None:
                         parent_val = parent_done
