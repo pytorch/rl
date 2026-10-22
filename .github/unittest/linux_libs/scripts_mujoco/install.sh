@@ -25,18 +25,18 @@ fi
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with cu128\n"
+printf "Installing PyTorch with cu130\n"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --pre --force-reinstall torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre --force-reinstall torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      pip3 install --pre --force-reinstall torch --index-url https://download.pytorch.org/whl/nightly/cu130 -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --force-reinstall torch --index-url https://download.pytorch.org/whl/cpu -U
   else
-      pip3 install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu128
+      pip3 install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu130
   fi
 else
   printf "Failed to install pytorch"
@@ -44,14 +44,16 @@ else
 fi
 
 
-# MuJoCo physics backends -- pinned for compatibility with mujoco-torch 0.2.0:
-# mujoco>=3.8 removed the mjENBL_MULTICCD enum that mujoco-torch 0.2.0 references.
+# MuJoCo physics backends. mujoco-torch 0.2.0 fails under torch.compile on
+# current torch, so it is installed from a main commit that includes
+# vmoens/mujoco-torch#85.
 pip install mujoco==3.7.0 mujoco-mjx==3.7.0 'jax[cuda12]>=0.7.0,<0.11' --progress-bar off
-pip install mujoco-torch==0.2.0 --no-deps --progress-bar off
+MUJOCO_TORCH_REF=2676d912bc5972fa9d1ceec21ddaea932f20840d
+pip install "git+https://github.com/vmoens/mujoco-torch.git@${MUJOCO_TORCH_REF}" --no-deps --progress-bar off
 pip install mujoco-menagerie --progress-bar off
 
 # install tensordict
-pip install git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt) --progress-bar off
+pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
 
 # smoke test
 python -c "import functorch;import tensordict"

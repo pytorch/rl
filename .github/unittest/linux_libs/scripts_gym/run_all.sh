@@ -50,7 +50,7 @@ uv pip install charset-normalizer
 # 5. Install PyTorch
 printf "* Installing PyTorch with ${CU_VERSION}\n"
 if [ "${CU_VERSION:-}" == "cpu" ]; then
-    uv pip install torch==2.0 torchvision==0.15 --index-url https://download.pytorch.org/whl/cpu
+    uv pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cpu
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
         CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
@@ -58,7 +58,7 @@ else
         CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
-    uv pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+    uv pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu130
     uv pip install numpy==1.26
 fi
 
@@ -75,7 +75,7 @@ printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
     # Install tensordict dependencies (since we use --no-deps)
     uv pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
-    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
+    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
     uv pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
     uv pip install --no-deps tensordict

@@ -27,7 +27,7 @@ jobs:
   #   strategy:
   #     matrix:
   #       python_version: ["3.10"]
-  #       cuda_arch_version: ["12.8"]
+  #       cuda_arch_version: ["13.0"]
   #   if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') }}
   #   uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
   #   with:
@@ -46,7 +46,7 @@ jobs:
 
   #       set -euo pipefail
   #       export PYTHON_VERSION="3.10"
-  #       export CU_VERSION="cu128"
+  #       export CU_VERSION="cu130"
   #       export TAR_OPTIONS="--no-same-owner"
   #       export UPLOAD_CHANNEL="nightly"
   #       export TF_CPP_MIN_LOG_LEVEL=0
@@ -61,14 +61,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.11"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/brax') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -82,7 +82,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.11"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -97,14 +97,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/craftground') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -118,7 +118,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -138,14 +138,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.11"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/mujoco_playground') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -159,7 +159,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.11"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -174,14 +174,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.11"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/mjlab') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -195,7 +195,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.11"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -210,14 +210,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Modules') || contains(github.event.pull_request.labels.*.name, 'Objectives') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -231,7 +231,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -248,7 +248,7 @@ jobs:
   #   strategy:
   #     matrix:
   #       python_version: ["3.10"]
-  #       cuda_arch_version: ["12.8"]
+  #       cuda_arch_version: ["13.0"]
   #   if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') }}
   #   uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
   #   with:
@@ -267,7 +267,7 @@ jobs:
 
   #       set -euo pipefail
   #       export PYTHON_VERSION="3.10"
-  #       export CU_VERSION="cu128"
+  #       export CU_VERSION="cu130"
   #       export TAR_OPTIONS="--no-same-owner"
   #       export UPLOAD_CHANNEL="nightly"
   #       export TF_CPP_MIN_LOG_LEVEL=0
@@ -283,7 +283,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/envpool') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
@@ -302,7 +302,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -320,7 +320,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/gendgrl') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
@@ -339,7 +339,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -356,7 +356,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
@@ -406,14 +406,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/jumanji') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -427,7 +427,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -447,7 +447,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
       fail-fast: false
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/libero') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
@@ -455,8 +455,8 @@ jobs:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
-      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.8.1-cudnn-devel-ubuntu24.04"
+      gpu-arch-version: "13.0"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda13.0.3-cudnn-devel-ubuntu24.04"
       timeout: 120
       upload-artifact: test-results-libero
       script: |
@@ -470,7 +470,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="${{ matrix.python_version }}"
-        export CU_VERSION="cu128"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -493,7 +493,7 @@ jobs:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -507,7 +507,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.11"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -527,14 +527,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/open_spiel') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -548,7 +548,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -567,14 +567,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/chess') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -588,7 +588,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -607,14 +607,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10.12"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/unity_mlagents') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -628,7 +628,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10.12"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -647,7 +647,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/minari') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
@@ -666,7 +666,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -679,7 +679,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/openx') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
@@ -698,7 +698,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -719,7 +719,7 @@ jobs:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -733,7 +733,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -753,14 +753,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/procgen') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -774,7 +774,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -794,14 +794,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/safety_gymnasium') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -815,7 +815,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -835,7 +835,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/robohive') }}
     # Not linux_job_v3: on OSDC the checkout runs inside this container, and
     # nvidia/cudagl ships no git, so it would degrade to a REST tarball with no
@@ -890,7 +890,7 @@ jobs:
 
           set -euo pipefail
           export PYTHON_VERSION="3.10"
-          export CU_VERSION="cu128"
+          export CU_VERSION="cu130"
           export TAR_OPTIONS="--no-same-owner"
           export UPLOAD_CHANNEL="nightly"
           export TF_CPP_MIN_LOG_LEVEL=0
@@ -911,7 +911,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/roboset') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
@@ -930,7 +930,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -948,7 +948,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
@@ -968,7 +968,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -986,14 +986,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/smacv2') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -1007,7 +1007,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -1027,7 +1027,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/vd4rl') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
@@ -1046,7 +1046,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -1064,14 +1064,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/vmas') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -1085,7 +1085,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -1105,14 +1105,14 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.8"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Integrations') || contains(github.event.pull_request.labels.*.name, 'Integrations/torch_geometric') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: "13.0"
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -1126,7 +1126,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="12.8"
+        export CU_VERSION="13.0"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0

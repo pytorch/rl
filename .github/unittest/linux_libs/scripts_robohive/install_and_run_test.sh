@@ -5,7 +5,10 @@ unset PYTORCH_VERSION
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
 export DEBIAN_FRONTEND=noninteractive
-apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc libosmesa6-dev cmake
+apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc libosmesa6-dev cmake software-properties-common gpg-agent
+add-apt-repository -y ppa:ubuntu-toolchain-r/test
+apt-get update && apt-get install -y gcc-11 g++-11
+export CC=gcc-11 CXX=g++-11
 
 set -e
 set -v
@@ -35,18 +38,18 @@ esac
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with cu128"
+printf "Installing PyTorch with cu130"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install torch --index-url https://download.pytorch.org/whl/cpu
   else
-      pip3 install torch --index-url https://download.pytorch.org/whl/cu128
+      pip3 install torch --index-url https://download.pytorch.org/whl/cu130
   fi
 else
   printf "Failed to install pytorch"
@@ -59,7 +62,7 @@ conda install -y cmake
 # install tensordict
 pip3 install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
+  pip3 install --no-deps git+https://github.com/pytorch/tensordict.git
 else
   pip3 install --no-deps tensordict
 fi
