@@ -1,4 +1,4 @@
-# Flaky Test Report - 2026-10-22
+# Flaky Test Report - 2026-10-23
 
 ## Summary
 
@@ -14,32 +14,32 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...replay_collection_smoke[cuda-async-True-True-True-frames]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `..._replay_collection_smoke[cuda-sync-True-True-True-frames]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...replay_collection_smoke[cuda-async-True-False-False-time]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...play_collection_smoke[cuda-async-True-False-False-warmup]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...ollection_smoke[cuda-sync-True-False-False-reset_records]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...eamer_v3_process_inference_collection_smoke[cuda:0-False]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...reamer_v3_process_inference_collection_smoke[cuda:0-True]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...d.py::test_cuda_prioritized_replay_buffer_samples_on_cuda` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...ict_prioritized_replay_buffer_memmap_storage_cuda_sampler` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...cuda_prioritized_replay_buffer_weight_matches_cpu_formula` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...b/test_rb_core.py::TestSequenceUnit::test_non_cpu_storage` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...ce[tensor-LazyMemmapStorage-device_data0-device_storage0]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...torage_device[tensor-LazyMemmapStorage-device_data3-auto]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...ce[tensor-LazyTensorStorage-device_data0-device_storage0]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...torage_device[tensor-LazyTensorStorage-device_data3-auto]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...device[tc-LazyMemmapStorage-device_data0-device_storage0]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...st_storage_device[tc-LazyMemmapStorage-device_data3-auto]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...device[tc-LazyTensorStorage-device_data0-device_storage0]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...st_storage_device[tc-LazyTensorStorage-device_data3-auto]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
-| `...device[td-LazyMemmapStorage-device_data0-device_storage0]` | 21.1% (16/76) | 16 | 0.42 | 2026-10-21 |
+| `...replay_collection_smoke[cuda-async-True-True-True-frames]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `..._replay_collection_smoke[cuda-sync-True-True-True-frames]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...replay_collection_smoke[cuda-async-True-False-False-time]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...play_collection_smoke[cuda-async-True-False-False-warmup]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...ollection_smoke[cuda-sync-True-False-False-reset_records]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...eamer_v3_process_inference_collection_smoke[cuda:0-False]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...reamer_v3_process_inference_collection_smoke[cuda:0-True]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...d.py::test_cuda_prioritized_replay_buffer_samples_on_cuda` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...ict_prioritized_replay_buffer_memmap_storage_cuda_sampler` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...cuda_prioritized_replay_buffer_weight_matches_cpu_formula` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...b/test_rb_core.py::TestSequenceUnit::test_non_cpu_storage` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...ce[tensor-LazyMemmapStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...torage_device[tensor-LazyMemmapStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...ce[tensor-LazyTensorStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...torage_device[tensor-LazyTensorStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...device[tc-LazyMemmapStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...st_storage_device[tc-LazyMemmapStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...device[tc-LazyTensorStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...st_storage_device[tc-LazyTensorStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
+| `...device[td-LazyMemmapStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-22 |
 
 
 ### Newly Flaky Tests
 
 - `test/rb/test_storages.py::TestStorageExport::test_device_storage[cuda-ListStorage-True]`
-- `test/libs/test_datasets.py::TestHuggingFaceDatasetAdapter::test_import_reads_unformatted_values[columns]`
+- `test/objectives/test_transitive_q.py::TestTransitiveQLoss::test_compile_matches_eager`
 
 ---
 
@@ -52,4 +52,4 @@
 
 ---
 
-*Generated at 2026-10-22T06:28:54.142320+00:00*
+*Generated at 2026-10-23T06:31:16.575077+00:00*
