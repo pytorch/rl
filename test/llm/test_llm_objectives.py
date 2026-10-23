@@ -151,6 +151,21 @@ class TestMCAdvantage:
         for chunk, exp in zip(out["advantage"].squeeze(-1).split([2, 3, 2]), expected):
             torch.testing.assert_close(chunk, exp.expand_as(chunk))
 
+    @pytest.mark.parametrize("trajectory_return", [None, "sum"])
+    def test_mc_advantage_uniform_fractional_rewards(self, trajectory_return):
+        # A group where every reward is the same fraction carries no learning
+        # signal. Its float32 mean is not exactly 0.7, and the rounding residue
+        # divided by the clamped std used to give every sample an advantage of
+        # about 0.06 (regression test).
+        adv_t = MCAdvantage(
+            grpo_size=8, prompt_key="group_id", trajectory_return=trajectory_return
+        )
+        for _ in range(7):
+            assert adv_t.inv(_make_group_traj(0, [0.7, 0.7])) is None
+        out = adv_t.inv(_make_group_traj(0, [0.7, 0.7]))
+        assert out is not None
+        assert (out["advantage"] == 0).all()
+
     def test_mc_advantage_string_prompt_survives_contiguous(self):
         # String prompts are stored as NonTensorData in lazy-stacked
         # trajectories. TensorDict.contiguous() can silently turn those stacks
