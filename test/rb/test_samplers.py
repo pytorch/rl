@@ -2503,6 +2503,41 @@ class TestStreamingSliceSampler:
 class TestStalenessAwareSampler:
     """Tests for StalenessAwareSampler."""
 
+    @pytest.mark.parametrize(
+        "shape,version_key",
+        [
+            ((6,), "policy_version"),
+            ((2, 3), "policy_version"),
+            ((2, 2, 3), ("collector", "policy_version")),
+        ],
+    )
+    @pytest.mark.parametrize("capacity_multiplier", [1, 2])
+    def test_storage_coordinates(self, shape, version_key, capacity_multiplier):
+        versions = torch.arange(np.prod(shape)).reshape(shape)
+        data = TensorDict({"observation": versions, version_key: versions}, shape)
+        sampler = StalenessAwareSampler(max_staleness=1, version_key=version_key)
+        sampler.consumer_version = versions.numel() - 1
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(
+                versions.numel() * capacity_multiplier, ndim=len(shape)
+            ),
+            sampler=sampler,
+            batch_size=2,
+            dim_extend=0,
+        )
+        rb.extend(data)
+
+        sample, info = rb.sample(return_info=True)
+
+        assert sample.batch_size == torch.Size([2])
+        assert torch.equal(
+            sample["observation"].sort().values,
+            torch.tensor([versions.numel() - 2, versions.numel() - 1]),
+        )
+        assert torch.equal(
+            info["staleness"], sampler.consumer_version - sample[version_key]
+        )
+
     def _make_buffer_with_versions(self, n_entries=100, version_range=(0, 5)):
         """Create a replay buffer populated with data containing policy_version."""
         sampler = StalenessAwareSampler(max_staleness=-1)
