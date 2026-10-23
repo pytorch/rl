@@ -13,7 +13,7 @@ from multiprocessing.context import get_spawning_popen
 from typing import Any
 
 import torch
-from tensordict import is_tensor_collection, TensorDict
+from tensordict import is_tensor_collection, is_tensorclass, TensorDict
 
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 
@@ -155,10 +155,8 @@ class StoreStorage(Storage):
                 "Use TensorDict, tensorclass, or torch.Tensor."
             )
 
-        from tensordict.utils import _is_tensorclass
-
         data_type = type(data)
-        self._tensorclass_type = data_type if _is_tensorclass(data_type) else None
+        self._tensorclass_type = data_type if is_tensorclass(data_type) else None
 
         # Create an empty TensorDictStore -- keys will be registered lazily on
         # the first write via __setitem__.

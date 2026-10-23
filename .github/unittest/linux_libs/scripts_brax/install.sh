@@ -45,7 +45,7 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
+  pip install git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt) --progress-bar off
 else
   pip install tensordict --progress-bar off
 fi

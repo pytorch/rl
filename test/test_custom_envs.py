@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import random
+import warnings
 
 import pytest
 import torch
@@ -229,31 +230,21 @@ class TestPendulum:
         out_false = env.reset(state.clone(), set_state=False)
         assert not torch.allclose(out_false["th"], th_target)
 
-        # set_state=True + select_reset_only is contradictory
-        with pytest.raises(ValueError, match="select_reset_only"):
-            env.reset(state.clone(), set_state=True, select_reset_only=True)
-
         # rollout threads set_state to the initial reset
         r = env.rollout(4, tensordict=state.clone(), set_state=True)
         assert torch.allclose(r["th"][0], th_target)
 
-    def test_pendulum_set_state_transition_warning(self):
+    def test_pendulum_set_state_default(self):
         env = PendulumEnv()
         state = env.reset()
         th_target = state["th"].clone()
-        # unspecified set_state with state in the tensordict -> FutureWarning,
-        # but the state is still honored (backwards-compatible behavior).
-        with pytest.warns(FutureWarning, match="set_state"):
-            out = env.reset(state.clone())
-        assert torch.allclose(out["th"], th_target)
-
-        # an empty tensordict (batch-size only) must not trigger the warning.
-        import warnings
-
+        # unspecified set_state generates a fresh state.
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
-            env.reset(TensorDict(batch_size=[4]))
-            env.rollout(3, tensordict=TensorDict(batch_size=[2]))
+            out = env.reset(state.clone())
+
+        # pendulum states are randomized, highly unlikely to match.
+        assert not torch.allclose(out["th"], th_target)
 
     def test_llm_hashing_env(self):
         vocab_size = 5

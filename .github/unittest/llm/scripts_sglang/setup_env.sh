@@ -8,7 +8,8 @@ export DEBIAN_FRONTEND=noninteractive
 export TZ=UTC
 
 apt-get update
-apt-get install -yq --no-install-recommends git wget unzip curl patchelf
+# python3-venv lets linux_job_v3's HF cache sync install the AWS CLI
+apt-get install -yq --no-install-recommends git wget unzip curl patchelf python3-dev python3-venv
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 

@@ -27,7 +27,8 @@ apt-get install -y wget \
     libglx0 \
     libegl1 \
     libgles2 \
-    libglib2.0-0
+    libglib2.0-0 \
+    python3-dev
 
 # Upgrade specific package
 apt-get upgrade -y libstdc++6

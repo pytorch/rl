@@ -8,7 +8,8 @@
 set -e
 set -v
 
-apt-get update && apt-get upgrade -y && apt-get install -y git cmake
+# python3-venv lets linux_job_v3's HF cache sync install the AWS CLI
+apt-get update && apt-get upgrade -y && apt-get install -y git cmake python3-venv
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 apt-get install -y wget \

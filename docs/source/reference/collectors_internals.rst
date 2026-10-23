@@ -202,6 +202,10 @@ it belongs to.  Two pieces of machinery cooperate:
   :func:`_aggregate_end_of_traj`, draws as many fresh IDs from the pool as
   there are envs that finished, and ``masked_scatter``-s them into the per-env
   ``traj_ids`` tensor on the carrier.
+- :meth:`Collector._start_new_trajectories` does the same for explicit resets:
+  the ``reset_at_each_iter`` reset at the start of each batch, and
+  :meth:`Collector.reset`, where only the environments selected by ``index``
+  receive a new ID.
 
 Setting ``track_traj_ids=False`` skips both the per-step bookkeeping and the
 allocation of the ``traj_ids`` tensor. This is useful in throughput-sensitive

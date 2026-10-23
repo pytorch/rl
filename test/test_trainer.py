@@ -50,7 +50,15 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.envs import Compose, GymEnv, RenameTransform, SerialEnv, TransformedEnv
+from torchrl.envs import (
+    Compose,
+    GymEnv,
+    RenameTransform,
+    RewardScaling,
+    SerialEnv,
+    StepCounter,
+    TransformedEnv,
+)
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.modules import (
     FlowMatchingPolicy,
@@ -59,6 +67,7 @@ from torchrl.modules import (
     OneStepPolicy,
     ProbabilisticActor,
     TanhNormal,
+    TdMpc2Planner,
     ValueOperator,
 )
 from torchrl.objectives import (
@@ -69,10 +78,11 @@ from torchrl.objectives import (
     LossModule,
     SACLoss,
     SoftUpdate,
+    TdMpc2Loss,
 )
 from torchrl.record.loggers.common import PrefixLogger
 from torchrl.testing import PONG_VERSIONED
-from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
 from torchrl.trainers import EvaluatorHook, LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
 from torchrl.trainers.algorithms import FQLTrainer
@@ -88,6 +98,7 @@ from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
+from torchrl.trainers.algorithms.tdmpc2 import TdMpc2OptimizationStepper, TdMpc2Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
@@ -1384,6 +1395,15 @@ class TestOptimizer:
 
 
 class TestLogReward:
+    def test_log_reward_normalizes_hydra_nested_key(self):
+        from omegaconf import ListConfig
+        from torchrl.trainers.algorithms.configs.hooks import _make_log_scalar
+
+        log_reward = _make_log_scalar(ListConfig(["next", "reward"]), "reward")
+        assert log_reward.key == ("next", "reward")
+        td = TensorDict({("next", "reward"): torch.ones(3)}, [3])
+        assert log_reward(td)["reward"] == 1.0
+
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
     @pytest.mark.parametrize("dtype", [torch.float32, torch.int64])
@@ -1698,6 +1718,90 @@ class TestTrainerCheckpointComponents:
             checkpoint=Checkpoint(),
         )
         assert "optimizer" in trainer.checkpoint.components
+
+
+@pytest.mark.parametrize("record_frames", [None, 3, 6])
+@pytest.mark.parametrize("record_episodes", [1, 3])
+@pytest.mark.parametrize("batched", [False, True])
+@pytest.mark.parametrize("truncated", [False, True])
+def test_recorder_episodes(record_frames, record_episodes, batched, truncated):
+    def make_env(length):
+        env = TransformedEnv(
+            CountingEnv(max_steps=100 if truncated else length - 1),
+            RewardScaling(loc=1.0, scale=1.0),
+        )
+        if truncated:
+            env.append_transform(StepCounter(max_steps=length))
+        return env
+
+    if batched:
+        environment = TransformedEnv(
+            SerialEnv(2, [lambda: make_env(2), lambda: make_env(4)])
+        )
+    else:
+        environment = make_env(2)
+    policy = TensorDictModule(torch.ones_like, ["observation"], ["action"])
+    recorder = LogValidationReward(
+        record_interval=2,
+        record_episodes=record_episodes,
+        record_frames=record_frames,
+        frame_skip=2,
+        policy_exploration=policy,
+        environment=environment,
+        log_keys=[("next", "reward"), ("next", "done")],
+    )
+    result = recorder(None)
+    finished = 2 if batched and record_frames != 3 else 1
+    assert result[("next", "done")].sum() == record_episodes * finished
+    assert result["r_evaluation"] == 0.5
+    expected_total = (2.5 if record_frames == 3 else 3.0) if batched else 2.0
+    assert result["total_r_evaluation"] == expected_total
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_recorder_episodes_nonterminating(batched):
+    def make_env(max_steps):
+        return TransformedEnv(
+            CountingEnv(max_steps=max_steps), RewardScaling(loc=1.0, scale=1.0)
+        )
+
+    environment = (
+        TransformedEnv(
+            SerialEnv(2, [lambda: make_env(1), lambda: make_env(float("inf"))])
+        )
+        if batched
+        else make_env(float("inf"))
+    )
+    calls = 0
+
+    def policy(td):
+        nonlocal calls
+        calls += 1
+        assert calls <= 6, "Evaluation exceeded the per-episode step cap"
+        return td.set("action", torch.ones_like(td["observation"]))
+
+    recorder = LogValidationReward(
+        record_interval=1,
+        record_episodes=2,
+        record_frames=3,
+        policy_exploration=policy,
+        environment=environment,
+        log_keys=[("next", "reward"), ("next", "done")],
+    )
+    result = recorder(None)
+    assert calls == 6
+    assert result[("next", "done")].sum() == (2 if batched else 0)
+    assert result["r_evaluation"] == 1.0
+    assert result["total_r_evaluation"] == (2.5 if batched else 3.0)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{}, {"record_frames": 0, "record_episodes": 1}, {"record_episodes": 0}],
+)
+def test_recorder_recording_mode(kwargs):
+    with pytest.raises(ValueError, match="record_frames|record_episodes"):
+        LogValidationReward(record_interval=1, policy_exploration=None, **kwargs)
 
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
@@ -2204,6 +2308,37 @@ class TestPostOptimCompleteLog:
 
 
 class TestDefaultOptimizationStepper:
+    def test_returns_detached_metrics(self):
+        model = nn.Linear(1, 1, bias=False)
+
+        class LossWithMetric(nn.Module):
+            def forward(self, td):
+                prediction = model(td["x"])
+                return TensorDict(
+                    {
+                        "loss": prediction.square().mean(),
+                        "metric": prediction.mean(),
+                    },
+                    [],
+                )
+
+        stepper = DefaultOptimizationStepper()
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=None,
+            loss_module=LossWithMetric(),
+            optimizer=torch.optim.SGD(model.parameters(), lr=1e-3),
+            optimization_stepper=stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+
+        metrics = stepper.step(trainer, TensorDict({"x": torch.ones(2, 1)}, []))
+
+        assert not metrics["loss"].requires_grad
+        assert not metrics["metric"].requires_grad
+
     def test_loss_components_partial(self):
         torch.manual_seed(0)
         x = torch.randn(5, 10)
@@ -3584,6 +3719,548 @@ class TestGRPOTrainer:
 
         with pytest.raises(RuntimeError, match="no 'loss_\\*' keys"):
             stepper.step(trainer, _make_grpo_batch())
+
+
+def _make_tdmpc2_loss_for_stepper():
+    from hydra.utils import instantiate
+
+    from torchrl.trainers.algorithms.configs import (
+        TdMpc2PolicyPriorConfig,
+        TdMpc2QEnsembleConfig,
+        TdMpc2WorldModelConfig,
+    )
+
+    world_model = instantiate(
+        TdMpc2WorldModelConfig(
+            observation_dim=5,
+            action_dim=2,
+            latent_dim=8,
+            encoder_dim=12,
+            mlp_dim=16,
+            simnorm_dim=4,
+            num_bins=5,
+        )
+    )
+    policy_prior = instantiate(
+        TdMpc2PolicyPriorConfig(latent_dim=8, action_dim=2, mlp_dim=16)
+    )
+    q_ensemble = instantiate(
+        TdMpc2QEnsembleConfig(
+            latent_dim=8,
+            action_dim=2,
+            mlp_dim=16,
+            num_q=2,
+            num_bins=5,
+            dropout=0.0,
+        )
+    )
+    return TdMpc2Loss(world_model, policy_prior, q_ensemble, horizon=3)
+
+
+class TestTdMpc2OptimizationStepper:
+    def test_step(self):
+        loss = _make_tdmpc2_loss_for_stepper()
+        optimizer_model = torch.optim.Adam(
+            [*loss.world_model.parameters(), *loss.q_ensemble.q_params.parameters()],
+            lr=1e-3,
+        )
+        optimizer_actor = torch.optim.Adam(loss.policy_prior.parameters(), lr=1e-3)
+        stepper = TdMpc2OptimizationStepper(
+            loss,
+            optimizer_model,
+            optimizer_actor,
+            target_tau=0.5,
+        )
+        batch_size = [2, loss.horizon]
+        sample = TensorDict(
+            {
+                "observation": torch.randn(*batch_size, 5),
+                "action": torch.randn(*batch_size, 2).tanh(),
+                ("next", "observation"): torch.randn(*batch_size, 5),
+                ("next", "reward"): torch.randn(*batch_size, 1),
+                ("next", "terminated"): torch.zeros(*batch_size, 1),
+            },
+            batch_size=batch_size,
+        )
+
+        world_model_before = [
+            parameter.detach().clone() for parameter in loss.world_model.parameters()
+        ]
+        q_before = [
+            parameter.detach().clone()
+            for parameter in loss.q_ensemble.q_params.parameters()
+        ]
+        actor_before = [
+            parameter.detach().clone() for parameter in loss.policy_prior.parameters()
+        ]
+        target_before = [
+            parameter.detach().clone()
+            for parameter in loss.q_ensemble.target_q_params.parameters()
+        ]
+        trainer = Namespace(
+            loss_module=loss,
+            process_group=None,
+            target_net_updater=None,
+            clip_grad_norm=True,
+            clip_norm=20.0,
+        )
+        loss.eval()
+        metrics = stepper.step(trainer, sample)
+
+        assert stepper.update_count == 1
+        assert not loss.training
+        assert metrics["pi_entropy"].ndim == 0
+        assert metrics["pi_scaled_entropy"].ndim == 0
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(world_model_before, loss.world_model.parameters())
+        )
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(q_before, loss.q_ensemble.q_params.parameters())
+        )
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(actor_before, loss.policy_prior.parameters())
+        )
+        for before, target, online in zip(
+            target_before,
+            loss.q_ensemble.target_q_params.parameters(),
+            loss.q_ensemble.q_params.parameters(),
+        ):
+            torch.testing.assert_close(target, before.lerp(online, 0.5))
+        torch.testing.assert_close(
+            metrics["loss_model"],
+            metrics["loss_consistency"]
+            + metrics["loss_reward"]
+            + metrics["loss_value"],
+        )
+
+
+_TDMPC2_OBSERVATION_DIM = 5
+_TDMPC2_ACTION_DIM = 2
+_TDMPC2_LATENT_DIM = 8
+_TDMPC2_HORIZON = 3
+
+
+class _TdMpc2Collector:
+    total_frames = 100
+    init_random_frames = 0
+
+    def update_policy_weights_(self, weights=None):
+        del weights
+
+    def set_seed(self, seed, **kwargs):
+        return seed
+
+    def shutdown(self):
+        pass
+
+    def state_dict(self):
+        return {}
+
+    def load_state_dict(self, state_dict):
+        del state_dict
+
+
+class _TdMpc2BatchCollector(_TdMpc2Collector):
+    init_random_frames = 32
+
+    def __init__(self, batches):
+        self.batches = batches
+        self.shutdown_called = False
+
+    def __iter__(self):
+        return iter(self.batches)
+
+    def shutdown(self):
+        self.shutdown_called = True
+
+
+class _TdMpc2FactoryCollector(_TdMpc2Collector):
+    def __init__(self, policy, total_frames=100, auto_register_policy_transforms=False):
+        self.policy = policy
+        self.total_frames = total_frames
+        self.auto_register_policy_transforms = auto_register_policy_transforms
+
+
+def _tdmpc2_make_factory_collector(*, policy, total_frames=100, **kwargs):
+    return _TdMpc2FactoryCollector(policy, total_frames=total_frames, **kwargs)
+
+
+def _tdmpc2_make_loss():
+    from hydra.utils import instantiate
+
+    from torchrl.trainers.algorithms.configs import (
+        TdMpc2PolicyPriorConfig,
+        TdMpc2QEnsembleConfig,
+        TdMpc2WorldModelConfig,
+    )
+
+    world_model = instantiate(
+        TdMpc2WorldModelConfig(
+            observation_dim=_TDMPC2_OBSERVATION_DIM,
+            action_dim=_TDMPC2_ACTION_DIM,
+            latent_dim=_TDMPC2_LATENT_DIM,
+            encoder_dim=12,
+            mlp_dim=16,
+            simnorm_dim=4,
+            num_bins=5,
+        )
+    )
+    policy_prior = instantiate(
+        TdMpc2PolicyPriorConfig(
+            latent_dim=_TDMPC2_LATENT_DIM,
+            action_dim=_TDMPC2_ACTION_DIM,
+            mlp_dim=16,
+        )
+    )
+    q_ensemble = instantiate(
+        TdMpc2QEnsembleConfig(
+            latent_dim=_TDMPC2_LATENT_DIM,
+            action_dim=_TDMPC2_ACTION_DIM,
+            mlp_dim=16,
+            num_q=2,
+            num_bins=5,
+            dropout=0.0,
+        )
+    )
+    return TdMpc2Loss(
+        world_model,
+        policy_prior,
+        q_ensemble,
+        horizon=_TDMPC2_HORIZON,
+        discount=0.97,
+        rho=0.5,
+    )
+
+
+def _tdmpc2_make_planner(loss):
+    return TdMpc2Planner(
+        loss.world_model,
+        loss.policy_prior,
+        loss.q_ensemble,
+        horizon=loss.horizon,
+        discount=loss.discount.item(),
+        num_samples=4,
+        num_elites=2,
+        num_pi_trajs=1,
+        iterations=1,
+    )
+
+
+def _tdmpc2_make_raw_batch(num_episodes=4):
+    num_items = num_episodes * _TDMPC2_HORIZON
+    terminated = torch.zeros(num_items, dtype=torch.bool)
+    terminated[_TDMPC2_HORIZON - 1 :: _TDMPC2_HORIZON] = True
+    truncated = torch.zeros_like(terminated)
+    return TensorDict(
+        {
+            "observation": torch.randn(num_items, _TDMPC2_OBSERVATION_DIM),
+            "action": torch.randn(num_items, _TDMPC2_ACTION_DIM),
+            ("next", "observation"): torch.randn(num_items, _TDMPC2_OBSERVATION_DIM),
+            ("next", "reward"): torch.randn(num_items, 1),
+            ("next", "terminated"): terminated.unsqueeze(-1),
+            ("next", "truncated"): truncated.unsqueeze(-1),
+            ("next", "done"): terminated.unsqueeze(-1),
+            "episode": torch.arange(num_episodes).repeat_interleave(_TDMPC2_HORIZON),
+        },
+        batch_size=[num_items],
+    )
+
+
+def _tdmpc2_make_replay_buffer(num_episodes=4, batch_size=2, strict_length=True):
+    from torchrl.data import LazyTensorStorage, ReplayBuffer, SliceSampler
+
+    return ReplayBuffer(
+        storage=LazyTensorStorage(num_episodes * _TDMPC2_HORIZON),
+        sampler=SliceSampler(
+            slice_len=_TDMPC2_HORIZON,
+            output_layout="batch_time",
+            end_key=("next", "done"),
+            truncated_key=("next", "truncated"),
+            strict_length=strict_length,
+            init_key=None,
+        ),
+        batch_size=batch_size * _TDMPC2_HORIZON,
+    )
+
+
+class TestTdMpc2Trainer:
+    def test_replay_optimization(self):
+        loss = _tdmpc2_make_loss()
+        replay_buffer = _tdmpc2_make_replay_buffer()
+        trainer = TdMpc2Trainer(
+            collector=_TdMpc2Collector(),
+            total_frames=100,
+            loss_module=loss,
+            planner=_tdmpc2_make_planner(loss),
+            optimizer_model=torch.optim.SGD(
+                [
+                    *loss.world_model.parameters(),
+                    *loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.SGD(loss.policy_prior.parameters(), lr=1e-3),
+            replay_buffer=replay_buffer,
+            batch_size=2,
+            progress_bar=False,
+        )
+
+        batch = _tdmpc2_make_raw_batch()
+        trainer._process_batch_hook(batch)
+        trainer.optim_steps(batch)
+
+        assert trainer.optimization_stepper.update_count == 1
+        assert trainer._tdmpc2_replay_buffer is not None
+        sampled = trainer._tdmpc2_replay_buffer.replay_buffer.sample()
+        assert sampled.batch_size == torch.Size([2, _TDMPC2_HORIZON])
+        assert torch.isfinite(sampled["next", "reward"]).all()
+
+    def test_seed_schedule(self):
+        loss = _tdmpc2_make_loss()
+        batches = []
+        for index in range(3):
+            batch = _tdmpc2_make_raw_batch()
+            batch["episode"] += index * 4
+            batch.set(
+                ("collector", "mask"),
+                torch.ones(batch.batch_size[0], dtype=torch.bool),
+            )
+            batches.append(batch)
+        collector = _TdMpc2BatchCollector(batches)
+        trainer = TdMpc2Trainer(
+            collector=collector,
+            total_frames=36,
+            loss_module=loss,
+            planner=_tdmpc2_make_planner(loss),
+            optimizer_model=torch.optim.SGD(
+                [
+                    *loss.world_model.parameters(),
+                    *loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.SGD(loss.policy_prior.parameters(), lr=1e-3),
+            replay_buffer=_tdmpc2_make_replay_buffer(num_episodes=12),
+            batch_size=2,
+            seed_pretrain_steps=3,
+            progress_bar=False,
+        )
+
+        trainer.train()
+
+        assert trainer.collected_frames == 36
+        assert trainer._optim_count == 3
+        assert trainer.optimization_stepper.update_count == 3
+        assert trainer.collector.shutdown_called
+
+    def test_checkpoint_roundtrip(self, tmp_path):
+        path = tmp_path / "tdmpc2-checkpoint"
+        source_loss = _tdmpc2_make_loss()
+        source = TdMpc2Trainer(
+            collector=_TdMpc2Collector(),
+            total_frames=100,
+            loss_module=source_loss,
+            planner=_tdmpc2_make_planner(source_loss),
+            optimizer_model=torch.optim.Adam(
+                [
+                    *source_loss.world_model.parameters(),
+                    *source_loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.Adam(
+                source_loss.policy_prior.parameters(), lr=1e-3
+            ),
+            replay_buffer=_tdmpc2_make_replay_buffer(),
+            batch_size=2,
+            progress_bar=False,
+            seed_pretrain_steps=3,
+            checkpoint=Checkpoint(format="directory"),
+            save_trainer_file=path,
+        )
+        batch = _tdmpc2_make_raw_batch()
+        source._process_batch_hook(batch)
+        source.collected_frames = 4
+        source.optim_steps(batch)
+        source.collected_frames = 7
+        source.save_trainer(force_save=True)
+
+        restored_loss = _tdmpc2_make_loss()
+        restored = TdMpc2Trainer(
+            collector=_TdMpc2Collector(),
+            total_frames=100,
+            loss_module=restored_loss,
+            planner=_tdmpc2_make_planner(restored_loss),
+            optimizer_model=torch.optim.Adam(
+                [
+                    *restored_loss.world_model.parameters(),
+                    *restored_loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.Adam(
+                restored_loss.policy_prior.parameters(), lr=1e-3
+            ),
+            replay_buffer=_tdmpc2_make_replay_buffer(),
+            batch_size=2,
+            progress_bar=False,
+            seed_pretrain_steps=3,
+            checkpoint=Checkpoint(),
+        )
+        restored.load_from_file(path)
+
+        assert restored.collected_frames == 7
+        assert restored._optim_count == source._optim_count == 3
+        assert restored.optimization_stepper.update_count == 3
+        assert not restored._seed_pretraining_pending()
+        assert len(restored._tdmpc2_replay_buffer.replay_buffer) == len(
+            source._tdmpc2_replay_buffer.replay_buffer
+        )
+        for parameter, restored_parameter in zip(
+            source.loss_module.parameters(), restored.loss_module.parameters()
+        ):
+            torch.testing.assert_close(parameter, restored_parameter)
+
+        torch.manual_seed(2718)
+        source.optim_steps(batch)
+        torch.manual_seed(2718)
+        restored.optim_steps(batch)
+
+        assert (
+            restored.optimization_stepper.update_count
+            == source.optimization_stepper.update_count
+        )
+        assert restored._optim_count == source._optim_count
+        torch.testing.assert_close(
+            source.loss_module.state_dict(),
+            restored.loss_module.state_dict(),
+            atol=1e-6,
+            rtol=1e-6,
+        )
+        torch.testing.assert_close(
+            source.optimization_stepper.state_dict(),
+            restored.optimization_stepper.state_dict(),
+            atol=1e-6,
+            rtol=1e-6,
+        )
+
+    @pytest.mark.parametrize("with_collector_mask", [False, True])
+    def test_timeout_flags(self, with_collector_mask):
+        loss = _tdmpc2_make_loss()
+        replay_buffer = _tdmpc2_make_replay_buffer(num_episodes=1, batch_size=1)
+        trainer = TdMpc2Trainer(
+            collector=_TdMpc2Collector(),
+            total_frames=100,
+            loss_module=loss,
+            planner=_tdmpc2_make_planner(loss),
+            optimizer_model=torch.optim.SGD(
+                [
+                    *loss.world_model.parameters(),
+                    *loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.SGD(loss.policy_prior.parameters(), lr=1e-3),
+            replay_buffer=replay_buffer,
+            batch_size=1,
+            progress_bar=False,
+        )
+        truncated = torch.zeros(_TDMPC2_HORIZON, 1, dtype=torch.bool)
+        truncated[-1] = True
+        batch = TensorDict(
+            {
+                "observation": torch.randn(_TDMPC2_HORIZON, 1, _TDMPC2_OBSERVATION_DIM),
+                "action": torch.randn(_TDMPC2_HORIZON, 1, _TDMPC2_ACTION_DIM),
+                "episode": torch.zeros(_TDMPC2_HORIZON, 1, dtype=torch.long),
+                ("next", "observation"): torch.randn(
+                    _TDMPC2_HORIZON, 1, _TDMPC2_OBSERVATION_DIM
+                ),
+                ("next", "reward"): torch.randn(_TDMPC2_HORIZON, 1, 1),
+                ("next", "terminated"): torch.zeros(
+                    _TDMPC2_HORIZON, 1, 1, dtype=torch.bool
+                ),
+                ("next", "truncated"): truncated,
+                ("next", "done"): truncated,
+            },
+            batch_size=[_TDMPC2_HORIZON, 1],
+        )
+        if with_collector_mask:
+            batch.set(
+                ("collector", "mask"),
+                torch.ones(_TDMPC2_HORIZON, 1, dtype=torch.bool),
+            )
+
+        trainer._process_batch_hook(batch)
+        sample = replay_buffer.sample()
+
+        assert sample.batch_size == torch.Size([1, _TDMPC2_HORIZON])
+        assert not sample["next", "truncated"][..., :-1].any()
+        assert sample["next", "truncated"][..., -1].all()
+        assert not sample["next", "terminated"][..., -1].any()
+        assert sample["next", "done"][..., -1].all()
+
+    @pytest.mark.parametrize(
+        "sampler_kwargs, error",
+        [
+            ({"slice_len": _TDMPC2_HORIZON - 1}, "slice_len"),
+            ({"slice_len": _TDMPC2_HORIZON, "output_layout": "flat"}, "output_layout"),
+            (
+                {
+                    "slice_len": _TDMPC2_HORIZON,
+                    "strict_length": False,
+                    "output_layout": "batch_time",
+                },
+                "strict_length",
+            ),
+            (
+                {
+                    "slice_len": _TDMPC2_HORIZON,
+                    "strict_length": False,
+                    "pad_output": True,
+                    "output_layout": "batch_time",
+                },
+                "strict_length",
+            ),
+            ({"num_slices": 2, "output_layout": "batch_time"}, "slice_len"),
+        ],
+    )
+    def test_replay_validation(self, sampler_kwargs, error):
+        from torchrl.data import LazyTensorStorage, ReplayBuffer, SliceSampler
+
+        loss = _tdmpc2_make_loss()
+        replay_buffer = ReplayBuffer(
+            storage=LazyTensorStorage(16),
+            sampler=SliceSampler(
+                end_key=("next", "done"),
+                truncated_key=("next", "truncated"),
+                init_key=None,
+                **sampler_kwargs,
+            ),
+            batch_size=2 * _TDMPC2_HORIZON,
+        )
+        with pytest.raises((TypeError, ValueError), match=error):
+            TdMpc2Trainer(
+                collector=_TdMpc2Collector(),
+                total_frames=100,
+                loss_module=loss,
+                planner=_tdmpc2_make_planner(loss),
+                optimizer_model=torch.optim.SGD(
+                    [
+                        *loss.world_model.parameters(),
+                        *loss.q_ensemble.q_params.parameters(),
+                    ],
+                    lr=1e-3,
+                ),
+                optimizer_actor=torch.optim.SGD(
+                    loss.policy_prior.parameters(), lr=1e-3
+                ),
+                replay_buffer=replay_buffer,
+                batch_size=2,
+                progress_bar=False,
+            )
 
 
 if __name__ == "__main__":

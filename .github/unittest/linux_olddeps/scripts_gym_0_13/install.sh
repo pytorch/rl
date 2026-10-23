@@ -50,10 +50,10 @@ fi
 if [[ "$RELEASE" == 0 ]]; then
   # pybind11 headers are required to build tensordict's C++ extension.
   python -m pip install "pybind11[global]"
-  python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
-  python -m pip install --no-deps git+https://github.com/pytorch/tensordict.git
+  python -m pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
+  python -m pip install --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
-  python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
+  python -m pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
   python -m pip install --no-deps tensordict
 fi
 

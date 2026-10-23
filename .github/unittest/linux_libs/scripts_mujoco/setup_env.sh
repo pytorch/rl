@@ -17,7 +17,8 @@ apt-get install -y wget \
     curl \
     patchelf \
     libosmesa6-dev \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglx-mesa0 \
     libglfw3 \
     libglew-dev \
     libglvnd0 \

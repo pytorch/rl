@@ -32,7 +32,7 @@ from typing import Literal
 
 import torch
 import torch.distributed as dist
-from tensordict.base import _is_leaf_nontensor, TensorDictBase
+from tensordict import is_leaf_nontensor, TensorDictBase
 from tensordict.utils import NestedKey
 
 from torchrl import implement_for
@@ -138,11 +138,11 @@ def _store_flag_is_set(store: dist.Store, key: str) -> bool:
 
 
 def _sorted_leaf_keys(spec: TensorDictBase) -> list[NestedKey]:
-    # _is_leaf_nontensor surfaces NonTensorData leaves (excluded by the
+    # is_leaf_nontensor surfaces NonTensorData leaves (excluded by the
     # default leaf iterator) so validation rejects them instead of ignoring
     # them; the keys are sorted so both peers derive the same wire order.
     keys = list(
-        spec.keys(include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor)
+        spec.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf_nontensor)
     )
     return sorted(keys, key=lambda k: (k,) if isinstance(k, str) else tuple(k))
 

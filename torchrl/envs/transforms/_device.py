@@ -15,7 +15,7 @@ import torch
 
 from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import dispatch
-from tensordict.utils import _zip_strict, NestedKey
+from tensordict.utils import NestedKey
 
 from torchrl._utils import _make_ordinal_device
 
@@ -284,7 +284,7 @@ class DTypeCastTransform(Transform):
             return tensordict
         else:
             # we made sure that if in_keys is not None, out_keys is not None either
-            for in_key, out_key in _zip_strict(in_keys, out_keys):
+            for in_key, out_key in zip(in_keys, out_keys, strict=True):
                 item = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, item)
             return tensordict
@@ -343,7 +343,9 @@ class DTypeCastTransform(Transform):
             raise NotImplementedError(
                 f"Calling transform_input_spec without a parent environment isn't supported yet for {type(self)}."
             )
-        for in_key_inv, out_key_inv in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+        for in_key_inv, out_key_inv in zip(
+            self.in_keys_inv, self.out_keys_inv, strict=True
+        ):
             if in_key_inv in full_action_spec.keys(True):
                 _spec = full_action_spec[in_key_inv]
                 target = "action"
@@ -377,7 +379,7 @@ class DTypeCastTransform(Transform):
         full_observation_spec = output_spec["full_observation_spec"]
         for reward_key, reward_spec in list(full_reward_spec.items(True, True)):
             # find out_key that match the in_key
-            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
                 if reward_key == in_key:
                     if reward_spec.dtype != self.dtype_in:
                         raise TypeError(f"reward_spec.dtype is not {self.dtype_in}")
@@ -393,7 +395,7 @@ class DTypeCastTransform(Transform):
             full_observation_spec.items(True, True)
         ):
             # find out_key that match the in_key
-            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
                 if observation_key == in_key:
                     if observation_spec.dtype != self.dtype_in:
                         raise TypeError(
@@ -643,7 +645,7 @@ class DeviceCastTransform(Transform):
             return result
         tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
         if self._rename_keys:
-            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, tensordict.get(in_key))
@@ -659,7 +661,7 @@ class DeviceCastTransform(Transform):
             self._to, nested_keys=True, device=None
         )
         if self._rename_keys:
-            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, next_tensordict.get(in_key))
@@ -687,7 +689,9 @@ class DeviceCastTransform(Transform):
             device=None,
         )
         if self._rename_keys_inv:
-            for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+            for in_key, out_key in zip(
+                self.in_keys_inv, self.out_keys_inv, strict=True
+            ):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, tensordict.get(in_key))
@@ -721,7 +725,7 @@ class DeviceCastTransform(Transform):
 
     def transform_action_spec(self, full_action_spec: Composite) -> Composite:
         full_action_spec = full_action_spec.clear_device_()
-        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
             local_action_spec = full_action_spec.get(in_key, None)
             if local_action_spec is not None:
                 full_action_spec[out_key] = local_action_spec.to(self.device)
@@ -729,7 +733,7 @@ class DeviceCastTransform(Transform):
 
     def transform_state_spec(self, full_state_spec: Composite) -> Composite:
         full_state_spec = full_state_spec.clear_device_()
-        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
             local_state_spec = full_state_spec.get(in_key, None)
             if local_state_spec is not None:
                 full_state_spec[out_key] = local_state_spec.to(self.device)
@@ -744,7 +748,7 @@ class DeviceCastTransform(Transform):
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         observation_spec = observation_spec.clear_device_()
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             local_obs_spec = observation_spec.get(in_key, None)
             if local_obs_spec is not None:
                 observation_spec[out_key] = local_obs_spec.to(self.device)
@@ -752,7 +756,7 @@ class DeviceCastTransform(Transform):
 
     def transform_done_spec(self, full_done_spec: Composite) -> Composite:
         full_done_spec = full_done_spec.clear_device_()
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             local_done_spec = full_done_spec.get(in_key, None)
             if local_done_spec is not None:
                 full_done_spec[out_key] = local_done_spec.to(self.device)
@@ -760,7 +764,7 @@ class DeviceCastTransform(Transform):
 
     def transform_reward_spec(self, full_reward_spec: Composite) -> Composite:
         full_reward_spec = full_reward_spec.clear_device_()
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             local_reward_spec = full_reward_spec.get(in_key, None)
             if local_reward_spec is not None:
                 full_reward_spec[out_key] = local_reward_spec.to(self.device)

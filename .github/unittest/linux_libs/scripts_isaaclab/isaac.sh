@@ -15,6 +15,12 @@ export TF_CPP_MIN_LOG_LEVEL=0
 export BATCHED_PIPE_TIMEOUT=60
 export TD_GET_DEFAULTS_TO_NONE=1
 export OMNI_KIT_ACCEPT_EULA=yes
+export ACCEPT_EULA=Y
+export PRIVACY_CONSENT=Y
+# linux_job_v3 runs this script under `uv run`, which makes Ray start its workers
+# with `uv run` too. uv picks its own interpreter rather than Isaac Sim's bundled
+# Python, and the workers die with "SRE module mismatch".
+export RAY_ENABLE_UV_RUN_RUNTIME_ENV=0
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 export PYTHONNOUSERSITE=1
 
@@ -52,12 +58,12 @@ if [[ -f "${ISAACLAB_PYTHON}" ]]; then
     echo "* Installing tensordict from source (no-deps to avoid packaging conflicts)..."
     if [[ "$RELEASE" == 0 ]]; then
         "${ISAACLAB_PYTHON}" -p -m pip install "pybind11[global]" --disable-pip-version-check
-        "${ISAACLAB_PYTHON}" -p -m pip install git+https://github.com/pytorch/tensordict.git --no-deps --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt) --no-deps --disable-pip-version-check
         # Install only the missing dependencies that won't conflict
-        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle orjson "pyvers>=0.2.3" --no-deps --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle 'orjson; python_version < "3.13"' "pyvers>=0.2.3" --no-deps --disable-pip-version-check
     else
         "${ISAACLAB_PYTHON}" -p -m pip install tensordict --no-deps --disable-pip-version-check
-        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle orjson "pyvers>=0.2.3" --no-deps --disable-pip-version-check
+        "${ISAACLAB_PYTHON}" -p -m pip install cloudpickle 'orjson; python_version < "3.13"' "pyvers>=0.2.3" --no-deps --disable-pip-version-check
     fi
     
     # smoke test

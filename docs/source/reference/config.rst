@@ -352,6 +352,7 @@ Model and Network Configurations
     TdMpc2MLPConfig
     TdMpc2PolicyPriorConfig
     TdMpc2QEnsembleConfig
+    TdMpc2PlannerConfig
     TdMpc2WorldModelConfig
     DreamerV3MLPConfig
     DreamerV3DiscreteActorConfig
@@ -477,6 +478,7 @@ Replay Buffer and Storage Configurations
     SliceSamplerConfig
     SliceSamplerWithoutReplacementConfig
     StreamingSliceSamplerConfig
+    SubgoalTripletConfig
     ListStorageConfig
     TensorStorageConfig
     LazyTensorStorageConfig
@@ -508,6 +510,7 @@ Training and Optimization Configurations
     FQLTrainerConfig
     CQLTrainerConfig
     TD3TrainerConfig
+    TdMpc2TrainerConfig
 
 Trainer Hook Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -525,6 +528,7 @@ Trainer Hook Configurations
     EarlyStoppingConfig
     LogScalarConfig
     LogTimingConfig
+    TdMpc2OptimizationStepperConfig
     RewardNormalizerConfig
     SelectKeysConfig
 
@@ -545,6 +549,8 @@ Trainer Hook Configurations
     FQLLossConfig
     CQLLossConfig
     TD3LossConfig
+    TdMpc2LossConfig
+    TransitiveQLossConfig
     GAEConfig
     TargetNetUpdaterConfig
     SoftUpdateConfig

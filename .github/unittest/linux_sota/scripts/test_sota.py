@@ -31,6 +31,27 @@ commands = {
   evaluation.interval=10 evaluation.episodes=1 log_interval=1 \
   hydra.run.dir=$SOTA_LOG_DIR/fql
 """,
+    "transitive_rl": """python sota-implementations/transitive_rl/transitive_rl.py \
+  device=cpu dataset.name=null dataset.random_frames=64 env.max_episode_steps=16 \
+  optim.steps=10 optim.batch_size=8 'network.hidden=[32,32]' \
+  evaluation.interval=10 evaluation.num_tasks=1 evaluation.episodes=1 \
+  evaluation.max_steps=5 log_interval=1 \
+  compile.compile=false compile.cudagraphs=false \
+  hydra.run.dir=$SOTA_LOG_DIR/transitive_rl
+""",
+    "tdmpc2": """python sota-implementations/tdmpc2_trainer/train.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  trainer.batch_size=4 \
+  trainer.optim_steps_per_batch=1 \
+  trainer.seed_pretrain_steps=1 \
+  models.planner.num_samples=16 \
+  models.planner.num_elites=4 \
+  models.planner.num_pi_trajs=2 \
+  models.planner.iterations=2 \
+  hydra.run.dir=outputs/sota_tdmpc2
+""",
     "dqn_trainer_resume": """python sota-implementations/dqn_trainer/train.py \
   collector.total_frames=2000 \
   collector.frames_per_batch=1000 \
@@ -551,10 +572,10 @@ def test_commands(algo, monkeypatch, tmp_path):
     if dataset_id is not None:
         monkeypatch.setenv("HOME", str(tmp_path))
         _write_synthetic_d4rl_dataset(tmp_path, dataset_id)
-    if algo in {"ppo_mujoco", "sac", "fql"}:
+    if algo in {"ppo_mujoco", "sac", "fql", "transitive_rl"}:
         monkeypatch.setenv("SOTA_LOG_DIR", str(tmp_path))
     run_command(commands[algo])
-    if algo in {"ppo_mujoco", "sac", "fql"}:
+    if algo in {"ppo_mujoco", "sac", "fql", "transitive_rl"}:
         scalar_roots = list(tmp_path.rglob("scalars"))
         assert len(scalar_roots) == 1
         scalar_names = {
@@ -565,9 +586,13 @@ def test_commands(algo, monkeypatch, tmp_path):
             "ppo_mujoco": "training/loss_objective.csv",
             "sac": "training/q_loss.csv",
             "fql": "training/loss_actor.csv",
+            "transitive_rl": "training/loss_qvalue.csv",
         }[algo]
         assert expected_training_metric in scalar_names
-        expected_evaluation_metric = "return" if algo == "fql" else "reward"
+        expected_evaluation_metric = {
+            "fql": "return",
+            "transitive_rl": "overall",
+        }.get(algo, "reward")
         assert f"evaluation/{expected_evaluation_metric}.csv" in scalar_names
         assert scalar_names
         assert all(

@@ -525,7 +525,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
                 def _compare_and_expand(param):
                     if is_tensor_collection(param):
-                        return param._apply_nest(
+                        return param.apply(
                             _compare_and_expand,
                             batch_size=[expand_dim, *param.shape],
                             filter_empty=False,

@@ -93,6 +93,7 @@ from torchrl.envs import (
     EnvCreator,
     InitTracker,
     ParallelEnv,
+    PendulumEnv,
     SerialEnv,
     StepCounter,
     Transform,
@@ -1834,7 +1835,8 @@ class TestCollectorGeneric:
                     b3 = data
                 else:
                     break
-            assert_allclose_td(b1, b2)
+            traj_ids = ("collector", "traj_ids")
+            assert_allclose_td(b1.exclude(traj_ids), b2.exclude(traj_ids))
             with pytest.raises(AssertionError):
                 assert_allclose_td(b1, b3)
         finally:
@@ -1860,6 +1862,25 @@ class TestCollectorGeneric:
         with pytest.raises(RuntimeError):
             for _ in collector:
                 break
+
+    def test_async_env_that_errors_with_healthy_worker(self):
+        """A dead worker stops MultiAsyncCollector even while another worker keeps producing."""
+        frames_per_batch = 20
+        total_frames = 100_000
+        collector = MultiAsyncCollector(
+            [ContinuousActionVecMockEnv, EnvThatErrorsAfter10Iters],
+            policy=RandomPolicy(EnvThatErrorsAfter10Iters().action_spec),
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+        )
+        n_batches = 0
+        try:
+            with pytest.raises(RuntimeError, match="worker 1"):
+                for _ in collector:
+                    n_batches += 1
+        finally:
+            collector.shutdown()
+        assert n_batches < total_frames // frames_per_batch
 
     @retry(AssertionError, tries=10, delay=0)
     @pytest.mark.parametrize("to", [3, 10])
@@ -2739,6 +2760,33 @@ if __name__ == "__main__":
         finally:
             collector.shutdown()
             del collector
+
+    @pytest.mark.parametrize("update_at_each_batch", [False, True])
+    def test_async_update_at_each_batch(self, update_at_each_batch):
+        """MultiAsyncCollector pushes the policy weights between batches only when update_at_each_batch is set.
+
+        The bias is replaced rather than edited in place: on CPU the workers read the
+        policy weights from shared memory, so an in-place edit reaches them without
+        any weight update.
+        """
+        policy = TensorDictModule(
+            BiasModule(0.0), in_keys=["observation"], out_keys=["action"]
+        )
+        collector = MultiAsyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=200,
+            update_at_each_batch=update_at_each_batch,
+        )
+        biases = []
+        try:
+            for i, batch in enumerate(collector):
+                biases.append(batch["action"] - batch["observation"])
+                policy.module.bias = nn.Parameter(torch.tensor(float(i + 1)))
+        finally:
+            collector.shutdown()
+        assert (torch.cat(biases).abs() > 0.5).any() == update_at_each_batch
 
     def test_shared_mem_transport_logs_weight_sync(self):
         transport = SharedMemTransport()
@@ -5680,6 +5728,130 @@ class TestUniqueTraj:
         finally:
             c.shutdown()
             del c
+
+    def test_reset_at_each_iter_starts_new_trajectories(self):
+        env = CountingEnv(max_steps=100)
+        collector = Collector(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=12,
+            reset_at_each_iter=True,
+        )
+        seen = set()
+        try:
+            for batch in collector:
+                assert batch["observation"].squeeze(-1).tolist() == [0, 1, 2, 3]
+                traj_ids = set(batch["collector", "traj_ids"].tolist())
+                assert len(traj_ids) == 1
+                assert not traj_ids & seen
+                seen |= traj_ids
+        finally:
+            collector.shutdown()
+
+    def test_reset_at_each_iter_trajs_per_batch(self):
+        env = CountingEnv(max_steps=2)
+        collector = Collector(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=16,
+            reset_at_each_iter=True,
+            trajs_per_batch=1,
+            traj_format="cat",
+        )
+        try:
+            for batch in collector:
+                obs = batch["observation"].squeeze(-1)
+                torch.testing.assert_close(
+                    obs, torch.arange(obs.numel(), dtype=obs.dtype)
+                )
+                assert collector.stats()["trajectory_pending_frames"] == 0
+        finally:
+            collector.shutdown()
+
+    def test_reset_starts_new_trajectories(self):
+        env = CountingEnv(max_steps=100, batch_size=[2])
+        collector = Collector(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=-1,
+        )
+
+        def collect():
+            batch = next(batches)
+            return (
+                batch["observation"].squeeze(-1).tolist(),
+                batch["collector", "traj_ids"][:, 0].tolist(),
+            )
+
+        try:
+            batches = iter(collector)
+            _, ids = collect()
+            collector.reset(index=torch.zeros(2, 1, dtype=torch.bool))
+            assert collect() == ([[2, 3], [2, 3]], ids)
+            collector.reset(index=torch.tensor([[True], [False]]))
+            obs, partial_ids = collect()
+            assert obs == [[0, 1], [4, 5]]
+            assert partial_ids[0] not in ids
+            assert partial_ids[1] == ids[1]
+            collector.reset()
+            obs, full_ids = collect()
+            assert obs == [[0, 1], [0, 1]]
+            assert not set(full_ids) & set(ids + partial_ids)
+        finally:
+            collector.shutdown()
+
+    def test_partial_reset_trajs_per_batch(self):
+        env = SerialEnv(
+            3,
+            [
+                functools.partial(CountingEnv, max_steps=1),
+                functools.partial(CountingEnv, max_steps=6),
+                functools.partial(CountingEnv, max_steps=6),
+            ],
+        )
+        collector = Collector(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            frames_per_batch=6,
+            total_frames=-1,
+            trajs_per_batch=1,
+            traj_format="cat",
+        )
+        try:
+            batches = iter(collector)
+            trajectories = [next(batches)]
+            collector.reset(index=torch.tensor([[False], [False], [True]]))
+            assert collector.stats()["trajectory_pending_frames"] == 2
+            trajectories += [next(batches) for _ in range(5)]
+            assert sum(traj.numel() == 7 for traj in trajectories) == 2
+            traj_ids = [
+                traj["collector", "traj_ids"][0].item() for traj in trajectories
+            ]
+            assert len(set(traj_ids)) == len(traj_ids)
+            for traj in trajectories:
+                obs = traj["observation"].squeeze(-1)
+                torch.testing.assert_close(
+                    obs, torch.arange(obs.numel(), dtype=obs.dtype)
+                )
+        finally:
+            collector.shutdown()
+
+    def test_partial_reset_state_carrying_env(self):
+        torch.manual_seed(0)
+        env = SerialEnv(2, PendulumEnv)
+        collector = Collector(env, None, frames_per_batch=4, total_frames=-1)
+        try:
+            batches = iter(collector)
+            last_th = next(batches)["next", "th"][:, -1].tolist()
+            collector.reset(index=torch.tensor([True, False]))
+            first_th = next(batches)["th"][:, 0].tolist()
+            assert first_th[0] != last_th[0]
+            assert first_th[1] == last_th[1]
+        finally:
+            collector.shutdown()
 
 
 class TestDynamicEnvs:

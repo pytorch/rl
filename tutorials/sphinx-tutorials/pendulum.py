@@ -365,7 +365,7 @@ def _reset(self, tensordict):
 #
 # ``set_state`` is a keyword argument rather than a ``tensordict`` key on
 # purpose: a per-step entry would not stack uniformly across a rollout and
-# padding it would be costly. With ``set_state=False`` (the future default) any
+# padding it would be costly. With ``set_state=False`` (the default) any
 # state in the input is ignored and a fresh random state is drawn, which is what
 # you want when starting a new trajectory from the terminal ``tensordict`` of a
 # previous one. A ``_reset`` implementation honors the flag by reading it from
@@ -377,11 +377,10 @@ def _reset(self, tensordict):
 #             return tensordict.copy()          # honor the provided state
 #         ...                                    # otherwise draw a fresh state
 #
-# .. note:: Until v0.15, passing a state-bearing ``tensordict`` to ``reset``
-#    *without* ``set_state`` keeps honoring that state (for backwards
-#    compatibility) but raises a ``FutureWarning``. Pass ``set_state=True`` (or
-#    ``set_state=False``) explicitly to opt into the final behavior and silence
-#    the warning.
+# .. note:: Prior to v0.15, passing a state-bearing ``tensordict`` to ``reset``
+#    *without* ``set_state`` kept honoring that state (for backwards
+#    compatibility) but raised a ``FutureWarning``. As of v0.15, this behavior
+#    has been finalized and ``set_state=False`` is the default.
 #
 
 

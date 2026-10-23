@@ -14,8 +14,8 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 from torchrl.data import Categorical, Composite, Unbounded
-from torchrl.envs import EnvBase
-from torchrl.modules import CEMPlanner, ValueOperator
+from torchrl.envs import EnvBase, ExplorationType, set_exploration_type
+from torchrl.modules import CEMPlanner, TdMpc2Planner, ValueOperator
 from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimator
 
@@ -320,6 +320,198 @@ class TestPlannerDoneMask:
             else _steady_live_sequence(device)[0]
         )
         _assert_planner_selects(env, planner_name, device, expected)
+
+
+TDMPC2_OBSERVATION_DIM = 5
+TDMPC2_ACTION_DIM = 2
+TDMPC2_LATENT_DIM = 8
+TDMPC2_HORIZON = 2
+
+
+def _make_tdmpc2_planner(**kwargs):
+    from hydra.utils import instantiate
+    from torchrl.trainers.algorithms.configs import (
+        TdMpc2PolicyPriorConfig,
+        TdMpc2QEnsembleConfig,
+        TdMpc2WorldModelConfig,
+    )
+
+    world_model = instantiate(
+        TdMpc2WorldModelConfig(
+            observation_dim=TDMPC2_OBSERVATION_DIM,
+            action_dim=TDMPC2_ACTION_DIM,
+            latent_dim=TDMPC2_LATENT_DIM,
+            encoder_dim=12,
+            mlp_dim=16,
+            simnorm_dim=4,
+            num_bins=5,
+        )
+    )
+    policy_prior = instantiate(
+        TdMpc2PolicyPriorConfig(
+            latent_dim=TDMPC2_LATENT_DIM,
+            action_dim=TDMPC2_ACTION_DIM,
+            mlp_dim=16,
+        )
+    )
+    q_ensemble = instantiate(
+        TdMpc2QEnsembleConfig(
+            latent_dim=TDMPC2_LATENT_DIM,
+            action_dim=TDMPC2_ACTION_DIM,
+            mlp_dim=16,
+            num_q=2,
+            num_bins=5,
+            dropout=0.0,
+        )
+    )
+    planner_kwargs = {
+        "horizon": TDMPC2_HORIZON,
+        "discount": 0.97,
+        "num_samples": 4,
+        "num_elites": 2,
+        "num_pi_trajs": 1,
+        "iterations": 2,
+    }
+    planner_kwargs.update(kwargs)
+    return TdMpc2Planner(world_model, policy_prior, q_ensemble, **planner_kwargs)
+
+
+def _make_tdmpc2_td(batch_shape=(2,), *, is_init=True, previous_mean=None):
+    observation = torch.randn(*batch_shape, TDMPC2_OBSERVATION_DIM)
+    if previous_mean is None:
+        previous_mean = torch.zeros(*batch_shape, TDMPC2_HORIZON, TDMPC2_ACTION_DIM)
+    return TensorDict(
+        {
+            "observation": observation,
+            "is_init": torch.full((*batch_shape, 1), is_init, dtype=torch.bool),
+            "_tdmpc2_prev_mean": previous_mean,
+        },
+        batch_size=batch_shape,
+    )
+
+
+class TestTdMpc2Planner:
+    def test_output(self):
+        planner = _make_tdmpc2_planner()
+        td = _make_tdmpc2_td()
+        output = planner(td)
+
+        assert output is td
+        assert output["action"].shape == (2, TDMPC2_ACTION_DIM)
+        assert output["next", "_tdmpc2_prev_mean"].shape == (
+            2,
+            TDMPC2_HORIZON,
+            TDMPC2_ACTION_DIM,
+        )
+        assert planner.out_keys == ["action", ("next", "_tdmpc2_prev_mean")]
+        assert torch.isfinite(output["action"]).all()
+        assert (output["action"].abs() <= 1).all()
+
+    def test_eval_exploration(self):
+        planner = _make_tdmpc2_planner(
+            num_samples=1,
+            num_elites=1,
+            num_pi_trajs=0,
+            iterations=1,
+            min_std=0.25,
+            max_std=0.25,
+        )
+        td = _make_tdmpc2_td(batch_shape=(1,))
+
+        planner.train()
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            torch.manual_seed(0)
+            deterministic = planner(td.clone())
+        with set_exploration_type(ExplorationType.RANDOM):
+            torch.manual_seed(0)
+            exploratory = planner(td.clone())
+
+        fitted_action = deterministic["next", "_tdmpc2_prev_mean"][..., 0, :]
+        torch.testing.assert_close(deterministic["action"], fitted_action)
+        assert not torch.allclose(exploratory["action"], deterministic["action"])
+
+        planner.eval()
+        with set_exploration_type(None):
+            torch.manual_seed(0)
+            direct_eval = planner(td.clone())
+        torch.testing.assert_close(
+            direct_eval["action"],
+            direct_eval["next", "_tdmpc2_prev_mean"][..., 0, :],
+        )
+        planner.train()
+
+    def test_batch_dims(self):
+        planner = _make_tdmpc2_planner(num_pi_trajs=0)
+        td = _make_tdmpc2_td((2, 3))
+        planner(td)
+
+        assert td["action"].shape == (2, 3, TDMPC2_ACTION_DIM)
+        assert td["next", "_tdmpc2_prev_mean"].shape == (
+            2,
+            3,
+            TDMPC2_HORIZON,
+            TDMPC2_ACTION_DIM,
+        )
+
+    def test_primer(self):
+        planner = _make_tdmpc2_planner()
+        primer = planner.make_tensordict_primer()
+
+        assert planner.in_keys[-1] == "_tdmpc2_prev_mean"
+        assert planner.out_keys[-1] == ("next", "_tdmpc2_prev_mean")
+        assert primer.primers["_tdmpc2_prev_mean"].shape == (
+            TDMPC2_HORIZON,
+            TDMPC2_ACTION_DIM,
+        )
+
+    def test_partial_reset(self):
+        planner = _make_tdmpc2_planner(num_pi_trajs=0)
+        observations = torch.randn(2, TDMPC2_OBSERVATION_DIM)
+        previous_mean = torch.stack(
+            [
+                torch.zeros(TDMPC2_HORIZON, TDMPC2_ACTION_DIM),
+                torch.ones(TDMPC2_HORIZON, TDMPC2_ACTION_DIM),
+            ]
+        )
+        batch = TensorDict(
+            {
+                "observation": observations,
+                "is_init": torch.tensor([[True], [False]]),
+                "_tdmpc2_prev_mean": previous_mean,
+            },
+            batch_size=[2],
+        )
+
+        torch.manual_seed(0)
+        batched = planner(batch)
+        torch.manual_seed(0)
+        first = planner(
+            TensorDict(
+                {
+                    "observation": observations[0],
+                    "is_init": torch.tensor(True),
+                    "_tdmpc2_prev_mean": previous_mean[0],
+                },
+                batch_size=[],
+            )
+        )
+        second = planner(
+            TensorDict(
+                {
+                    "observation": observations[1],
+                    "is_init": torch.tensor(False),
+                    "_tdmpc2_prev_mean": previous_mean[1],
+                },
+                batch_size=[],
+            )
+        )
+
+        torch.testing.assert_close(batched["action"][0], first["action"])
+        torch.testing.assert_close(batched["action"][1], second["action"])
+
+    def test_invalid_iterations(self):
+        with pytest.raises(ValueError):
+            _make_tdmpc2_planner(iterations=0)
 
 
 if __name__ == "__main__":

@@ -89,11 +89,12 @@ cd habitat-sim
 
 # Build with headless (EGL) and bullet physics support
 # Ensure system cmake is used (pip cmake 4.x is incompatible with habitat-sim's CMake files)
-# Put /usr/bin at the front of PATH to prefer system cmake over any pip-installed cmake
-export PATH="/usr/bin:$PATH"
+# Put /usr/bin at the front of PATH for this build only to prefer system cmake
+# over any pip-installed cmake; exporting it would make later pip3 calls resolve
+# to the externally-managed system pip instead of the conda env's
 # Also set CMAKE_EXECUTABLE to explicitly use system cmake
 export CMAKE_EXECUTABLE=/usr/bin/cmake
-pip3 install . --no-build-isolation
+PATH="/usr/bin:$PATH" "${env_dir}/bin/pip3" install . --no-build-isolation
 
 cd "${root_dir}"
 

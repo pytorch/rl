@@ -377,18 +377,22 @@ class TestMultiAgent:
             centralized=centralized,
             share_params=share_params,
         )
+
+        def unchanged(td_a, td_b):
+            # One flag per tensor, and per agent when params are not shared.
+            # Compare whole tensors: a single redrawn entry is isclose to its
+            # old value about once in 2e5 draws.
+            return td_a.apply(
+                lambda a, b: torch.isclose(a, b).flatten(td_a.batch_dims).all(-1),
+                td_b,
+            )
+
         params_before = actor_net.params.clone()
         actor_net.reset_parameters()
         params_after = actor_net.params
-        assert not params_before.apply(
-            lambda x, y: torch.isclose(x, y), params_after, batch_size=[]
-        ).any()
+        assert not unchanged(params_before, params_after).any()
         if params_after.numel() > 1:
-            assert (
-                not params_after[0]
-                .apply(lambda x, y: torch.isclose(x, y), params_after[1], batch_size=[])
-                .any()
-            )
+            assert not unchanged(params_after[0], params_after[1]).any()
 
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("agent_dim", [1, -3])

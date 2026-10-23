@@ -41,6 +41,7 @@ from tensordict import (
 )
 from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from torch import Tensor
+from torch.utils.data import Dataset, Subset
 
 try:
     from torch.utils._pytree import tree_leaves, tree_map
@@ -54,7 +55,11 @@ except ImportError:
 
 from torchrl._comm.replay_service import _DistributedReplayService, _extend_reply
 from torchrl._utils import _RayServiceMetaClass, rl_warnings
-from torchrl.data.replay_buffers.dataloader import ReplayBufferDataset
+from torchrl.data.replay_buffers.dataloader import (
+    ReplayBufferDataset,
+    StorageDataset,
+    tensordict_collate,
+)
 from torchrl.data.replay_buffers.query import _query_source, Trajectory
 from torchrl.data.replay_buffers.sample_units import SampleUnit
 from torchrl.data.replay_buffers.samplers import (
@@ -63,10 +68,12 @@ from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
     Sampler,
 )
+from torchrl.data.replay_buffers.samplers._trajectory import _FragmentedTrajectoryIndex
 from torchrl.data.replay_buffers.storages import (
     _get_default_collate,
     ListStorage,
     Storage,
+    StorageEnsemble,
     TensorStorage,
 )
 from torchrl.data.replay_buffers.utils import (
@@ -81,6 +88,8 @@ from torchrl.envs.transforms.transforms import _InvertTransform, Compose, Transf
 T = TypeVar("T")
 if TYPE_CHECKING:
     from typing import Self
+
+    from torchrl.data.datasets.adapters import ReplayDatasetExporter
 else:
     Self = T
 
@@ -2825,6 +2834,167 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "construction of the replay buffer."
             )
         return ReplayBufferDataset(self, num_batches=num_batches)
+
+    @_maybe_delay_init
+    def export(
+        self,
+        exporter: ReplayDatasetExporter[T],
+        /,
+        *,
+        trajectory_key: NestedKey | None = None,
+        step_key: NestedKey | None = None,
+    ) -> T:
+        """Convert stored replay data to an external dataset.
+
+        The exporter receives a finite, map-style dataset with one item per
+        storage entry. Entries are read in physical storage order by default.
+        Storage dimensions are flattened, while each item's remaining batch
+        and feature dimensions are preserved. The values are the stored values,
+        before sampling transforms are applied.
+
+        Pass both ``trajectory_key`` and ``step_key`` to group entries by
+        trajectory identifier and order each group by step number. Groups are
+        ordered by increasing trajectory identifier. All stored entries are
+        retained, including partially stored trajectories. Each key must hold
+        one integer per entry, step numbers must be non-negative, and each
+        trajectory/step pair must be unique. Use identifiers that distinguish
+        episodes across all producers contributing to the buffer.
+
+        Export waits for pending buffer work and runs synchronously. Storage
+        reads and writes through the buffer that begin during conversion wait
+        for the exporter to finish.
+
+        Buffers configured with ``shared=True`` require CPU-backed data for
+        export. Accelerator-backed data can be exported from unshared buffers.
+
+        Args:
+            exporter (ReplayDatasetExporter): object implementing
+                ``to_external(dataset)``. It converts the dataset to the
+                external library's native representation and must support
+                the storage's item types and shapes. It completes all reads
+                of the input dataset before returning. The returned data must
+                be independent of subsequent replay-buffer writes.
+
+        Keyword Args:
+            trajectory_key (NestedKey or None, optional): stored trajectory
+                identifier used to group entries. Supply together with
+                ``step_key`` for episodic ordering. Defaults to ``None``.
+            step_key (NestedKey or None, optional): stored step number used to
+                order entries within each trajectory. Supply together with
+                ``trajectory_key``. Defaults to ``None``.
+
+        Returns:
+            The native external dataset returned by the exporter. Use the
+            external library's methods to save or publish it.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+            >>> class ColumnExporter:
+            ...     def to_external(self, dataset):
+            ...         return torch.stack([dataset[i]["observation"] for i in range(len(dataset))])
+            >>> rb = ReplayBuffer(storage=LazyTensorStorage(4))
+            >>> _ = rb.extend(TensorDict({
+            ...     "observation": torch.tensor([11, 1, 10, 0]),
+            ...     ("collector", "traj_ids"): torch.tensor([1, 0, 1, 0]),
+            ...     "step_count": torch.tensor([1, 1, 0, 0]),
+            ... }, batch_size=[4]))
+            >>> rb.export(ColumnExporter()).tolist()
+            [11, 1, 10, 0]
+            >>> rb.export(
+            ...     ColumnExporter(),
+            ...     trajectory_key=("collector", "traj_ids"),
+            ...     step_key="step_count",
+            ... ).tolist()
+            [0, 1, 10, 11]
+        """
+        if (trajectory_key is None) != (step_key is None):
+            raise ValueError("Supply trajectory_key and step_key together.")
+        if self.service_backend != "direct":
+            raise NotImplementedError(
+                "Export replay data from the owning direct replay buffer."
+            )
+        with self._futures_lock:
+            # Pending operations can acquire replay/write locks, so settle
+            # them before taking the locks that protect storage reads.
+            self._synchronize_futures_locked()
+            with self._replay_lock, self._write_lock:
+                devices = (
+                    self._storage._content_devices() if len(self._storage) else set()
+                )
+                if self.shared and any(device.type != "cpu" for device in devices):
+                    raise NotImplementedError(
+                        "Export from a shared replay buffer requires CPU-backed "
+                        "data. Export cannot ensure completion of accelerator "
+                        "writes submitted by other processes."
+                    )
+                # Device kernels may still use the source tensors after a
+                # writer or exporter returns to Python.
+                self._synchronize_export_devices(devices)
+                try:
+                    dataset = self._export_dataset(trajectory_key, step_key)
+                    return exporter.to_external(dataset)
+                finally:
+                    self._synchronize_export_devices(devices)
+
+    @staticmethod
+    def _synchronize_export_devices(devices: set[torch.device]) -> None:
+        for device in devices:
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            elif device.type == "mps":
+                torch.mps.synchronize()
+
+    def _export_dataset(
+        self, trajectory_key: NestedKey | None, step_key: NestedKey | None
+    ) -> Dataset:
+        if isinstance(self._storage, StorageEnsemble):
+            raise NotImplementedError("Export each ensemble member buffer separately.")
+        if not len(self._storage):
+            return Subset((), [])
+        storage = self._storage.flatten()
+        dataset = StorageDataset(storage, share_memory=False)
+        if trajectory_key is None:
+            return dataset
+        trajectory_key, step_key = unravel_key(trajectory_key), unravel_key(step_key)
+        if isinstance(storage, TensorStorage):
+            metadata = storage[:]
+            if not is_tensor_collection(metadata):
+                raise TypeError(
+                    "Episodic export requires TensorDict items with integer "
+                    "trajectory and step fields."
+                )
+            metadata.select(trajectory_key, step_key, strict=True)
+        else:
+            metadata = []
+            for index in range(len(dataset)):
+                item = dataset[index]
+                if not isinstance(item, TensorDictBase):
+                    raise TypeError(
+                        "Episodic export requires TensorDict items with integer "
+                        "trajectory and step fields."
+                    )
+                # The trajectory index is host-backed. Stage only its fields
+                # so metadata from different item devices can be collated.
+                record = TensorDict({}, [])
+                for key in (trajectory_key, step_key):
+                    value = item[key]
+                    if not isinstance(value, torch.Tensor):
+                        raise TypeError(f"key={key!r} must contain a tensor.")
+                    if value.numel() != 1:
+                        raise RuntimeError(
+                            f"Expected scalar values under key={key!r}, got shape "
+                            f"{tuple(value.shape)}."
+                        )
+                    record.set(key, value.cpu().reshape(()))
+                metadata.append(record)
+            metadata = tensordict_collate(metadata)
+            storage = TensorStorage(metadata)
+        indexer = _FragmentedTrajectoryIndex(trajectory_key, step_key)
+        indexer.refresh(storage)
+        indices, _, _ = indexer.runs()
+        return Subset(dataset, indices.cpu().tolist())
 
     def _state_without_prefetch(self) -> dict[str, Any]:
         """The pickled state of the buffer without its prefetched batches.

@@ -20,7 +20,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import _zip_strict, NestedKey
+from tensordict.utils import NestedKey
 from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
 from torchrl import logger as torchrl_logger
@@ -937,7 +937,7 @@ class TransformersWrapper(LLMWrapperBase):
             text_prompt = result_flat[self.text_key, "prompt"]
             text_response = [
                 txt[len(prompt) :]
-                for txt, prompt in _zip_strict(text_full, text_prompt)
+                for txt, prompt in zip(text_full, text_prompt, strict=True)
             ]
             result_flat.set((self.text_key, "full"), text_full)
             result_flat.set((self.text_key, "response"), text_response)
@@ -1016,7 +1016,9 @@ class TransformersWrapper(LLMWrapperBase):
     def _cat_text(self, text, response_text):
         """Concatenate text and response text."""
         if isinstance(text, list):
-            return [self._cat_text(t, t_) for t, t_ in _zip_strict(text, response_text)]
+            return [
+                self._cat_text(t, t_) for t, t_ in zip(text, response_text, strict=True)
+            ]
         else:
             return text + response_text
 
@@ -1219,7 +1221,7 @@ class TransformersWrapper(LLMWrapperBase):
         if isinstance(tokens, list) or isinstance(response_tokens, list):
             return [
                 self._cat_tensors(t, t_, cast=cast)
-                for t, t_ in _zip_strict(tokens, response_tokens)
+                for t, t_ in zip(tokens, response_tokens, strict=True)
             ]
         else:
             result = torch.cat([tokens, response_tokens], dim=-1)

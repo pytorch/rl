@@ -41,7 +41,7 @@ fi
 # Install mjlab after PyTorch so its torch>=2.7 dependency is satisfied by the
 # CI-selected wheel rather than pulling a second torch build from PyPI.
 pip install "mjlab>=1.4.0" --progress-bar off
-pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
+pip install git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt) --progress-bar off
 
 python -c "import torch; import tensordict; import mjlab"
 

@@ -17,10 +17,9 @@ from typing import Any, overload, TYPE_CHECKING, TypeVar, Union
 
 import torch
 
-from tensordict import TensorDict, TensorDictBase, unravel_key
-from tensordict.base import _is_leaf_nontensor
+from tensordict import is_leaf_nontensor, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import dispatch
-from tensordict.utils import _zip_strict, NestedKey
+from tensordict.utils import NestedKey
 from torch import nn
 from torch.utils._pytree import tree_map
 
@@ -109,7 +108,7 @@ def _apply_to_composite(function):
             _specs = observation_spec._specs
             in_keys = self.in_keys
             out_keys = self.out_keys
-            for in_key, out_key in _zip_strict(in_keys, out_keys):
+            for in_key, out_key in zip(in_keys, out_keys, strict=True):
                 if in_key in observation_spec.keys(True, True):
                     _specs[out_key] = function(self, observation_spec[in_key].clone())
             return Composite(
@@ -146,7 +145,7 @@ def _apply_to_composite_inv(function):
             action_spec = state_spec = Composite()
         in_keys_inv = self.in_keys_inv
         out_keys_inv = self.out_keys_inv
-        for in_key, out_key in _zip_strict(in_keys_inv, out_keys_inv):
+        for in_key, out_key in zip(in_keys_inv, out_keys_inv, strict=True):
             in_key = unravel_key(in_key)
             out_key = unravel_key(out_key)
             # if in_key != out_key:
@@ -522,7 +521,7 @@ class Transform(nn.Module):
         :meth:`~torchrl.envs.TransformedEnv.reset` but not during :meth:`~torchrl.envs.Transform.forward`.
 
         """
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             value = next_tensordict.get(in_key, default=None)
             if value is not None:
                 observation = self._apply_transform(value)
@@ -566,7 +565,7 @@ class Transform(nn.Module):
             >>> t(TensorDict(a=0))  # Works offline too.
 
         """
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             data = tensordict.get(in_key, None)
             if data is not None:
                 data = self._apply_transform(data)
@@ -610,7 +609,7 @@ class Transform(nn.Module):
         """
         if not self.in_keys_inv:
             return tensordict
-        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
             data = tensordict.get(out_key, None)
             if data is not None:
                 item = self._inv_apply_transform(data)
@@ -1393,7 +1392,7 @@ but got an object of type {type(transform)}."""
                     device=result.device,
                     filter_empty=True,
                     default=None,
-                    is_leaf=_is_leaf_nontensor,
+                    is_leaf=is_leaf_nontensor,
                 )
             if partial_steps.any():
                 result[partial_steps] = next_tensordict
@@ -1427,16 +1426,6 @@ but got an object of type {type(transform)}."""
         self.base_env._complete_done(self.base_env.full_done_spec, tensordict_reset)
         tensordict_reset = self.transform._reset(tensordict, tensordict_reset)
         return tensordict_reset
-
-    def _input_td_has_state(self, tensordict: TensorDictBase | None) -> bool:
-        if tensordict is None:
-            return False
-        state_keys = list(self.state_spec.keys(True, True))
-        if not state_keys:
-            return False
-        tensordict = tensordict.select(*self.reset_keys, *state_keys, strict=False)
-        tensordict = self.transform._reset_env_preprocess(tensordict)
-        return self.base_env._input_td_has_state(tensordict)
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
         # self._complete_done(self.full_done_spec, reset)

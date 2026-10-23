@@ -1602,6 +1602,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     self._record_trajectory_completion(
                         completed_frames, completed_trajectories
                     )
+                if self._discards_in_flight_trajectories():
+                    partial_trajs.clear()
+                    self._clear_pending_trajectory_progress()
                 if has_rb:
                     # Write each complete trajectory to the replay buffer
                     # immediately as a flat sequence — no padding, no
@@ -1651,13 +1654,40 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         except StopIteration:
             return None
 
+    def _discards_in_flight_trajectories(self) -> bool:
+        """Whether episodes still running at the end of a batch are abandoned.
+
+        Collectors that reset their environments before every batch return
+        ``True`` so that trajectory assembly drops the interrupted episodes
+        instead of holding them as partial trajectories that can never finish.
+        """
+        return False
+
+    def _drop_partial_trajectories(self, traj_ids: list[int]) -> None:
+        """Drop the partially-assembled trajectories with the given ids.
+
+        Called by a partial ``reset()``: the selected environments abandon
+        their episodes while the others continue, so only the abandoned
+        chunks are discarded.
+        """
+        assembly = getattr(self, "_traj_assembly", None)
+        if assembly is None:
+            return
+        dropped_frames = 0
+        for traj_id in traj_ids:
+            for chunk in assembly[0].pop(traj_id, ()):
+                mask = chunk.get(("collector", "mask"), None)
+                dropped_frames += chunk.numel() if mask is None else int(mask.sum())
+        if dropped_frames:
+            self._record_pending_trajectory_frames(-dropped_frames)
+
     def _flush_trajectory_assembly(self) -> None:
         """Drop partially-assembled and queued-but-not-yet-yielded trajectories.
 
         Called by ``reset()`` when trajectory assembly is in use: after an
         environment reset, steps queued under the pre-reset policy must not
-        leak into post-reset batches, and stale partial chunks must not be
-        merged with later episodes that reuse a rebased trajectory id.
+        leak into post-reset batches, and stale partial chunks of abandoned
+        episodes must not accumulate.
         """
         assembly = getattr(self, "_traj_assembly", None)
         if assembly is not None:

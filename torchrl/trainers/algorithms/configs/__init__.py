@@ -52,6 +52,7 @@ from torchrl.trainers.algorithms.configs.data import (
     StorageEnsembleConfig,
     StorageEnsembleWriterConfig,
     StreamingSliceSamplerConfig,
+    SubgoalTripletConfig,
     TensorDictReplayBufferConfig,
     TensorStorageConfig,
     TransitionConfig,
@@ -95,6 +96,7 @@ from torchrl.trainers.algorithms.configs.hooks import (
     LogTimingConfig,
     RewardNormalizerConfig,
     SelectKeysConfig,
+    TdMpc2OptimizationStepperConfig,
 )
 from torchrl.trainers.algorithms.configs.logging import (
     CSVLoggerConfig,
@@ -120,6 +122,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     TanhModuleConfig,
     TanhNormalModelConfig,
     TdMpc2MLPConfig,
+    TdMpc2PlannerConfig,
     TdMpc2PolicyPriorConfig,
     TdMpc2QEnsembleConfig,
     TdMpc2WorldModelConfig,
@@ -145,7 +148,9 @@ from torchrl.trainers.algorithms.configs.objectives import (
     SACLossConfig,
     SoftUpdateConfig,
     TD3LossConfig,
+    TdMpc2LossConfig,
     TQCLossConfig,
+    TransitiveQLossConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
     A2CTrainerConfig,
@@ -161,6 +166,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     ReinforceTrainerConfig,
     SACTrainerConfig,
     TD3TrainerConfig,
+    TdMpc2TrainerConfig,
     TrainerConfig,
 )
 from torchrl.trainers.algorithms.configs.transforms import (
@@ -337,6 +343,7 @@ __all__ = [
     "TdMpc2MLPConfig",
     "TdMpc2PolicyPriorConfig",
     "TdMpc2QEnsembleConfig",
+    "TdMpc2PlannerConfig",
     "TdMpc2WorldModelConfig",
     "ModelConfig",
     "TanhModuleConfig",
@@ -432,6 +439,7 @@ __all__ = [
     # Sample units
     "SampleUnitConfig",
     "SequenceConfig",
+    "SubgoalTripletConfig",
     "TransitionConfig",
     # Samplers
     "ConsumingSamplerConfig",
@@ -455,7 +463,9 @@ __all__ = [
     "ReinforceLossConfig",
     "SACLossConfig",
     "TD3LossConfig",
+    "TdMpc2LossConfig",
     "TQCLossConfig",
+    "TransitiveQLossConfig",
     # Value functions
     "GAEConfig",
     # Trainers
@@ -471,6 +481,7 @@ __all__ = [
     "ReinforceTrainerConfig",
     "SACTrainerConfig",
     "TD3TrainerConfig",
+    "TdMpc2TrainerConfig",
     "TrainerConfig",
     "GRPOTrainerConfig",
     # Hooks
@@ -481,6 +492,7 @@ __all__ = [
     "EarlyStoppingConfig",
     "DreamerV3OptimizationStepperConfig",
     "DreamerV3UpdateRatioConfig",
+    "TdMpc2OptimizationStepperConfig",
     "LogScalarConfig",
     "LogTimingConfig",
     "RewardNormalizerConfig",
@@ -603,6 +615,7 @@ def _register_configs():
     cs.store(group="model", name="qvalue", node=QValueModelConfig)
     cs.store(group="model", name="tdmpc2_policy_prior", node=TdMpc2PolicyPriorConfig)
     cs.store(group="model", name="tdmpc2_q_ensemble", node=TdMpc2QEnsembleConfig)
+    cs.store(group="model", name="tdmpc2_planner", node=TdMpc2PlannerConfig)
     cs.store(group="model", name="tdmpc2_world_model", node=TdMpc2WorldModelConfig)
 
     # Exploration configs
@@ -730,7 +743,9 @@ def _register_configs():
     cs.store(group="loss", name="reinforce", node=ReinforceLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
     cs.store(group="loss", name="td3", node=TD3LossConfig)
+    cs.store(group="loss", name="tdmpc2", node=TdMpc2LossConfig)
     cs.store(group="loss", name="tqc", node=TQCLossConfig)
+    cs.store(group="loss", name="transitive_q", node=TransitiveQLossConfig)
 
     # =============================================================================
     # Value Function Configurations
@@ -780,6 +795,7 @@ def _register_configs():
     cs.store(group="writer", name="round_robin", node=RoundRobinWriterConfig)
     cs.store(group="sample_unit", name="transition", node=TransitionConfig)
     cs.store(group="sample_unit", name="sequence", node=SequenceConfig)
+    cs.store(group="sample_unit", name="subgoal_triplet", node=SubgoalTripletConfig)
 
     # =============================================================================
     # Collector Configurations
@@ -810,6 +826,7 @@ def _register_configs():
     cs.store(group="trainer", name="reinforce", node=ReinforceTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
     cs.store(group="trainer", name="td3", node=TD3TrainerConfig)
+    cs.store(group="trainer", name="tdmpc2", node=TdMpc2TrainerConfig)
     cs.store(group="trainer", name="grpo", node=GRPOTrainerConfig)
 
     # =============================================================================
@@ -823,6 +840,11 @@ def _register_configs():
         group="hook",
         name="dreamer_v3_optimization",
         node=DreamerV3OptimizationStepperConfig,
+    )
+    cs.store(
+        group="hook",
+        name="tdmpc2_optimization",
+        node=TdMpc2OptimizationStepperConfig,
     )
     cs.store(group="hook", name="early_stopping", node=EarlyStoppingConfig)
     cs.store(group="hook", name="log_scalar", node=LogScalarConfig)

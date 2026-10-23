@@ -74,10 +74,10 @@ export pybind11_DIR
 printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
     # Install tensordict dependencies (since we use --no-deps)
-    uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
-    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+    uv pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
+    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
-    uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
+    uv pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
     uv pip install --no-deps tensordict
 fi
 
@@ -206,7 +206,7 @@ run_tests() {
         test_failed=1
     fi
     
-    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 -k "gym and not isaac" --mp_fork; then
+    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 -k "gym and not isaac" --mp_fork_if_no_cuda; then
         echo "ERROR: test/libs failed for ${version_name}"
         test_failed=1
     fi

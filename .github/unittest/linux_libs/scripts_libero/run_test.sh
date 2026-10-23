@@ -22,6 +22,7 @@ timeout 300s python -m torch.utils.collect_env
 git config --global --add safe.directory '*'
 
 Xvfb :99 -screen 0 1024x768x24 &
+trap 'bash .github/unittest/helpers/reap_strays.sh' EXIT
 
 timeout 120s python -c 'import torch; t = torch.ones([2, 2], device="cuda:0" if torch.cuda.is_available() else "cpu"); print(t); print("tensor device:" + str(t.device))'
 timeout 120s python -c 'from torchrl.envs.libs.libero import _ensure_libero_config; _ensure_libero_config()'

@@ -8,17 +8,17 @@ from collections.abc import MutableSequence
 from ctypes import Array, c_byte
 
 import torch
-from tensordict.base import _is_leaf_nontensor, TensorDictBase
+from tensordict import is_leaf_nontensor, TensorDictBase
 
 
 def _make_slot_bank(
     spec: TensorDictBase, num_slots: int, transport_name: str, argname: str
 ) -> TensorDictBase:
     """Validate a CPU tensor spec and allocate a shared request or response bank."""
-    # _is_leaf_nontensor surfaces NonTensorData leaves (excluded by the
+    # is_leaf_nontensor surfaces NonTensorData leaves (excluded by the
     # default leaf iterator) so they are rejected instead of ignored.
     leaves = list(
-        spec.items(include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor)
+        spec.items(include_nested=True, leaves_only=True, is_leaf=is_leaf_nontensor)
     )
     if not leaves:
         raise ValueError(f"{argname} must contain at least one tensor leaf.")

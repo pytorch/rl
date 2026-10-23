@@ -39,10 +39,25 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   fi
 fi
 
+# torchrl/_comm/distributed.py resolves socket.gethostbyname(gethostname()) to
+# pick the dist.TCPStore address. Nothing puts an OSDC job container's hostname
+# in its /etc/hosts, so that raises gaierror; a plain `docker run` added the
+# entry, which is why this only appears off EC2. Every participant lives in
+# this container, so loopback is the right answer.
+if [[ $OSTYPE != 'darwin'* ]]; then
+  echo "127.0.0.1 $(hostname)" >> /etc/hosts
+  getent hosts "$(hostname)"
+fi
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 if [[ $OSTYPE != 'darwin'* ]]; then
-  # from cudagl docker image
-  cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+  # from cudagl docker image. /usr/share/glvnd/egl_vendor.d is a read-only
+  # mount under the NVIDIA container runtime, so install into
+  # /etc/glvnd/egl_vendor.d, the other default libglvnd search path, and
+  # skip entirely when the runtime already supplied the file.
+  if [ ! -e /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
+    install -Dm644 $this_dir/10_nvidia.json /etc/glvnd/egl_vendor.d/10_nvidia.json
+  fi
 fi
 
 
@@ -138,6 +153,16 @@ uv_pip_install \
   transformers \
   ninja \
   timm
+
+# Dataset adapter tests are collected by the CPU bulk shard.
+if [[ "${CU_VERSION:-}" == cpu && "${TORCHRL_TEST_SHARD:-all}" == bulk ]]; then
+  # Exercise the oldest supported datasets version on the oldest Python job.
+  if [[ "${PYTHON_VERSION}" == "3.10" ]]; then
+    uv_pip_install "datasets==3.6.0" "pyarrow>=14.0.0"
+  else
+    uv_pip_install datasets "pyarrow>=14.0.0"
+  fi
+fi
 
 # Install dm_control for Python < 3.13
 # labmaze (dm_control dependency) doesn't have Python 3.13+ wheels
@@ -238,7 +263,7 @@ export pybind11_DIR
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
   uv_pip_install --no-deps tensordict
 fi
@@ -439,7 +464,13 @@ run_non_distributed_tests() {
       # configuration the timing numbers were collected with.
       xdist_workers=24
     else
-      xdist_workers=auto
+      # GPU: bound by device memory, not cores. -n auto gives 16 workers here,
+      # and 16 concurrent CUDA contexts on the single A10G leave no room for a
+      # test that spawns its own CUDA subprocess -- they die in
+      # cuDevicePrimaryCtxRetain with CUDA_ERROR_OUT_OF_MEMORY, and ordinary
+      # Triton tests start failing to allocate too. Which tests lose the race
+      # varies run to run, so cap the concurrency rather than chase them.
+      xdist_workers=4
     fi
   fi
   local xdist_args=""
@@ -593,6 +624,11 @@ python .github/unittest/helpers/upload_test_results.py || echo "Warning: Failed 
 # ================================ Post-proc ========================================= #
 
 bash ${this_dir}/post_process.sh
+
+# ==================================================================================== #
+# ================================ Reap strays ======================================= #
+
+bash "${root_dir}/.github/unittest/helpers/reap_strays.sh"
 
 # Exit with failure if any tests failed
 exit $EXIT_STATUS

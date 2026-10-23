@@ -29,9 +29,9 @@ jobs:
       matrix:
         python_version: [ "3.12" ]
         cuda_arch_version: [ "12.8" ]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       upload-artifact: docs
       timeout: 120
@@ -66,13 +66,13 @@ jobs:
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
           # Use stable PyTorch for releases (tags and release/* branches)
           python -m pip install torch torchvision --quiet --root-user-action=ignore
-          python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0" --quiet --root-user-action=ignore
+          python -m pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0" --quiet --root-user-action=ignore
           python -m pip install tensordict --no-deps --quiet --root-user-action=ignore
           python -m pip install torchcodec --quiet --root-user-action=ignore
         else
           # Use nightly PyTorch for main, nightly, and PRs
           python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
-          python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0" --quiet --root-user-action=ignore
+          python -m pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0" --quiet --root-user-action=ignore
           python -m pip install git+https://github.com/pytorch/tensordict.git --no-deps --quiet --root-user-action=ignore
           # torchcodec nightly wheels, matching the torch nightly above.
           python -m pip install --pre torchcodec --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
@@ -212,7 +212,7 @@ jobs:
       ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       download-artifact: docs
@@ -255,7 +255,10 @@ jobs:
         rm -rf "${RUNNER_ARTIFACT_DIR}/sphinx-gallery-cache"
 
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
-        rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
+        # Was rsync, which linux_job.yml's conda-builder image had.
+        # almalinux-builder, the v3 default, does not; a plain recursive
+        # copy is all this needed.
+        cp -a "${RUNNER_ARTIFACT_DIR}"/. "${TARGET_FOLDER}"/
         git add "${TARGET_FOLDER}" || true
 
         # Debug

@@ -26,6 +26,7 @@ java -version
 # The Minecraft client needs an X display; use a virtual framebuffer with
 # Mesa software rendering.
 Xvfb :99 -screen 0 1024x768x24 &
+trap 'bash .github/unittest/helpers/reap_strays.sh' EXIT
 export DISPLAY=:99
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs/test_craftground.py --instafail -v --durations 200 --capture no -k TestCraftGround --error-for-skips --runslow

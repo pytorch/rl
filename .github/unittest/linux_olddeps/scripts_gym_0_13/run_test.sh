@@ -12,6 +12,11 @@ python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 
+# Resolve the OSDC container's hostname for torchrl/_comm/distributed.py; see
+# linux/scripts/run_all.sh.
+echo "127.0.0.1 $(hostname)" >> /etc/hosts
+getent hosts "$(hostname)"
+
 root_dir="$(git rev-parse --show-toplevel)"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"

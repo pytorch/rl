@@ -11,8 +11,27 @@ import sys
 import torch
 from packaging import version
 from packaging.version import parse
+from tensordict import TensorDict
 
 from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
+
+
+class _ReplayRowsExporter:
+    def to_external(self, dataset):
+        return [dataset[index].clone() for index in range(len(dataset))]
+
+
+def _episode_data(obs, episode, step, *, device="cpu"):
+    return TensorDict(
+        {
+            "obs": torch.tensor(obs, device=device),
+            "episode": torch.tensor(episode, device=device),
+            "step": torch.tensor(step, device=device),
+        },
+        [len(obs)],
+        device=device,
+    )
+
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None

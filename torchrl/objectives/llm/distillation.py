@@ -12,7 +12,6 @@ from typing import Literal, TYPE_CHECKING
 import torch
 from tensordict import NestedKey, TensorClass, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.utils import _zip_strict
 from torchrl.data import History
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.objectives.common import LossModule
@@ -396,7 +395,7 @@ class DistillationLoss(LossModule):
         return (
             [
                 mask & a_mask
-                for mask, a_mask in _zip_strict(assistant_masks, attention_mask)
+                for mask, a_mask in zip(assistant_masks, attention_mask, strict=True)
             ],
             attention_mask,
             assistant_masks,
@@ -418,8 +417,8 @@ class DistillationLoss(LossModule):
         """
         zeros = 0
         total = 0
-        for tlp, att, ast in _zip_strict(
-            teacher_log_probs, attention_masks, assistant_masks
+        for tlp, att, ast in zip(
+            teacher_log_probs, attention_masks, assistant_masks, strict=True
         ):
             if tlp.shape != att.shape or tlp.shape != ast.shape:
                 return
@@ -471,7 +470,7 @@ class DistillationLoss(LossModule):
             )
         if not all(
             lp.shape == tlp.shape
-            for lp, tlp in _zip_strict(log_probs, teacher_log_probs)
+            for lp, tlp in zip(log_probs, teacher_log_probs, strict=True)
         ):
             raise ValueError(
                 f"Student and teacher log-probs have different shapes: "
@@ -479,7 +478,7 @@ class DistillationLoss(LossModule):
                 "Both models must score the same tokenized sequences."
             )
         if not all(
-            mask.shape == lp.shape for mask, lp in _zip_strict(masks, log_probs)
+            mask.shape == lp.shape for mask, lp in zip(masks, log_probs, strict=True)
         ):
             raise ValueError(
                 f"Masks and log-probs have different shapes: "
@@ -491,7 +490,7 @@ class DistillationLoss(LossModule):
             )
 
         kl_tokens = []
-        for lp, tlp, mask in _zip_strict(log_probs, teacher_log_probs, masks):
+        for lp, tlp, mask in zip(log_probs, teacher_log_probs, masks, strict=True):
             lp = lp.masked_fill(~mask, 0.0)
             tlp = tlp.detach().masked_fill(~mask, 0.0)
             if self.kl_direction == "reverse":

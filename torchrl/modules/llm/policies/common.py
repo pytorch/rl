@@ -17,7 +17,6 @@ import torch
 from tensordict import lazy_stack, NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from tensordict.tensorclass import TensorClass
-from tensordict.utils import _zip_strict
 from torch import distributions as D
 from torch.distributions import Categorical
 from torch.nn.utils.rnn import pad_sequence
@@ -336,8 +335,6 @@ class ChatHistory(TensorClass["nocast"]):
             - For full: uses add_generation_prompt=False
             - Response is computed by slicing full tokens after prompt length
         """
-        from tensordict.utils import _zip_strict
-
         tokenizer_kwargs = {}
         if chat_template_name is not None:
             tokenizer_kwargs["chat_template_name"] = chat_template_name
@@ -383,8 +380,8 @@ class ChatHistory(TensorClass["nocast"]):
             full_tokens_list = tokens_out.get("full", as_list=True)
             response_tokens_list = []
 
-            for prompt_tok, full_tok in _zip_strict(
-                prompt_tokens_list, full_tokens_list
+            for prompt_tok, full_tok in zip(
+                prompt_tokens_list, full_tokens_list, strict=True
             ):
                 prompt_len = prompt_tok.shape[-1]
                 response_tok = full_tok[..., prompt_len:]
@@ -431,8 +428,6 @@ class ChatHistory(TensorClass["nocast"]):
             - For full: uses add_generation_prompt=False
             - Response is computed by removing prompt prefix from full text
         """
-        from tensordict.utils import _zip_strict
-
         tokenizer_kwargs = {}
         if chat_template_name is not None:
             tokenizer_kwargs["chat_template_name"] = chat_template_name
@@ -468,7 +463,9 @@ class ChatHistory(TensorClass["nocast"]):
             full_texts_list = text_out.get("full", as_list=True)
             response_texts_list = []
 
-            for prompt_txt, full_txt in _zip_strict(prompt_texts_list, full_texts_list):
+            for prompt_txt, full_txt in zip(
+                prompt_texts_list, full_texts_list, strict=True
+            ):
                 if full_txt.startswith(prompt_txt):
                     response_txt = full_txt[len(prompt_txt) :]
                 else:
@@ -1289,7 +1286,7 @@ class LLMWrapperBase(TensorDictModuleBase):
                 response_mask[..., : prompt_tokens.shape[-1]] = False
             else:
                 response_mask = []
-                for am, p in _zip_strict(attention_mask, prompt_tokens):
+                for am, p in zip(attention_mask, prompt_tokens, strict=True):
                     am = am.clone()
                     am[..., : p.size(-1)] = False
                     response_mask.append(am)
@@ -1302,7 +1299,7 @@ class LLMWrapperBase(TensorDictModuleBase):
         # Make the response mask using prompt tokens
         if not self.pad_output:
             # Check that the lengths of the mask is the same as the logits
-            for m, lg in _zip_strict(response_mask, logits):
+            for m, lg in zip(response_mask, logits, strict=True):
                 if m.shape[-1] != lg.shape[-2]:
                     raise ValueError(
                         f"Mask and logits have different lengths: {m.shape[-1]} != {lg.shape[-2]}.\n"
@@ -1691,7 +1688,6 @@ def _extract_responses_from_full_histories(
         RuntimeError: If parsing produces inconsistent batch shapes
     """
     import torch
-    from tensordict.utils import _zip_strict
     from torchrl.data.llm import History
 
     # Extract response portions by processing each element individually
@@ -1701,8 +1697,8 @@ def _extract_responses_from_full_histories(
     full_histories = History.from_text(
         text_full, chat_template_name=chat_template_name, tokenizer=tokenizer
     )
-    for h_prompt, h_full in _zip_strict(
-        prompt_histories.unbind(0), full_histories.unbind(0)
+    for h_prompt, h_full in zip(
+        prompt_histories.unbind(0), full_histories.unbind(0), strict=True
     ):
         if h_full.shape[0] <= h_prompt.shape[0]:
             # Empty response: model generated 0 tokens. Create a minimal

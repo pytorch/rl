@@ -71,7 +71,7 @@ jobs:
   prepare-environment:
     name: Prepare pinned benchmark environment
     if: contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
-    runs-on: linux.g5.4xlarge.nvidia.gpu
+    runs-on: mt-l-x86aavx2-11-41-a10g
     container:
       image: nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04@sha256:b3e7fba84d169f46939f00c25be7d016f712a8d651f4756d6a55e693d84d94f2
       options: --gpus all --shm-size=8g
@@ -153,7 +153,7 @@ jobs:
     name: ${{ matrix.device }} ${{ matrix.revision }} benchmark
     if: contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
     needs: [prepare-definitions, prepare-environment]
-    runs-on: linux.g5.4xlarge.nvidia.gpu
+    runs-on: mt-l-x86aavx2-11-41-a10g
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -315,7 +315,7 @@ jobs:
               "pr_number": int(os.environ["PR_NUMBER"]),
               "base_sha": os.environ["BASE_SHA"],
               "head_sha": os.environ["HEAD_SHA"],
-              "runner": "linux.g5.4xlarge.nvidia.gpu",
+              "runner": "mt-l-x86aavx2-11-41-a10g",
               "image": os.environ["IMAGE"],
               "python_version": os.environ["PYTHON_VERSION"],
               "system_environment_sha256": os.environ["SYSTEM_ENVIRONMENT_SHA"],

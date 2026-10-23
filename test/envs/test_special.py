@@ -8,6 +8,7 @@ import contextlib
 import multiprocessing
 import os
 import pickle
+import sys
 import threading
 import warnings
 from functools import partial
@@ -81,6 +82,38 @@ class _DelayedCountingEnv(CountingEnv):
     def _step(self, tensordict):
         threading.Event().wait(self.delay)
         return super()._step(tensordict)
+
+
+class _DifferentSpecCountingEnv(CountingEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observation_spec = Composite(
+            observation=Unbounded(
+                (*self.batch_size, 5),
+                dtype=torch.int32,
+                device=self.device,
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
+
+
+class _NestedSpecCountingEnv(CountingEnv):
+    def __init__(self, *args, obs_dim: int = 5, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observation_spec = Composite(
+            nested=Composite(
+                observation=Unbounded(
+                    (*self.batch_size, obs_dim),
+                    dtype=torch.int32,
+                    device=self.device,
+                ),
+                shape=self.batch_size,
+                device=self.device,
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
 
 
 def _round_robin_affinity(env_index, *, cpus):
@@ -399,7 +432,7 @@ class TestChessEnv:
             stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
         )
         fen = "5k2/4r3/8/8/8/1Q6/2K5/8 w - - 0 1"
-        td = env.reset(TensorDict({"fen": fen}))
+        td = env.reset(TensorDict({"fen": fen}), set_state=True)
         if include_fen:
             assert td["fen"] == fen
             assert env.board.fen() == fen
@@ -413,7 +446,7 @@ class TestChessEnv:
             stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
         )
         fen = "5k2/4r3/8/8/8/1Q6/2K5/8 b - - 0 1"
-        td = env.reset(TensorDict({"fen": fen}))
+        td = env.reset(TensorDict({"fen": fen}), set_state=True)
         assert td["fen"] == fen
         assert env.board.fen() == fen
         assert td["turn"] == env.lib.BLACK
@@ -427,7 +460,7 @@ class TestChessEnv:
         )
         fen = "1R3k2/2R5/8/8/8/8/2K5/8 b - - 0 1"
         with pytest.raises(ValueError) as e_info:
-            env.reset(TensorDict({"fen": fen}))
+            env.reset(TensorDict({"fen": fen}), set_state=True)
 
         assert "Cannot reset to a fen that is a gameover state" in str(e_info)
 
@@ -497,7 +530,7 @@ class TestChessEnv:
         if reset_without_fen:
             td = TensorDict({"fen": fen})
         else:
-            td = env.reset(TensorDict({"fen": fen}))
+            td = env.reset(TensorDict({"fen": fen}), set_state=True)
             assert td["turn"] == expected_turn
 
         td["action"] = env._san_moves.index(move)
@@ -546,7 +579,7 @@ class TestChessEnv:
         ]
         for fen, num_legal_moves in cases:
             # Load the state by fen.
-            td = env.reset(TensorDict({"fen": fen}))
+            td = env.reset(TensorDict({"fen": fen}), set_state=True)
             assert td["fen"] == fen
             assert td["action_mask"].sum() == num_legal_moves
             # Reset to initial state just to make sure that the next reset
@@ -554,7 +587,7 @@ class TestChessEnv:
             assert env.reset()["action_mask"].sum() == 20
             # Load the state by fen hash and make sure it gives the same output
             # as before.
-            td_check = env.reset(td.select("fen_hash"))
+            td_check = env.reset(td.select("fen_hash"), set_state=True)
             assert (td_check == td).all()
 
     @pytest.mark.parametrize("include_fen", [False, True])
@@ -923,8 +956,50 @@ class TestAsyncEnvPool:
             s = env.rand_step(r)
             assert s.shape == env.shape
             env.check_env_specs(break_when_any_done="both")
+            sample_child = make_envs[0]()
+            assert env.observation_spec_unbatched == sample_child.observation_spec
+            assert env.action_spec_unbatched == sample_child.action_spec
         finally:
             env._maybe_shutdown()
+
+    @pytest.mark.parametrize("backend", ["threading", "multiprocessing"])
+    def test_heterogeneous_child_specs_unbatched_raises(self, backend):
+        env = AsyncEnvPool(
+            [partial(CountingEnv), partial(_DifferentSpecCountingEnv)],
+            backend=backend,
+        )
+        try:
+            with pytest.raises(
+                ValueError,
+                match="Cannot compute a single unbatched spec because child environment 1",
+            ):
+                _ = env.observation_spec_unbatched
+
+            with pytest.raises(
+                ValueError,
+                match="Cannot compute a single unbatched spec because child environment 1",
+            ):
+                _ = env.full_observation_spec_unbatched
+        finally:
+            env._maybe_shutdown()
+
+        nested_env = AsyncEnvPool(
+            [
+                partial(_NestedSpecCountingEnv, obs_dim=5),
+                partial(_NestedSpecCountingEnv, obs_dim=1),
+            ],
+            backend=backend,
+        )
+        try:
+            assert ("nested", "observation") in nested_env.observation_spec
+            assert ("nested", "missing") not in nested_env.observation_spec
+            with pytest.raises(
+                ValueError,
+                match="Cannot compute a single unbatched spec because child environment 1",
+            ):
+                _ = nested_env.observation_spec_unbatched
+        finally:
+            nested_env._maybe_shutdown()
 
     @pytest.mark.skipif(
         not hasattr(os, "sched_setaffinity"),
@@ -1793,3 +1868,7 @@ class TestMPSSubEnvs:
             assert rollout.device.type == "mps"
         finally:
             env.close(raise_if_closed=False)
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, *sys.argv[1:]]))

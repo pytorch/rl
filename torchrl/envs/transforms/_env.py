@@ -13,15 +13,15 @@ from typing import Any, TYPE_CHECKING
 import torch
 
 from tensordict import (
+    is_leaf_nontensor,
     LazyStackedTensorDict,
     NonTensorData,
     TensorDict,
     TensorDictBase,
     unravel_key,
 )
-from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import _zip_strict, expand_as_right, NestedKey
+from tensordict.utils import expand_as_right, NestedKey
 
 from torchrl._utils import _ends_with, _replace_last
 
@@ -552,7 +552,7 @@ class TensorDictPrimer(Transform):
         for key in self.primers.keys(True, True):
             # We relax a bit the condition here, allowing nested but not leaf values to
             #  be checked against
-            if key not in next_tensordict.keys(True, is_leaf=_is_leaf_nontensor):
+            if key not in next_tensordict.keys(True, is_leaf=is_leaf_nontensor):
                 prev_val = tensordict.get(key)
                 next_tensordict.set(key, prev_val)
         return next_tensordict
@@ -1044,12 +1044,13 @@ class StepCounter(Transform):
             terminated_key,
             reset_key,
             done_key,
-        ) in _zip_strict(
+        ) in zip(
             self.step_count_keys,
             self.truncated_keys,
             self.terminated_keys,
             self.reset_keys,
             self.done_keys,
+            strict=True,
         ):
             reset = tensordict.get(reset_key, default=None)
             if reset is None:
@@ -1092,8 +1093,8 @@ class StepCounter(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for step_count_key, truncated_key, done_key in _zip_strict(
-            self.step_count_keys, self.truncated_keys, self.done_keys
+        for step_count_key, truncated_key, done_key in zip(
+            self.step_count_keys, self.truncated_keys, self.done_keys, strict=True
         ):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
@@ -1845,7 +1846,7 @@ class InitTracker(Transform):
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
-        for reset_key, init_key in _zip_strict(self.reset_keys, self.init_keys):
+        for reset_key, init_key in zip(self.reset_keys, self.init_keys, strict=True):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
                 done_key = _replace_last(init_key, "done")

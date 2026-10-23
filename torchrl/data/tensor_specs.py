@@ -2573,10 +2573,37 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
                 mini = self.space.low.int()
             else:
                 mini = self.space.low
-            interval = maxi - mini
-            r = torch.rand(_size([*shape, *self._safe_shape]), device=interval.device)
-            r = interval * r
-            r = self.space.low + r
+            size = _size([*shape, *self._safe_shape])
+            if self.dtype.is_floating_point:
+                interval = maxi - mini
+                r = torch.rand(size, device=interval.device)
+                r = interval * r
+                r = self.space.low + r
+            else:
+                low = mini.to(torch.int64)
+                high = maxi.to(torch.int64)
+                on_mps = low.device.type == "mps"
+                if self.dtype == torch.int64:
+                    float_dtype = torch.float32 if on_mps else torch.float64
+                    span = high - low
+                    span = span.to(float_dtype) + (span < 0).to(float_dtype) * 2.0**64
+                    offset = torch.rand(size, dtype=float_dtype, device=low.device)
+                    offset = torch.minimum((offset * (span + 1)).floor(), span)
+                    from_low = offset <= span / 2
+                    step = torch.where(from_low, offset, span - offset)
+                    step = step.clamp(
+                        max=2.0**63 * (1 - torch.finfo(float_dtype).eps / 2)
+                    ).long()
+                    r = torch.where(from_low, low + step, high - step)
+                else:
+                    float_dtype = (
+                        torch.float64
+                        if self.dtype == torch.int32 and not on_mps
+                        else torch.float32
+                    )
+                    offset = torch.rand(size, dtype=float_dtype, device=low.device)
+                    offset = (offset * ((high - low).to(float_dtype) + 1)).long()
+                    r = torch.minimum(low + offset, high)
             if r.dtype != self.dtype:
                 r = r.to(self.dtype)
             if self.dtype is not None and r.device != self.device:
@@ -4105,7 +4132,7 @@ class Categorical(TensorSpec):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
-        return torch.nn.functional.one_hot(val, self.space.n).bool()
+        return torch.nn.functional.one_hot(val.to(torch.long), self.space.n).bool()
 
     def to_categorical(
         self, val: torch.Tensor, safe: bool | None = None
@@ -4896,10 +4923,32 @@ class MultiCategorical(Categorical):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
+        if val.ndim < 1:
+            val = val.unsqueeze(0)
+        nvec = self.nvec
+        if nvec.ndim > 1:
+            widths = nvec.flatten(0, -2)[0]
+            if (nvec != widths).any():
+                if val.ndim != self.ndim:
+                    raise RuntimeError(
+                        "Cannot create a nested tensor with a stack dimension other than 0. "
+                        f"Got a value of shape {val.shape} for a spec of shape {self.shape}."
+                    )
+                rows = [
+                    spec.to_one_hot(_val, safe=False)
+                    for spec, _val in zip(self.unbind(0), val.unbind(0))
+                ]
+                if any(row.is_nested for row in rows):
+                    raise RuntimeError(
+                        "Cannot create a nested tensor with a stack dimension other than 0. "
+                        "The rows of nvec differ beyond the first dim."
+                    )
+                return torch.nested.nested_tensor(rows)
+            nvec = widths
         return torch.cat(
             [
                 torch.nn.functional.one_hot(val[..., i], n).bool()
-                for i, n in enumerate(self.nvec)
+                for i, n in enumerate(nvec.tolist())
             ],
             -1,
         ).to(self.device)
@@ -6590,6 +6639,10 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
             for spec, v in zip(self._specs, torch.unbind(val, dim=self.dim)):
                 spec.assert_is_in(v)
         return {key: self[key].to_numpy(val) for key, val in val.items()}
+
+    def __contains__(self, key: NestedKey) -> bool:
+        key = unravel_key(key)
+        return key in self.keys(include_nested=isinstance(key, tuple))
 
     def __len__(self):
         return self.shape[0]
