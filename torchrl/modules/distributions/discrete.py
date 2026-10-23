@@ -312,13 +312,12 @@ class MaskedCategorical(D.Categorical):
 
         # Clamp logits to avoid numerical issues
         logits = self.logits
+        mask = ~logits.isfinite()
         if self._mask.dtype is torch.bool:
-            mask = expand_as_right(self._mask, logits)
-            mask = (~mask) | (~logits.isfinite())
-            logits = torch.masked_fill(logits, mask, min_real)
-        else:
-            # logits are already masked
-            pass
+            mask = mask | ~expand_as_right(self._mask, logits)
+        elif self._padding_value is not None:
+            mask = mask | (self._mask == self._padding_value)
+        logits = torch.masked_fill(logits, mask, min_real)
         logits = logits - logits.logsumexp(-1, keepdim=True)
 
         # Get probabilities and mask them
