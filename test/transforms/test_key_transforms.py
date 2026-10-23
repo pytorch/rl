@@ -37,6 +37,7 @@ from torchrl.envs import (
     Hash,
     RemoveEmptySpecs,
     RenameTransform,
+    RewardSum,
     SelectTransform,
     SerialEnv,
     Tokenizer,
@@ -300,6 +301,22 @@ class TestExcludeTransform(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("no inverse for ExcludeTransform")
+
+    def test_stateful_transform_after_inverse_exclude(self):
+        # The inverse exclusion removes the key from the data read by the _step of
+        # the next transforms, which would reset the RewardSum state at every step.
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(ExcludeTransform("episode_reward", inverse=True), RewardSum()),
+        )
+        with pytest.raises(ValueError, match="episode_reward"):
+            env.input_spec
+        # Excluding another key, or excluding on the way out, is fine
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(ExcludeTransform("observation_orig"), RewardSum()),
+        )
+        assert "episode_reward" in env.state_spec.keys(True, True)
 
 
 class TestSelectTransform(TransformBase):
@@ -869,6 +886,29 @@ class TestRenameTransform(TransformBase):
             assert "b" in tensordict.keys()
         else:
             assert "b" not in tensordict.keys()
+
+    def test_stateful_transform_after_inverse_rename(self, create_copy):
+        # Without a copy, the inverse pass renames "ep" back to "episode_reward"
+        # before the _step of the next transforms, which would reset the RewardSum
+        # state at every step. With a copy, "ep" is kept.
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(
+                RenameTransform(
+                    in_keys=[],
+                    out_keys=[],
+                    in_keys_inv=["episode_reward"],
+                    out_keys_inv=["ep"],
+                    create_copy=create_copy,
+                ),
+                RewardSum(in_keys=["reward"], out_keys=["ep"]),
+            ),
+        )
+        if create_copy:
+            assert "ep" in env.state_spec.keys(True, True)
+        else:
+            with pytest.raises(ValueError, match="ep"):
+                env.input_spec
 
     def test_rename_action(self, create_copy):
         base_env = ContinuousActionVecMockEnv()
