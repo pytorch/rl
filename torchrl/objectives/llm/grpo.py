@@ -21,6 +21,7 @@ from tensordict import (
     is_leaf_nontensor,
     is_tensor_collection,
     lazy_stack,
+    LazyStackedTensorDict,
     NestedKey,
     TensorClass,
     TensorDict,
@@ -1502,9 +1503,15 @@ class MCAdvantage(Transform):
             self.completed_groups += 1
             # Cat is the most robust way to combine the trajs
             tds = self._cat_tensordicts(trajs, -1)
-            # Collect rewards. Same-length trajectories concatenate into a
-            # regular strided tensor rather than a nested one.
-            reward = tds.get(self.rewards_key, as_nested_tensor=True)
+            # Collect rewards. Ragged trajectories concatenate into a lazy
+            # stack, whose rewards come out as a nested tensor. Same-length
+            # trajectories concatenate into a regular TensorDict, whose
+            # rewards must stay a regular tensor: from tensordict 0.17,
+            # as_nested_tensor=True returns a nested tensor there too.
+            if isinstance(tds, LazyStackedTensorDict):
+                reward = tds.get(self.rewards_key, as_nested_tensor=True)
+            else:
+                reward = tds.get(self.rewards_key)
             reward_values = reward.values() if reward.is_nested else reward
             reward_mean = reward_values.mean()
             reward_scale = reward_values.std()
