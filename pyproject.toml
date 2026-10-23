@@ -68,6 +68,10 @@ dev = [
 prerelease = "allow"
 conflicts = [
     [
+        { extra = "lerobot" },
+        { extra = "gym_continuous" },
+    ],
+    [
         { extra = "mjlab" },
         { extra = "genesis" },
     ],
@@ -99,6 +103,7 @@ notebook = ["jupyterlab"]
 # lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
 # recent torch), so the extra is empty on older interpreters
 vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
+lerobot = ["lerobot[dataset]>=0.6.1,<0.7; python_version >= '3.12'"]
 rendering = ["moviepy", "pygame", "pyyaml", "torchcodec>=0.10.0"]
 # Node.js runtime for the MuJoCo WASM viewer on machines without a system Node.
 mujoco_wasm = ["nodejs-wheel"]
