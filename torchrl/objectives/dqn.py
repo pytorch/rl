@@ -526,8 +526,14 @@ class DistributionalDQNLoss(LossModule):
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
 
-        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, 1)
-        discount = self.gamma**steps_to_next_obs
+        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
+        if steps_to_next_obs is None:
+            discount = self.gamma
+        else:
+            # MultiStep writes steps_to_next_obs without the trailing singleton
+            # dim of the reward: align them so that the discount broadcasts
+            # against the support the same way the reward does.
+            discount = self.gamma ** steps_to_next_obs.view_as(reward)
 
         # Calculate current state probabilities (online network noise already
         # sampled)
