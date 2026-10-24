@@ -179,7 +179,7 @@ transforms, behavior cloning, chunked execution, RL fine-tuning.
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7fe37b0ca3d0>
+    <torch._C.Generator object at 0x7f6d4c7cb290>
 
 
 
@@ -440,7 +440,7 @@ The behavior-cloning loss drops sharply as the policy fits the expert chunks:
  .. code-block:: none
 
 
-    (1.6689702272415161, 0.07800992578268051)
+    (1.6689702272415161, 0.07800987362861633)
 
 
 
@@ -748,7 +748,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.410 seconds)
+   **Total running time of the script:** (0 minutes 0.445 seconds)
 
 
 .. _sphx_glr_download_tutorials_vla.py:

@@ -115,7 +115,7 @@ The device of the tensorclass, or `None` if its leaves may be on different devic
 It is read-only: use [`to()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to move the
 tensorclass to another device.
 
-dumps(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
+dumps(*prefix: str | Path | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
 
 Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -1207,7 +1207,7 @@ by `prefix=<dir>` (see `memmap_like()`).
 HDF5 file given by `filename=<path>`.
 - `"zarr"`: a [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) in
 the zarr store given by `filename=<path or store>`
-(requires `zarr>=3.0`).
+(requires `zarr>=3.1.1`).
 - `"shared"`: tensors in shared memory (see
 [`share_memory_()`](torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.share_memory_)).
 - `"redis"` or `"dragonfly"`: a
@@ -1428,7 +1428,7 @@ from_zarr(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: 
 Opens a zarr store as a [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
 
 The data stays in the store: entries are read when they are accessed.
-Requires `zarr>=3.0`. See [Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving) and
+Requires `zarr>=3.1.1`. See [Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving) and
 [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
 
 Parameters:
@@ -1858,7 +1858,7 @@ Examples
 'LazyStackedTensorDict'
 ```
 
-memmap(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
+memmap(*prefix: str | Path | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
 
 Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
@@ -1996,7 +1996,7 @@ MemoryMappedTensor True
 ['meta.json', 'next', 'obs.memmap']
 ```
 
-memmap_(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *atomic: bool = False*) → Self
+memmap_(*prefix: str | Path | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *atomic: bool = False*) → Self
 
 Writes every leaf to a memory-mapped file in place, and returns `self`.
 
@@ -2106,7 +2106,7 @@ True True True
 MemoryMappedTensor
 ```
 
-memmap_like(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *existsok: bool = True*, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*) → Self
+memmap_like(*prefix: str | Path | None = None*, *copy_existing: bool = False*, ***, *existsok: bool = True*, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*) → Self
 
 Creates a memory-mapped tensordict with the same keys, shapes and dtypes, without copying the values.
 
@@ -2321,7 +2321,7 @@ Examples
 tensor([1., 1., 1.])
 ```
 
-save(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
+save(*prefix: str | Path | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*, *atomic: bool = False*) → Self
 
 Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
