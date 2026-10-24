@@ -61,6 +61,7 @@ from torchrl.testing import (  # noqa
 )
 from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
     CountingEnv,
     CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
@@ -639,6 +640,37 @@ class TestCatFrames(TransformBase):
         #
         # _ = cat_frames._call(tdc)
         assert (buffer != 0).all()
+
+    @pytest.mark.parametrize("batch_size", [(6,), (2, 3)])
+    def test_catframes_partial_reset(self, batch_size):
+        # each sub-env is done after a different number of steps, so the rollout
+        # goes through partial resets
+        max_steps = torch.arange(1, 7).view(batch_size)
+        env = TransformedEnv(
+            CountingBatchedEnv(max_steps=max_steps, batch_size=batch_size),
+            CatFrames(N=3, dim=-1, in_keys=["observation"]),
+        )
+        n_steps = 10
+        rollout = env.rollout(
+            n_steps,
+            lambda td: td.set("action", env.full_action_spec["action"].one()),
+            break_when_any_done=False,
+        )
+        # with an increment of 1, the count is reset to 0 after max_steps + 1
+        # steps, and the frames before a reset are padded with the reset value 0
+        t = torch.arange(n_steps).view(n_steps, *[1] * len(batch_size))
+        count = t % (max_steps + 1)
+        frames = torch.arange(-2, 1)
+        expected = (count.unsqueeze(-1) + frames).clamp_min(0)
+        expected_next = (count.unsqueeze(-1) + 1 + frames).clamp_min(0)
+        assert rollout.shape == (*batch_size, n_steps)
+        torch.testing.assert_close(
+            rollout["observation"].movedim(-2, 0).to(torch.int64), expected
+        )
+        torch.testing.assert_close(
+            rollout["next", "observation"].movedim(-2, 0).to(torch.int64),
+            expected_next,
+        )
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for CatFrames")
