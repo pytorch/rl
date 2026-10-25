@@ -33,8 +33,9 @@ check the [TorchRL paper](https://arxiv.org/abs/2306.00577).
 # Installation
 
 TorchRL releases are synced with PyTorch, so make sure you always enjoy the latest
-features of the library with the [most recent version of PyTorch](https://pytorch.org/get-started/locally/) (although core features
-are guaranteed to be backward compatible with pytorch>=2.0).
+features of the library with the [most recent version of PyTorch](https://pytorch.org/get-started/locally/).
+TorchRL requires pytorch>=2.11. Support for pytorch 2.11 and 2.12 is deprecated
+and will be removed in v0.17, after which pytorch>=2.13 is required.
 Nightly releases can be installed via
 
 ```

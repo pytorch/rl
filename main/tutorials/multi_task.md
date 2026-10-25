@@ -365,7 +365,7 @@ env.close()
 del env
 ```
 
-**Total running time of the script:** (0 minutes 4.401 seconds)
+**Total running time of the script:** (0 minutes 4.558 seconds)
 
 [`Download Jupyter notebook: multi_task.ipynb`](../_downloads/9b5fe5a65e76c28e02edf59221b0dc86/multi_task.ipynb)
 

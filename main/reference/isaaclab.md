@@ -1,8 +1,11 @@
 # IsaacLab Integration
 
 This guide covers how to use TorchRL components with
-[IsaacLab](https://isaac-sim.github.io/IsaacLab/v2.3.0/)
+[IsaacLab](https://isaac-sim.github.io/IsaacLab/v3.0.0/)
 (NVIDIA's GPU-accelerated robotics simulation platform).
+
+TorchRL is tested against Isaac Lab 3.0. Isaac Lab 2.x ships torch 2.7,
+which is below the torch version TorchRL requires.
 
 For general IsaacLab installation and cluster setup (not specific to TorchRL), see the
 [knowledge_base/ISAACLAB.md](https://github.com/pytorch/rl/blob/main/knowledge_base/ISAACLAB.md) file.
@@ -10,21 +13,42 @@ For general IsaacLab installation and cluster setup (not specific to TorchRL), s
 ## IsaacLabWrapper
 
 Use [`IsaacLabWrapper`](generated/torchrl.envs.IsaacLabWrapper.html#torchrl.envs.IsaacLabWrapper) to wrap a gymnasium
-IsaacLab environment into a TorchRL-compatible [`EnvBase`](generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase):
+IsaacLab environment into a TorchRL-compatible [`EnvBase`](generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase).
+Isaac Lab 3.0 resolves the task config first, then starts only the simulation
+runtime that config needs with `launch_simulation`; the environment must be
+built and used inside that context:
 
 ```
+import argparse
+
 import gymnasium as gym
+import isaaclab_tasks # noqa: F401
+from isaaclab.app import add_launcher_args, launch_simulation
+from isaaclab_tasks.utils import resolve_task_config
 from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
-env = gym.make("Isaac-Ant-v0", cfg=env_cfg)
-env = IsaacLabWrapper(env)
+parser = argparse.ArgumentParser()
+add_launcher_args(parser)
+args_cli, _ = parser.parse_known_args([])
+
+env_cfg, _ = resolve_task_config("Isaac-Ant", None, overrides=[])
+env_cfg.scene.num_envs = 64
+with launch_simulation(env_cfg, args_cli):
+ env = IsaacLabWrapper(gym.make("Isaac-Ant", cfg=env_cfg))
+ rollout = env.rollout(10) # shape: (64, 10)
 ```
+
+Isaac Lab 3.0 registers its tasks without the `-v0` suffix (`Isaac-Ant`,
+`Isaac-Cartpole-Direct`) and the core tasks run on Newton physics by default,
+so no Isaac Sim installation is needed. Another backend is selected with a
+Hydra override of the task config, e.g. `overrides=["physics=ovphysx"]`.
 
 Key defaults:
 
 - `device=cuda:0`
 - `allow_done_after_reset=True` (IsaacLab can report done immediately after reset)
-- `convert_actions_to_numpy=False` (actions stay as tensors)
+- `convert_actions_to_numpy=False` (actions stay as tensors, detached from
+the autograd graph before they reach the simulator)
 
 Note
 
@@ -45,55 +69,44 @@ unsqueezes to `(num_envs, 1)` for TorchRL compatibility.
 ### Headless camera rendering
 
 For headless RGB capture, prefer IsaacLab tiled cameras over viewport
-rendering. Add a tiled camera to the IsaacLab config before instantiating the
-environment, launch IsaacLab with cameras enabled, then ask
-`IsaacLabWrapper` to read the camera sensor into the TensorDict:
+rendering. Add a tiled camera to the IsaacLab config before launching the
+simulation, then ask `IsaacLabWrapper` to read the camera sensor into the
+TensorDict. The Newton Warp renderer runs without Isaac Sim:
 
 ```
 import argparse
+
 import gymnasium as gym
-import torch
-from isaaclab.app import AppLauncher
-from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+import isaaclab_tasks # noqa: F401
+from isaaclab.app import add_launcher_args, launch_simulation
+from isaaclab_tasks.utils import resolve_task_config
 from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
 parser = argparse.ArgumentParser()
-AppLauncher.add_app_launcher_args(parser)
-args, _ = parser.parse_known_args([
- "--headless",
- "--enable_cameras",
- "--rendering_mode",
- "performance",
- "--device",
- "cuda:0",
-])
-app = AppLauncher(args).app
+add_launcher_args(parser)
+args_cli, _ = parser.parse_known_args([])
 
-cfg = IsaacLabWrapper.add_tiled_camera_config(
- AntEnvCfg(),
+env_cfg, _ = resolve_task_config("Isaac-Ant", None, overrides=[])
+env_cfg.scene.num_envs = 4
+env_cfg = IsaacLabWrapper.add_tiled_camera_config(
+ env_cfg,
+ renderer_backend="newton_warp",
  width=320,
  height=240,
- pos=(-7.0, 0.0, 3.0),
- rot=(0.9945, 0.0, 0.1045, 0.0),
 )
-env = gym.make("Isaac-Ant-v0", cfg=cfg)
-env = IsaacLabWrapper(env, from_tiled_camera=True, device=torch.device("cuda:0"))
-
-td = env.reset()
-pixels = td["pixels"] # shape: (num_envs, height, width, 3)
+with launch_simulation(env_cfg, args_cli):
+ env = IsaacLabWrapper(gym.make("Isaac-Ant", cfg=env_cfg), from_tiled_camera=True)
+ td = env.reset()
+ pixels = td["pixels"] # shape: (4, 240, 320, 3), dtype: torch.uint8
 ```
 
-The helper also exposes Isaac Lab's renderer selection directly. For example,
-on Isaac Lab versions with the pluggable renderer stack installed, use the
-Newton Warp renderer when RTX rendering is not available:
+Without `renderer_backend`, the camera uses Isaac Lab's default RTX
+renderer, for which `launch_simulation` starts Isaac Sim and enables cameras
+itself; this requires an Isaac Sim installation.
 
-```
-cfg = IsaacLabWrapper.add_tiled_camera_config(
- AntEnvCfg(),
- renderer_backend="newton_warp",
- data_type="rgb",
-)
-```
+The camera `rot` offset is a quaternion in the convention of the installed
+Isaac Lab: `(x, y, z, w)` on 3.x, `(w, x, y, z)` on 2.x. The default view,
+behind the robot and pitched down, is converted to the right convention.
 
 #### Cluster rendering dependencies
 
