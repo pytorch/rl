@@ -127,30 +127,30 @@ class IsaacLabWrapper(GymWrapper):
         kwarg is simpler and keeps simulator state out of the data path.
 
     Example:
-        >>> # This code block ensures that the Isaac app is started in headless mode
-        >>> from isaaclab.app import AppLauncher
         >>> import argparse
-
-        >>> parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
-        >>> AppLauncher.add_app_launcher_args(parser)
-        >>> args_cli, hydra_args = parser.parse_known_args(["--headless"])
-        >>> app_launcher = AppLauncher(args_cli)
-
-        >>> # Imports and env
         >>> import gymnasium as gym
-        >>> import isaaclab_tasks  # noqa: F401
-        >>> from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+        >>> import isaaclab_tasks  # noqa: F401  # doctest: +SKIP
+        >>> from isaaclab.app import add_launcher_args, launch_simulation  # doctest: +SKIP
+        >>> from isaaclab_tasks.utils import resolve_task_config  # doctest: +SKIP
         >>> from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+        >>> parser = argparse.ArgumentParser()
+        >>> add_launcher_args(parser)  # doctest: +SKIP
+        >>> args_cli, _ = parser.parse_known_args([])
+        >>> env_cfg, _ = resolve_task_config("Isaac-Ant", None, overrides=[])  # doctest: +SKIP
+        >>> env_cfg.scene.num_envs = 64  # doctest: +SKIP
+        >>> with launch_simulation(env_cfg, args_cli):  # doctest: +SKIP
+        ...     env = IsaacLabWrapper(gym.make("Isaac-Ant", cfg=env_cfg))
+        ...     rollout = env.rollout(10)
+        >>> rollout.shape  # doctest: +SKIP
+        torch.Size([64, 10])
 
-        >>> env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
-        >>> env = IsaacLabWrapper(env)
-
-    .. note:: With Isaac Lab 3.x, the ``AppLauncher`` boilerplate above is
-        replaced by the ``isaaclab_tasks.utils`` helpers
-        (``add_launcher_args``, ``launch_simulation``,
-        ``resolve_task_config``), and the physics backend is selected through
-        a Hydra-style preset override such as ``physics=newton_mjwarp`` or
-        ``physics=ovphysx``. The wrapper itself supports both versions.
+    .. note:: The example uses the Isaac Lab 3.x launch API, where
+        ``launch_simulation`` starts only the runtime the task config needs and
+        the physics backend is a Hydra override such as
+        ``overrides=["physics=ovphysx"]``. Isaac Lab 2.x starts the app with
+        ``isaaclab.app.AppLauncher`` before ``gym.make`` and registers tasks
+        with a ``-v0`` suffix (``Isaac-Ant-v0``). The wrapper supports both
+        versions.
 
     """
 
@@ -245,9 +245,11 @@ class IsaacLabWrapper(GymWrapper):
             The mutated ``env_cfg``.
 
         Examples:
-            >>> from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+            >>> from isaaclab_tasks.core.locomotion.ant.ant_manager_env_cfg import AntEnvCfg  # doctest: +SKIP
             >>> from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
-            >>> cfg = IsaacLabWrapper.add_tiled_camera_config(AntEnvCfg())
+            >>> cfg = IsaacLabWrapper.add_tiled_camera_config(  # doctest: +SKIP
+            ...     AntEnvCfg(), renderer_backend="newton_warp"
+            ... )
         """
         if not _has_isaaclab:
             raise ImportError("Isaac Lab is required to add a tiled camera config.")
