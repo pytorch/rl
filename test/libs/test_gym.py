@@ -15,7 +15,6 @@ import pytest
 import torch
 from packaging import version
 from tensordict import assert_allclose_td, TensorDict
-from tensordict.nn import TensorDictModule
 
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.collectors import Collector
@@ -2003,36 +2002,6 @@ class TestGym:
             assert env.env_name == env_name
         finally:
             env.close()
-
-    @pytest.mark.skipif(not _has_gymnasium, reason="gymnasium not found")
-    def test_tensor_actions_are_detached(self):
-        """With convert_actions_to_numpy=False the env receives actions without autograd history.
-
-        Torch-native simulators such as Isaac Lab 3.0 hand actions to Warp,
-        which rejects tensors that require grad, as ``Tensor.numpy`` does here.
-        """
-        with set_gym_backend("gymnasium"):
-            gym = gym_backend()
-
-            class TensorActionEnv(gym.Env):
-                observation_space = gym.spaces.Box(-1.0, 1.0, (2,), np.float32)
-                action_space = gym.spaces.Box(-1.0, 1.0, (2,), np.float32)
-
-                def reset(self, *, seed=None, options=None):
-                    return np.zeros(2, np.float32), {}
-
-                def step(self, action):
-                    return action.numpy(), 0.0, False, False, {}
-
-            env = GymWrapper(TensorActionEnv(), convert_actions_to_numpy=False)
-            policy = TensorDictModule(
-                torch.nn.Linear(2, 2), in_keys=["observation"], out_keys=["action"]
-            )
-            rollout = env.rollout(3, policy)
-        assert rollout["action"].requires_grad
-        torch.testing.assert_close(
-            rollout["next", "observation"], rollout["action"].detach()
-        )
 
 
 @pytest.mark.skipif(

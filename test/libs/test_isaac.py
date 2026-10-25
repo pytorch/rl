@@ -1039,6 +1039,7 @@ class TestIsaacLab:
 
         # Verify rollout works with the LSTM policy
         rollout = test_env.rollout(10, policy=policy, break_when_any_done=False)
+        assert rollout["action"].requires_grad
         assert rollout.shape[0] == env.batch_size[0]
         assert rollout.shape[1] == 10
         # Verify recurrent states are carried through the rollout

@@ -401,6 +401,15 @@ class IsaacLabWrapper(GymWrapper):
             info,
         )
 
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Steps the env with the actions detached from the autograd graph.
+
+        Isaac Lab 3.x hands the action tensor to Warp, which rejects tensors
+        that require grad, so a policy whose output requires grad could not
+        step the env.
+        """
+        return super()._step(tensordict.detach())
+
     # ------------------------------------------------------------------
     # Isaac Lab env detection
     # ------------------------------------------------------------------
