@@ -199,28 +199,21 @@ def _assert_rollouts_match(rollout, other):
 
     Newton physics (Isaac Lab 3.x) is not bitwise reproducible across
     processes: observations of identically seeded rollouts differ by up to
-    about 1.5e-4, so only they are compared with a 1e-3 tolerance, far below
-    the error of a wrong reset. Rewards keep the 1e-6 tolerance, and actions
-    and done flags, as well as the positions of the NaN terminal observations,
-    must match exactly.
+    about 1.5e-4, and rewards, computed from the same physics state, by up to
+    about 6.5e-5. Both are compared with a 1e-3 tolerance, far below the error
+    of a wrong reset. Actions and done flags, as well as the positions of the
+    NaN terminal observations, must match exactly.
     """
-    observation_keys = ["policy", ("next", "policy")]
-    reward_keys = [("next", "reward")]
+    physics_keys = ["policy", ("next", "policy"), ("next", "reward")]
     assert_allclose_td(
-        rollout.select(*observation_keys, strict=False),
-        other.select(*observation_keys, strict=False),
+        rollout.select(*physics_keys, strict=False),
+        other.select(*physics_keys, strict=False),
         rtol=1e-3,
         atol=1e-3,
     )
     assert_allclose_td(
-        rollout.select(*reward_keys, strict=False),
-        other.select(*reward_keys, strict=False),
-        rtol=1e-6,
-        atol=1e-6,
-    )
-    assert_allclose_td(
-        rollout.exclude(*observation_keys, *reward_keys),
-        other.exclude(*observation_keys, *reward_keys),
+        rollout.exclude(*physics_keys),
+        other.exclude(*physics_keys),
         rtol=0,
         atol=0,
     )
