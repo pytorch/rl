@@ -181,7 +181,7 @@ uv pip install --no-progress \
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install --no-progress --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
+  uv pip install --no-progress --no-deps git+https://github.com/pytorch/tensordict.git
 else
   uv pip install --no-progress --no-deps tensordict
 fi
