@@ -37,10 +37,9 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    conda install pytorch==2.1 torchvision==0.16 cpuonly -c pytorch -y
+    python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cpu
 else
-    python -m pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118
-#    conda install pytorch==2.1 torchvision==0.16 pytorch-cuda=11.8 "numpy<2.0" -c pytorch -c nvidia -y
+    python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url "https://download.pytorch.org/whl/${CU_VERSION}"
 fi
 
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
@@ -54,15 +53,14 @@ if [[ "$RELEASE" == 0 ]]; then
   python -m pip install --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
   python -m pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
-  python -m pip install --no-deps tensordict
+  python -m pip install --no-deps "tensordict>=0.14.2,<0.15.0"
 fi
 
 # smoke test
 python -c "import tensordict; print(f'tensordict: {tensordict.__version__}')"
 
-# torch 2.1 uses `from pkg_resources import packaging` in cpp_extension.py;
-# setuptools>=82 removed pkg_resources entirely.
-python -m pip install "setuptools<82"
+printf "* Installing hoptorch\n"
+python -m pip install "hoptorch>=0.1.4"
 
 printf "* Installing torchrl\n"
 python -m pip install -e . --no-build-isolation --no-deps

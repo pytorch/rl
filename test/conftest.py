@@ -18,6 +18,7 @@ import numpy as np
 
 import pytest
 import torch
+from tensordict.nn import set_interaction_type
 
 # Note: torchrl is imported lazily inside fixtures because this conftest must
 # load even when torchrl is not installed (see test/test_setup.py and the
@@ -75,6 +76,19 @@ def measure_duration(request: pytest.FixtureRequest):
         CALL_TIMES[name] = CALL_TIMES[name] + duration
 
     request.addfinalizer(fin)
+
+
+@pytest.fixture(autouse=True)
+def reset_interaction_type():
+    """Run every test from tensordict's default interaction type.
+
+    Background threads (evaluators, inference servers) enter and exit
+    ``set_interaction_type`` contexts on one process-wide value, and
+    interleaved exits can leave a stale mode that silently disables
+    exploration in later tests run by the same process.
+    """
+    with set_interaction_type(None):
+        yield
 
 
 @pytest.fixture(autouse=True)

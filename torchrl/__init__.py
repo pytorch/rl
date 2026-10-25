@@ -61,6 +61,7 @@ _init_extension()
 from torchrl._comm.backends import service_backend, transport_backend  # noqa: E402
 from torchrl._utils import (  # noqa: E402
     _get_default_mp_start_method,
+    _warn_if_torch_deprecated,
     auto_unwrap_transformed_env,
     compile_with_warmup,
     cuda_memory_profile,
@@ -74,6 +75,8 @@ from torchrl._utils import (  # noqa: E402
     set_profiling_enabled,
     timeit,
 )
+
+_warn_if_torch_deprecated()
 
 logger = logger
 torchrl_logger = logger

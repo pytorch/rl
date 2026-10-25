@@ -38,7 +38,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.1.0",
+    "torch>=2.11.0a0",
     "pyvers>=0.2.3",
     "hoptorch>=0.1.4",
     "numpy",
@@ -92,7 +92,7 @@ requires-dist = ["datasets", "huggingface-hub", "av", "jsonlines", "packaging"]
 [project.optional-dependencies]
 atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
-replay_buffer = ["torch>=2.7.0"]
+replay_buffer = []
 gym_continuous = ["gymnasium<1.0", "mujoco"]
 video = ["torchcodec>=0.10.0"]
 notebook = ["jupyterlab"]
