@@ -111,6 +111,10 @@ Without ``renderer_backend``, the camera uses Isaac Lab's default RTX
 renderer, for which ``launch_simulation`` starts Isaac Sim and enables cameras
 itself; this requires an Isaac Sim installation.
 
+The camera ``rot`` offset is a quaternion in the convention of the installed
+Isaac Lab: ``(x, y, z, w)`` on 3.x, ``(w, x, y, z)`` on 2.x. The default view,
+behind the robot and pitched down, is converted to the right convention.
+
 Cluster rendering dependencies
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

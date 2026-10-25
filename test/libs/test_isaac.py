@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import itertools
+import math
 import os
 import queue as queue_lib
 import sys
@@ -435,6 +436,29 @@ def test_isaaclab_data_to_torch():
     assert dlpack_out.data_ptr() == tensor.data_ptr()
     torch.testing.assert_close(
         isaac_lab_lib._isaac_data_to_torch([[1.0, 2.0]]), torch.tensor([[1.0, 2.0]])
+    )
+
+
+@pytest.mark.skipif(not _has_isaaclab, reason="Isaaclab not found")
+def test_isaaclab_tiled_camera_default_view_pitches_down():
+    """The default camera looks forward and 12 degrees down on any Isaac Lab version.
+
+    Isaac Lab 3.x writes quaternions as ``(x, y, z, w)`` and 2.x as
+    ``(w, x, y, z)``; Isaac Lab's own ``quat_apply`` reads the installed one.
+    """
+    from isaaclab.utils.math import quat_apply
+
+    env_cfg = IsaacLabWrapper.add_tiled_camera_config(
+        types.SimpleNamespace(scene=types.SimpleNamespace())
+    )
+    rot = torch.tensor(env_cfg.scene.tiled_camera.offset.rot)
+    forward = quat_apply(rot, torch.tensor([1.0, 0.0, 0.0]))
+    pitch = math.radians(12.0)
+    torch.testing.assert_close(
+        forward,
+        torch.tensor([math.cos(pitch), 0.0, -math.sin(pitch)]),
+        rtol=0,
+        atol=1e-3,
     )
 
 

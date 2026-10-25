@@ -199,7 +199,7 @@ class IsaacLabWrapper(GymWrapper):
         width: int = 320,
         height: int = 240,
         pos: tuple[float, float, float] = (-7.0, 0.0, 3.0),
-        rot: tuple[float, float, float, float] = (0.9945, 0.0, 0.1045, 0.0),
+        rot: tuple[float, float, float, float] | None = None,
         convention: Literal["opengl", "ros", "world"] = "world",
         focal_length: float = 24.0,
         focus_distance: float = 400.0,
@@ -230,7 +230,11 @@ class IsaacLabWrapper(GymWrapper):
             width (int, optional): Camera image width. Defaults to ``320``.
             height (int, optional): Camera image height. Defaults to ``240``.
             pos (tuple of float, optional): Camera position offset.
-            rot (tuple of float, optional): Camera orientation offset.
+            rot (tuple of float, optional): Camera orientation offset, as a
+                quaternion in the convention of the installed Isaac Lab:
+                ``(x, y, z, w)`` on 3.x, ``(w, x, y, z)`` on 2.x. Defaults to
+                ``None``, which pitches the camera down by 12 degrees,
+                written in the installed convention.
             convention (str, optional): Orientation convention. Defaults to
                 ``"world"``.
             focal_length (float, optional): Pinhole camera focal length.
@@ -278,6 +282,13 @@ class IsaacLabWrapper(GymWrapper):
 
             renderer_cfg = OVRTXRendererCfg()
 
+        if rot is None:
+            scalar_last = TiledCameraCfg.OffsetCfg().rot[-1] == 1.0
+            rot = (
+                (0.0, 0.1045, 0.0, 0.9945)
+                if scalar_last
+                else (0.9945, 0.0, 0.1045, 0.0)
+            )
         camera_kwargs = {}
         if renderer_cfg is not None:
             camera_kwargs["renderer_cfg"] = renderer_cfg
