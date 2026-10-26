@@ -128,6 +128,7 @@ jobs:
         GH_EVENT_NAME="${{ github.event_name }}"
         GH_REF_TYPE="${{ github.ref_type }}"
         GH_REF_NAME="${{ github.ref_name }}"
+        GH_PR_HEAD_REPO="${{ github.event.pull_request.head.repo.full_name }}"
         gallery_cache_key=$(
           {
             sha256sum docs/source/conf.py docs/requirements.txt
@@ -202,7 +203,7 @@ jobs:
         # Note: previously written as `if [[ ${{ github.event_name == 'pull_request' }} ]]`,
         # which renders to `[[ true ]]` / `[[ false ]]` -- both truthy -- so
         # the copy ran on every event.
-        if [[ "${GH_EVENT_NAME}" == "pull_request" ]]; then
+        if [[ "${GH_EVENT_NAME}" == "pull_request" && "${GH_PR_HEAD_REPO}" == "${{ github.repository }}" ]]; then
           cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
         fi
 
