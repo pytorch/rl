@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-10-25
+# Flaky Test Report - 2026-10-26
 
 ## Summary
 
-- **Flaky tests**: 5736
+- **Flaky tests**: 5780
 - **Newly flaky** (last 7 days): 2
 - **Resolved**: 0
-- **Total tests analyzed**: 32760
+- **Total tests analyzed**: 32765
 - **CI runs analyzed**: 60
 
 ---
@@ -14,32 +14,32 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...ce[tensor-LazyMemmapStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...torage_device[tensor-LazyMemmapStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...ce[tensor-LazyTensorStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...torage_device[tensor-LazyTensorStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...device[tc-LazyMemmapStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...st_storage_device[tc-LazyMemmapStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...device[tc-LazyTensorStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...st_storage_device[tc-LazyTensorStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...device[td-LazyMemmapStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...st_storage_device[td-LazyMemmapStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...device[td-LazyTensorStorage-device_data0-device_storage0]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...st_storage_device[td-LazyTensorStorage-device_data3-auto]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...prioritized_memmap_cuda_sampler_after_multiprocess_writes` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...StorageExport::test_device_storage[cuda-ListStorage-True]` 🆕 | 20.0% (5/25) | 5 | 0.40 | 2026-10-24 |
-| `...erGeneration::test_generation_cuda_data_into_cuda_storage` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `test/test_checkpoint.py::test_cuda_map_location_and_rng` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...custom_envs.py::TestCustomEnvs::test_financial_env_device` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...st_trainer.py::test_fql_update_matches_recipe[False-cuda]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...est_trainer.py::test_fql_update_matches_recipe[True-cuda]` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
-| `...ict_prioritized_replay_buffer_memmap_storage_cuda_sampler` | 20.0% (15/75) | 15 | 0.40 | 2026-10-24 |
+| `test/objectives/test_dt.py::TestOnlineDT::test_odt[device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...bjectives/test_dt.py::TestOnlineDT::test_seq_odt[device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `test/objectives/test_dt.py::TestDT::test_dt[device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `test/objectives/test_dt.py::TestDT::test_seq_dt[device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...ectives/test_dt.py::TestGAIL::test_gail[0.1-True-device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...ctives/test_dt.py::TestGAIL::test_gail[0.1-False-device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...ectives/test_dt.py::TestGAIL::test_gail[1.0-True-device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...ctives/test_dt.py::TestGAIL::test_gail[1.0-False-device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...ves/test_dt.py::TestGAIL::test_seq_gail[0.1-True-device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...es/test_dt.py::TestGAIL::test_seq_gail[0.1-False-device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...ves/test_dt.py::TestGAIL::test_seq_gail[1.0-True-device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...es/test_dt.py::TestGAIL::test_seq_gail[1.0-False-device1]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...omposite::test_device_cast[dest1-shape0-dtype0-None-True]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...mposite::test_device_cast[dest1-shape0-dtype0-None-False]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...osite::test_device_cast[dest1-shape0-dtype0-device1-True]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...site::test_device_cast[dest1-shape0-dtype0-device1-False]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...omposite::test_device_cast[dest1-shape0-dtype1-None-True]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...mposite::test_device_cast[dest1-shape0-dtype1-None-False]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...osite::test_device_cast[dest1-shape0-dtype1-device1-True]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
+| `...site::test_device_cast[dest1-shape0-dtype1-device1-False]` | 80.0% (12/15) | 12 | 0.40 | 2026-10-24 |
 
 
 ### Newly Flaky Tests
 
 - `test/rb/test_storages.py::TestStorageExport::test_device_storage[cuda-ListStorage-True]`
-- `test/objectives/test_transitive_q.py::TestTransitiveQLoss::test_compile_matches_eager`
+- `test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cuda-autocast]`
 
 ---
 
@@ -52,4 +52,4 @@
 
 ---
 
-*Generated at 2026-10-25T06:28:28.911271+00:00*
+*Generated at 2026-10-26T06:31:15.304577+00:00*
