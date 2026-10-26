@@ -17,6 +17,7 @@ the tensors.
 will be squeezed. Defaults to `True`.
 - **mask** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**None*) - mask some of the possible outcomes when a
 sample is taken. See `update_mask()` for more information.
+The mask stays boolean when the spec is cast to another dtype.
 
 Examples
 
