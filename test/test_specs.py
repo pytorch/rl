@@ -2453,10 +2453,29 @@ class TestTo:
             shape1 = (3,)
         else:
             shape1 = (*shape1, 3)
+        mask = torch.zeros(15, dtype=torch.bool)
+        mask[[1, 6, 12]] = True
         spec = MultiCategorical(
-            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+            nvec=(4, 5, 6),
+            shape=shape1,
+            device="cpu",
+            dtype=torch.long,
+            mask=mask,
         )
-        assert spec.to(device).device == device
+        spec = spec.to(device)
+        assert spec.device == device
+
+        converted = spec.to(torch.int32)
+        assert converted.dtype == torch.int32
+        assert converted.mask.dtype == torch.bool
+        torch.testing.assert_close(
+            converted.mask, mask.to(device).expand_as(converted.mask)
+        )
+        sample = converted.rand()
+        expected = torch.tensor([1, 2, 3], dtype=torch.int32, device=device)
+        torch.testing.assert_close(sample, expected.expand_as(sample))
+        assert spec.dtype == torch.long
+        torch.testing.assert_close(spec.mask, mask.to(device).expand_as(spec.mask))
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_multionehot(self, shape1, device):
@@ -2464,30 +2483,33 @@ class TestTo:
             shape1 = (15,)
         else:
             shape1 = (*shape1, 15)
-        spec = MultiOneHot(nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long)
-        assert spec.to(device).device == device
-
-    @pytest.mark.parametrize(
-        "spec_cls,expected",
-        [
-            (MultiCategorical, [1, 0]),
-            (MultiOneHot, [0, 1, 0, 1, 0]),
-        ],
-    )
-    def test_multi_masked_dtype(self, spec_cls, expected, device):
-        mask = torch.tensor([False, True, False, True, False], device=device)
-        spec = spec_cls([3, 2], device=device, mask=mask)
+        mask = torch.zeros(15, dtype=torch.bool)
+        mask[[1, 6, 12]] = True
+        spec = MultiOneHot(
+            nvec=(4, 5, 6),
+            shape=shape1,
+            device="cpu",
+            dtype=torch.long,
+            mask=mask,
+        )
+        spec = spec.to(device)
+        assert spec.device == device
 
         converted = spec.to(torch.int32)
         assert converted.dtype == torch.int32
         assert converted.mask.dtype == torch.bool
-        torch.testing.assert_close(converted.mask, mask)
-        sample = converted.rand((2, 3))
-        expected = torch.tensor(expected, dtype=torch.int32, device=device)
-        torch.testing.assert_close(sample, expected.expand(2, 3, -1))
-        assert converted.is_in(sample)
-        assert spec.dtype != converted.dtype
-        torch.testing.assert_close(spec.mask, mask)
+        torch.testing.assert_close(
+            converted.mask, mask.to(device).expand_as(converted.mask)
+        )
+        sample = converted.rand()
+        expected = torch.tensor(
+            [0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0],
+            dtype=torch.int32,
+            device=device,
+        )
+        torch.testing.assert_close(sample, expected.expand_as(sample))
+        assert spec.dtype == torch.long
+        torch.testing.assert_close(spec.mask, mask.to(device).expand_as(spec.mask))
 
     def test_non_tensor(self, device):
         spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
