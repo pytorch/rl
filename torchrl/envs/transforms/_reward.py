@@ -267,15 +267,41 @@ class RewardClipping(Transform):
     """Clips the reward between `clamp_min` and `clamp_max`.
 
     Args:
-        clip_min (scalar): minimum value of the resulting reward.
-        clip_max (scalar): maximum value of the resulting reward.
+        clamp_min (float or torch.Tensor, optional): minimum value of the
+            resulting reward. If ``None``, the reward is not bounded from below.
+            Defaults to ``None``.
+        clamp_max (float or torch.Tensor, optional): maximum value of the
+            resulting reward. If ``None``, the reward is not bounded from above.
+            Defaults to ``None``.
+        in_keys (sequence of NestedKey, optional): the reward entries to clip.
+            Defaults to ``["reward"]``.
+        out_keys (sequence of NestedKey, optional): the entries where the
+            clipped rewards are written. Defaults to ``in_keys``.
+
+    At least one of ``clamp_min`` and ``clamp_max`` must be provided. When only
+    one bound is given, the transformed reward spec is bounded by that value on
+    one side and by the most extreme value of the reward dtype on the other.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs import GymEnv, RewardClipping, TransformedEnv
+        >>> t = RewardClipping(clamp_max=1.0)
+        >>> td = TensorDict(reward=torch.tensor([[-3.0], [0.5], [2.0]]), batch_size=[3])
+        >>> t(td)["reward"].squeeze(-1)
+        tensor([-3.0000,  0.5000,  1.0000])
+        >>> env = TransformedEnv(GymEnv("Pendulum-v1"), RewardClipping(clamp_min=-1.0))
+        >>> env.reward_spec.space.low
+        tensor([-1.])
+        >>> rollout = env.rollout(10)
+        >>> assert (rollout["next", "reward"] >= -1.0).all()
 
     """
 
     def __init__(
         self,
-        clamp_min: float | None = None,
-        clamp_max: float | None = None,
+        clamp_min: float | Tensor | None = None,
+        clamp_max: float | Tensor | None = None,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ):
@@ -284,14 +310,16 @@ class RewardClipping(Transform):
         if out_keys is None:
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
-        clamp_min_tensor = (
-            clamp_min if isinstance(clamp_min, Tensor) else torch.as_tensor(clamp_min)
-        )
-        clamp_max_tensor = (
-            clamp_max if isinstance(clamp_max, Tensor) else torch.as_tensor(clamp_max)
-        )
-        self.register_buffer("clamp_min", clamp_min_tensor)
-        self.register_buffer("clamp_max", clamp_max_tensor)
+        if clamp_min is None and clamp_max is None:
+            raise TypeError(
+                "At least one of `clamp_min` and `clamp_max` must be provided."
+            )
+        if clamp_min is not None and not isinstance(clamp_min, Tensor):
+            clamp_min = torch.as_tensor(clamp_min)
+        if clamp_max is not None and not isinstance(clamp_max, Tensor):
+            clamp_max = torch.as_tensor(clamp_max)
+        self.register_buffer("clamp_min", clamp_min)
+        self.register_buffer("clamp_max", clamp_max)
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
         if self.clamp_max is not None and self.clamp_min is not None:
@@ -305,9 +333,14 @@ class RewardClipping(Transform):
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if isinstance(reward_spec, Unbounded):
+            dtype_info = (
+                torch.finfo(reward_spec.dtype)
+                if reward_spec.dtype.is_floating_point
+                else torch.iinfo(reward_spec.dtype)
+            )
             return Bounded(
-                self.clamp_min,
-                self.clamp_max,
+                self.clamp_min if self.clamp_min is not None else dtype_info.min,
+                self.clamp_max if self.clamp_max is not None else dtype_info.max,
                 shape=reward_spec.shape,
                 device=reward_spec.device,
                 dtype=reward_spec.dtype,
@@ -320,10 +353,11 @@ class RewardClipping(Transform):
             )
 
     def __repr__(self) -> str:
+        clamp_min = None if self.clamp_min is None else f"{float(self.clamp_min):4.4f}"
+        clamp_max = None if self.clamp_max is None else f"{float(self.clamp_max):4.4f}"
         return (
             f"{self.__class__.__name__}("
-            f"clamp_min={float(self.clamp_min):4.4f}, clamp_max"
-            f"={float(self.clamp_max):4.4f}, keys={self.in_keys})"
+            f"clamp_min={clamp_min}, clamp_max={clamp_max}, keys={self.in_keys})"
         )
 
 

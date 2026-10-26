@@ -274,6 +274,35 @@ class TestRewardClipping(TransformBase):
         assert (td[reward_key] <= 0.1).all()
         assert (td[reward_key] >= -0.1).all()
 
+    @pytest.mark.parametrize(
+        "clamp_min,clamp_max,expected",
+        [
+            (-0.1, None, [-0.1, -0.05, 0.05, 1.0]),
+            (None, 0.1, [-1.0, -0.05, 0.05, 0.1]),
+        ],
+    )
+    def test_one_sided_bound(self, clamp_min, clamp_max, expected):
+        reward = torch.tensor([[-1.0], [-0.05], [0.05], [1.0]])
+        t = RewardClipping(clamp_min=clamp_min, clamp_max=clamp_max)
+        out = t(TensorDict(reward=reward, batch_size=[4]))["reward"]
+        torch.testing.assert_close(out, torch.tensor(expected).unsqueeze(-1))
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RewardClipping(clamp_min=clamp_min, clamp_max=clamp_max),
+        )
+        check_env_specs(env)
+        space = env.reward_spec.space
+        dtype_max = torch.finfo(env.reward_spec.dtype).max
+        low = -dtype_max if clamp_min is None else clamp_min
+        high = dtype_max if clamp_max is None else clamp_max
+        torch.testing.assert_close(space.low, torch.full_like(space.low, low))
+        torch.testing.assert_close(space.high, torch.full_like(space.high, high))
+
+    def test_no_bound_raises(self):
+        with pytest.raises(TypeError, match="At least one of"):
+            RewardClipping()
+
     def test_transform_compose(self):
         t = Compose(RewardClipping(-0.1, 0.1))
         td = TensorDict({"reward": torch.randn(10)}, [])
