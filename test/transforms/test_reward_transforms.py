@@ -300,8 +300,16 @@ class TestRewardClipping(TransformBase):
         torch.testing.assert_close(space.high, torch.full_like(space.high, high))
 
     def test_no_bound_raises(self):
-        with pytest.raises(TypeError, match="At least one of"):
+        with pytest.raises(ValueError, match="At least one of"):
             RewardClipping()
+
+    def test_repr(self):
+        assert repr(RewardClipping(-0.1, 0.1)) == (
+            "RewardClipping(clamp_min=-0.1, clamp_max=0.1, keys=['reward'])"
+        )
+        assert repr(RewardClipping(clamp_max=1e-5)) == (
+            "RewardClipping(clamp_min=None, clamp_max=1e-05, keys=['reward'])"
+        )
 
     def test_transform_compose(self):
         t = Compose(RewardClipping(-0.1, 0.1))

@@ -311,7 +311,7 @@ class RewardClipping(Transform):
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if clamp_min is None and clamp_max is None:
-            raise TypeError(
+            raise ValueError(
                 "At least one of `clamp_min` and `clamp_max` must be provided."
             )
         if clamp_min is not None and not isinstance(clamp_min, Tensor):
@@ -353,8 +353,8 @@ class RewardClipping(Transform):
             )
 
     def __repr__(self) -> str:
-        clamp_min = None if self.clamp_min is None else f"{float(self.clamp_min):4.4f}"
-        clamp_max = None if self.clamp_max is None else f"{float(self.clamp_max):4.4f}"
+        clamp_min = None if self.clamp_min is None else f"{float(self.clamp_min):.4g}"
+        clamp_max = None if self.clamp_max is None else f"{float(self.clamp_max):.4g}"
         return (
             f"{self.__class__.__name__}("
             f"clamp_min={clamp_min}, clamp_max={clamp_max}, keys={self.in_keys})"
