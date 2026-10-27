@@ -1644,24 +1644,14 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
 
     def _make_policy_obs(self, observation: torch.Tensor) -> torch.Tensor:
         """Reorder the observation into the robot's layout, dropping what it cannot sense."""
-        joints = self.COMMAND_START + 2
-        command = torch.cat(
-            (
-                self._command,
-                self._command.new_zeros(
-                    *self._command.shape[:-1],
-                    self.POLICY_OBSERVATION_DIM - self.POLICY_COMMAND_START - 2,
-                ),
-            ),
-            dim=-1,
-        )
+        unfilled = self.POLICY_OBSERVATION_DIM - self.POLICY_COMMAND_START - 2
         return torch.cat(
             (
                 observation[..., 3:6],
                 observation[..., :3],
-                observation[..., joints : self.GAIT_PHASE_START],
+                observation[..., self.COMMAND_START + 2 : self.GAIT_PHASE_START],
                 observation[..., self.GAIT_PHASE_START + 3 :],
-                command,
+                torch.nn.functional.pad(self._command, (0, unfilled)),
             ),
             dim=-1,
         )
