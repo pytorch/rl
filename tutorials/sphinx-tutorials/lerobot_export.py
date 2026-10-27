@@ -28,7 +28,7 @@ first use.
 On a headless Linux machine, set ``MUJOCO_GL=egl`` before starting Python if your
 MuJoCo installation uses EGL. macOS uses its native offscreen renderer.
 
-By default we collect 120 frames with a 60-step limit per episode. Early falls
+By default we collect 600 frames with a 60-step limit per episode. Early falls
 trigger a reset and can add episodes. Nothing is uploaded by default.
 """
 
@@ -67,8 +67,8 @@ from heuristic_gait import MicroDuckGaitActor  # noqa: E402
 # Pick a new run directory each time.
 
 FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
-EPISODE_STEPS = 12 if FAST else 60
-TOTAL_FRAMES = 2 * EPISODE_STEPS
+EPISODE_STEPS = 60
+TOTAL_FRAMES = 120 if FAST else 600
 WIDTH, HEIGHT = 240, 160
 REPO_ID = os.environ.get("TORCHRL_LEROBOT_REPO_ID", "local/microduck-walk")
 PRIVATE_DATASET = True
