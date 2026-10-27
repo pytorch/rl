@@ -95,9 +95,8 @@ class ModelBasedEnvBase(EnvBase):
         params (List[torch.Tensor], optional): list of parameters of the world model;
         buffers (List[torch.Tensor], optional): list of buffers of the world model;
         device (torch.device, optional): device where the env input and output are expected to live
-        dtype (torch.dtype, optional): dtype of the env input and output
         batch_size (torch.Size, optional): number of environments contained in the instance
-        run_type_check (bool, optional): whether to run type checks on the step of the env
+        run_type_checks (bool, optional): whether to run type checks on the step of the env
 
     Methods:
         step (TensorDict -> TensorDict): step in the environment
