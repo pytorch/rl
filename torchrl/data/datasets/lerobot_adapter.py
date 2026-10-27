@@ -251,6 +251,9 @@ class LeRobotDatasetAdapter:
                         f"Cannot convert LeRobot feature {name!r} with dtype {value.dtype} to NumPy."
                     ) from error
                 shape = tuple(feature["shape"])
+                # TODO: Revisit layout handling using feature dimension names and an
+                # explicit source layout for ambiguous shapes. Shape alone cannot always
+                # distinguish CHW from HWC.
                 if (
                     feature["dtype"] in ("image", "video")
                     and len(shape) == 3
