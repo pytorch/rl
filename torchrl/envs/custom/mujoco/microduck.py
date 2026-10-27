@@ -1482,11 +1482,13 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         joint_ids = torch.as_tensor(model.actuator_trnid[:, 0].copy()).long()
         if (joint_ids < 0).any():
             raise ValueError("Every MicroDuck actuator must target a joint.")
-        joint_names = tuple(model.joint(int(joint)).name for joint in joint_ids)
-        if self.policy_observation and joint_names != self.JOINT_NAMES:
+        actuated = tuple(model.joint(int(joint)).name for joint in joint_ids)
+        defined = tuple(model.joint(joint).name for joint in range(1, model.njnt))
+        if self.policy_observation and not actuated == defined == self.JOINT_NAMES:
             raise ValueError(
                 "policy_observation follows the robot's joint order "
-                f"{self.JOINT_NAMES}, but the MJCF actuators drive {joint_names}."
+                f"{self.JOINT_NAMES}, but the MJCF actuators drive {actuated} "
+                f"and its joints are defined in the order {defined}."
             )
         home_ctrl = torch.as_tensor(model.key_ctrl[key_id].copy())
         joint_limited = torch.as_tensor(

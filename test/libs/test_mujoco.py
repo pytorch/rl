@@ -158,11 +158,20 @@ class TestMujoco:
 
     @staticmethod
     def _write_microduck_fixture(
-        tmp_path: Path, joint_names: Sequence[str] | None = None
+        tmp_path: Path,
+        joint_names: Sequence[str] | None = None,
+        actuated_joints: Sequence[str] | None = None,
     ) -> Path:
-        """A 14-actuator stand-in for the MicroDuck MJCF that rests on two feet."""
+        """A 14-actuator stand-in for the MicroDuck MJCF that rests on two feet.
+
+        ``joint_names`` are the joints in definition (qpos) order and
+        ``actuated_joints`` the joint driven by each actuator, in actuator
+        order; it defaults to ``joint_names``.
+        """
         if joint_names is None:
             joint_names = [f"joint{index}" for index in range(14)]
+        if actuated_joints is None:
+            actuated_joints = joint_names
         lines = [
             '<mujoco model="microduck-test">',
             '  <option timestep="0.002"/>',
@@ -206,7 +215,7 @@ class TestMujoco:
                 "  </worldbody>",
                 "  <actuator>",
                 *(
-                    f'    <position name="actuator{index}" joint="{joint_names[index]}" '
+                    f'    <position name="actuator{index}" joint="{actuated_joints[index]}" '
                     'kp="5" ctrlrange="-1 1"/>'
                     for index in range(14)
                 ),
@@ -372,14 +381,19 @@ class TestMujoco:
             "right_ankle",
         )
         assert MicroDuckEnv.JOINT_NAMES == robot_joints
-        (tmp_path / "unnamed").mkdir()
+        swapped = (robot_joints[1], robot_joints[0], *robot_joints[2:])
+        for name, fixture in (
+            ("unnamed", {}),
+            ("reordered", {"joint_names": swapped, "actuated_joints": robot_joints}),
+        ):
+            (tmp_path / name).mkdir()
+            with pytest.raises(ValueError, match="robot's joint order"):
+                MicroDuckEnv(
+                    self._write_microduck_fixture(tmp_path / name, **fixture),
+                    backend=backend,
+                    policy_observation=True,
+                )
         (tmp_path / "robot").mkdir()
-        with pytest.raises(ValueError, match="robot's joint order"):
-            MicroDuckEnv(
-                self._write_microduck_fixture(tmp_path / "unnamed"),
-                backend=backend,
-                policy_observation=True,
-            )
         num_envs = 1 if backend == "mujoco" else 2
         env = MicroDuckEnv(
             self._write_microduck_fixture(tmp_path / "robot", robot_joints),
