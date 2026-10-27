@@ -11,5 +11,6 @@ top-level :mod:`torchrl.modules` namespace.
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    MicroDuckMLPPolicy
     MicroDuckSkillPolicy
     MicroDuckSkills

@@ -39,6 +39,17 @@ preset per entry with its arguments, e.g. ``{preset: sidestep_task, speed: 0.15,
 weight: 0.5}``. Every env picks a task at reset and the policy reads the task
 index through a learned embedding, so one policy trains on the whole library.
 
+``policy.architecture=mlp env.policy_observation=true`` trains the policy the
+MicroDuck robot can run instead: a feed-forward
+:class:`~torchrl.modules.tensordict_module.zoo.MicroDuckMLPPolicy` reading the
+robot's 61-D ``policy_observation``, with a critic that keeps the privileged
+observation and the task index. ``policy.export_onnx=walk.onnx`` writes the
+trained actor as the ONNX graph the robot runtime loads::
+
+    python examples/microduck/ppo_mujoco.py env.download=true \\
+        policy.architecture=mlp env.policy_observation=true \\
+        policy.export_onnx=walk.onnx logger.entity=YOUR_ENTITY
+
 ``env.download=true`` fetches the pinned ``microduck_rl`` assets into
 ``~/.cache/torchrl/microduck``; set ``env.microduck_root`` or
 ``MICRODUCK_RL_ROOT`` to use an existing checkout instead. ``env.backend=mjx``
@@ -79,11 +90,13 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     get_primers_from_module,
     GRUModule,
+    MLP,
     ProbabilisticActor,
     set_recurrent_mode,
     TanhNormal,
     ValueOperator,
 )
+from torchrl.modules.tensordict_module.zoo import MicroDuckMLPPolicy
 from torchrl.objectives import ClipPPOLoss, KLAdaptiveLR
 from torchrl.objectives.value import GAE
 from torchrl.record import VideoRecorder
@@ -100,6 +113,7 @@ from examples.microduck.heuristic_gait import (  # noqa: E402
 )
 
 PolicyHead = Literal["gait-residual", "gaussian"]
+Architecture = Literal["gru", "mlp"]
 RECURRENT_STATE_KEY = "recurrent_state"
 TASK_PRESETS = (
     "make_task",
@@ -198,6 +212,7 @@ def make_env(
         "tasks": tasks,
         "action_scale": env_cfg["action_scale"],
         "diagnostics": env_cfg["diagnostics"],
+        "policy_observation": env_cfg["policy_observation"],
         "num_envs": env_cfg["num_envs"],
         # MuJoCo state is float64, which MPS does not support: CUDA or CPU.
         "device": torch.device(
@@ -407,11 +422,18 @@ def make_models(
     gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
     residual_scale: float = 0.2,
     initial_policy_scale: float = 0.05,
+    architecture: Architecture = "gru",
+    num_cells: Sequence[int] = (512, 256, 128),
 ) -> tuple[ProbabilisticActor, TensorDictSequential]:
     """Create the GRU actor and the critic that shares its backbone.
 
     Every network is built on ``device``, and the GRU's recurrent-state primer
     is appended to ``env`` so its rollouts carry the state between steps.
+
+    ``architecture="mlp"`` builds the robot-deployable pair instead: a
+    :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckMLPPolicy` with
+    hidden layers ``num_cells`` reading ``policy_observation``, and a separate
+    feed-forward critic on the privileged ``observation`` and the task index.
 
     ``policy_head="gaussian"`` (default) is a plain Gaussian head trained from
     scratch; ``policy_head="gait-residual"`` wraps the closed-form gait with a
@@ -425,6 +447,49 @@ def make_models(
         raise ValueError("residual_scale must be finite and positive.")
     device = torch.device(device)
     observation_dim = env.observation_spec["observation"].shape[-1]
+    if architecture == "mlp":
+        if policy_head != "gaussian":
+            raise ValueError(
+                "The closed-form gait prior reads the gait clock, which the robot "
+                "observation does not have; set policy.from_prior=false."
+            )
+        if "policy_observation" not in env.observation_spec.keys():
+            raise ValueError(
+                "architecture='mlp' reads the robot observation; set "
+                "env.policy_observation=true."
+            )
+        actor = MicroDuckMLPPolicy(
+            env.observation_spec["policy_observation"].shape[-1],
+            MicroDuckEnv.NUM_JOINTS,
+            num_cells=num_cells,
+            initial_policy_scale=initial_policy_scale,
+            device=device,
+        )
+        critic = TensorDictSequential(
+            TensorDictModule(
+                TaskConditionedEncoder(
+                    observation_dim,
+                    env.observation_spec["task_id"].n,
+                    num_cells[0],
+                    device=device,
+                ),
+                in_keys=["observation", "task_id"],
+                out_keys=["critic_features"],
+            ),
+            ValueOperator(
+                MLP(
+                    in_features=num_cells[0],
+                    out_features=1,
+                    num_cells=list(num_cells[1:]),
+                    activation_class=nn.ELU,
+                    device=device,
+                ),
+                in_keys=["critic_features"],
+            ),
+        )
+        return actor, critic
+    if architecture != "gru":
+        raise ValueError(f"Unknown architecture {architecture!r}.")
     embed = TensorDictModule(
         TaskConditionedEncoder(
             observation_dim,
@@ -497,6 +562,8 @@ def make_render_policy(
     gait: Mapping[str, float] | None = None,
     residual_scale: float | None = None,
     initial_policy_scale: float | None = None,
+    architecture: Architecture | None = None,
+    num_cells: Sequence[int] | None = None,
 ) -> ProbabilisticActor:
     """Build the actor whose weights an ``rlrender`` checkpoint provides.
 
@@ -515,6 +582,8 @@ def make_render_policy(
         "gait": gait,
         "residual_scale": residual_scale,
         "initial_policy_scale": initial_policy_scale,
+        "architecture": architecture,
+        "num_cells": num_cells,
     }
     recorded.update(
         {key: value for key, value in overrides.items() if value is not None}
@@ -597,10 +666,12 @@ def make_evaluator(
     Metrics are logged under ``evaluation/<label>/``; the evaluator adds
     ``reward`` and ``episode_length`` to
     :meth:`MicroDuckEnv.trajectory_metrics`, whose ``task_score`` measures
-    airborne time when ``jumping`` is set. The actor's recurrent-state primer
+    airborne time when ``jumping`` is set. A recurrent actor's state primer
     is appended to ``env``.
     """
-    env.append_transform(get_primers_from_module(actor))
+    primers = get_primers_from_module(actor, warn=False)
+    if primers is not None:
+        env.append_transform(primers)
     return Evaluator(
         env,
         actor,
@@ -719,7 +790,7 @@ def train_ppo(
     config: Mapping[str, Any] | None = None,
     logger: Logger | None = None,
 ) -> list[dict[str, float]]:
-    """Train the recurrent policy with PPO on whole episodes.
+    """Train the policy with PPO on whole episodes.
 
     Each iteration collects at least ``transitions_per_update`` transitions of
     complete episodes into the replay buffer, computes GAE once over the buffer
@@ -1036,6 +1107,11 @@ def main(cfg: DictConfig) -> None:
         MicroDuckGaitConfig(), frequency_hz=float(tasks[0].gait_frequency_hz)
     )
     policy_head = "gait-residual" if cfg.policy.from_prior else "gaussian"
+    if cfg.policy.export_onnx and cfg.policy.architecture != "mlp":
+        raise ValueError(
+            "policy.export_onnx writes the robot policy, which needs "
+            "policy.architecture=mlp."
+        )
     policy_kwargs = {
         "hidden_size": cfg.policy.hidden_size,
         "policy_head": policy_head,
@@ -1043,6 +1119,8 @@ def main(cfg: DictConfig) -> None:
         "residual_scale": cfg.policy.residual_scale,
         "initial_policy_scale": cfg.policy.initial_policy_scale
         or (0.05 if cfg.policy.from_prior else 1.0),
+        "architecture": cfg.policy.architecture,
+        "num_cells": list(cfg.policy.num_cells),
     }
     env = make_env(cfg.env)
     evaluators: list[Evaluator] = []
@@ -1079,7 +1157,10 @@ def main(cfg: DictConfig) -> None:
             cfg.logger.backend,
             logger_name="microduck_ppo",
             experiment_name=cfg.logger.exp_name
-            or generate_exp_name("microduck", f"{policy_head}-{cfg.env.backend}"),
+            or generate_exp_name(
+                "microduck",
+                f"{cfg.policy.architecture}-{policy_head}-{cfg.env.backend}",
+            ),
             wandb_kwargs={
                 "project": cfg.logger.project,
                 "entity": cfg.logger.entity,
@@ -1129,6 +1210,11 @@ def main(cfg: DictConfig) -> None:
             config=config,
             logger=logger,
         )
+        if cfg.policy.export_onnx:
+            path = actor.to_onnx(
+                cfg.policy.export_onnx, action_scale=cfg.env.action_scale
+            )
+            torchrl_logger.info("Wrote the robot policy to %s.", path)
     finally:
         if logger is not None and hasattr(logger.experiment, "finish"):
             logger.experiment.finish()
