@@ -36,7 +36,9 @@ jobs:
         run: |
           # LeRobot 0.6.1 requires torch < 2.12 and torchvision < 0.27.
           python -m pip install 'torch==2.11.0+cpu' 'torchvision==0.26.0+cpu' --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install setuptools wheel setuptools_scm ninja 'pybind11[global]' cmake pytest pytest-timeout pytest-error-for-skips
+          # setuptools_scm 10 pulls vcs-versioning, which requires packaging >= 26.2;
+          # LeRobot 0.6.1 requires packaging < 26.
+          python -m pip install setuptools wheel 'setuptools_scm>=8,<10' 'packaging>=24.2,<26' ninja 'pybind11[global]' cmake pytest pytest-timeout pytest-error-for-skips
           python -m pip install -e '.[lerobot]' --no-build-isolation
       - name: Verify PyTorch and TensorDict versions
         run: |
