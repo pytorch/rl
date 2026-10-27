@@ -6,16 +6,13 @@ From a MicroDuck rollout to a LeRobot dataset
 
 .. _lerobot_export_tuto:
 
-Let's record a little robot dataset. We'll walk MicroDuck in MuJoCo, keep its
-camera frames alongside its observations and actions, and export the replay
-buffer as a native LeRobot dataset. At the end you'll have MP4 videos you can
-watch locally, and an optional upload step to share the same episodes on the
-Hugging Face Hub.
+Let's record a little robot dataset. We'll walk MicroDuck in MuJoCo, record the
+data in a replay buffer, and export it as a native LeRobot dataset. At the end
+you'll have MP4 videos you can watch locally, and an optional upload step to
+share the same episodes on the Hugging Face Hub.
 
-This is a small data collection example, with no policy training. The controller
-is the closed-form gait from TorchRL's MicroDuck example. Its recordings are
-useful for checking a pipeline; judge the behavior before using them as expert
-demonstrations.
+Note: This is a small data collection example, with no policy training. The
+controller is the closed-form gait from TorchRL's MicroDuck example.
 
 What you will learn
 -------------------
