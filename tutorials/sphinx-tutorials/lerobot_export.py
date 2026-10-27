@@ -24,15 +24,13 @@ What you will learn
 - Upload the complete dataset and open it in the LeRobot Dataset Visualizer.
 
 This tutorial requires Python 3.12 or newer, MuJoCo, IPython, and TorchRL
-installed with the ``lerobot`` extra. Run it from a TorchRL checkout with TorchRL
-installed in editable mode to use the MicroDuck example policy. The pinned
-MicroDuck assets download on first use.
+installed with the ``lerobot`` extra. The pinned MicroDuck assets download on
+first use.
 On a headless Linux machine, set ``MUJOCO_GL=egl`` before starting Python if your
 MuJoCo installation uses EGL. macOS uses its native offscreen renderer.
 
 By default we collect 120 frames with a 60-step limit per episode. Early falls
-trigger a reset and can add episodes. ``TORCHRL_TUTORIALS_FAST=1`` reduces this
-to 24 frames for a quick smoke run. Nothing is uploaded by default.
+trigger a reset and can add episodes. Nothing is uploaded by default.
 """
 
 from __future__ import annotations
