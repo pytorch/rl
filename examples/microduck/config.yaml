@@ -17,16 +17,20 @@ env:
   render_height: 480
   action_scale: 1.0         # position-target offset in radians for a unit action (0.35 with the gait prior)
   diagnostics: false        # reward breakdown in the observation; evaluators turn it on
+  policy_observation: false # also expose the robot's 61-D observation (needed by policy.architecture=mlp)
   tasks:                    # task library: one MicroDuckEnv preset per entry with its arguments (`weight`, `name`, ...)
     - {preset: tracking_task, speed: 0.03}
   task_id: null             # pin one task of the library at every reset (evaluation, rendering)
 
 policy:
+  architecture: gru         # gru: task-conditioned recurrent policy; mlp: feed-forward policy the robot runs
   from_prior: false         # true: quick debugging start, a bounded residual around the closed-form gait
-  hidden_size: 128
+  hidden_size: 128          # gru width
+  num_cells: [512, 256, 128]  # mlp hidden layers (the shipped robot policies use these)
   residual_scale: 0.2       # bound of the learned residual when starting from the prior
   initial_policy_scale: null  # exploration std at start: 1.0 from scratch, 0.05 from the prior
   init_from: null           # checkpoint whose actor and critic parameters initialize the models
+  export_onnx: null         # mlp only: write the trained actor as the robot's ONNX policy at this path
 
 ppo:
   total_transitions: 10_000_000
