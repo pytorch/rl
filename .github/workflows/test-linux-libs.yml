@@ -23,6 +23,31 @@ permissions:
 
 jobs:
 
+  unittests-lerobot:
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/lerobot') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install stable PyTorch and LeRobot dependencies
+        run: |
+          # LeRobot 0.6.1 requires torch < 2.12 and torchvision < 0.27.
+          python -m pip install 'torch==2.11.0+cpu' 'torchvision==0.26.0+cpu' --index-url https://download.pytorch.org/whl/cpu
+          # setuptools_scm 10 pulls vcs-versioning, which requires packaging >= 26.2;
+          # LeRobot 0.6.1 requires packaging < 26.
+          python -m pip install setuptools wheel 'setuptools_scm>=8,<10' 'packaging>=24.2,<26' ninja 'pybind11[global]' cmake pytest pytest-timeout pytest-error-for-skips
+          python -m pip install -e '.[lerobot]' --no-build-isolation
+      - name: Verify PyTorch and TensorDict versions
+        run: |
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh stable
+          python -c 'import torch, torchvision; assert torch.__version__ == "2.11.0+cpu", torch.__version__; assert torchvision.__version__ == "0.26.0+cpu", torchvision.__version__; assert torch.version.cuda is None, torch.version.cuda'
+          python -m pip check
+      - name: Run LeRobot adapter tests
+        run: python -m pytest test/libs/test_datasets.py -q -k "LeRobotDatasetAdapter or lerobot_adapter" --error-for-skips
+
   # unittests-atari-dqn:
   #   strategy:
   #     matrix:
@@ -388,19 +413,24 @@ jobs:
   unittests-isaaclab:
     strategy:
       matrix:
-        python_version: ["3.11"]
-        cuda_arch_version: ["12.8"]
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/isaaclab') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvcr.io/nvidia/isaac-lab:2.3.0"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda13.0.3-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.8"
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
       script: |
-        ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+        else
+          export RELEASE=0
+        fi
+        bash .github/unittest/linux_libs/scripts_isaaclab/run_all.sh
 
   unittests-jumanji:
     strategy:

@@ -51,6 +51,7 @@ gh label create "Data" --repo "$REPO" --description "Triggers all data CI tests"
 
 # New granular labels
 gh label create "Data/gendgrl" --repo "$REPO" --description "Triggers gen-dgrl data tests only" --color "$DATA_COLOR" --force
+gh label create "Data/lerobot" --repo "$REPO" --description "Triggers LeRobot data tests only" --color "$DATA_COLOR" --force
 gh label create "Data/minari" --repo "$REPO" --description "Triggers minari data tests only" --color "$DATA_COLOR" --force
 gh label create "Data/openx" --repo "$REPO" --description "Triggers openx data tests only" --color "$DATA_COLOR" --force
 gh label create "Data/roboset" --repo "$REPO" --description "Triggers roboset data tests only" --color "$DATA_COLOR" --force

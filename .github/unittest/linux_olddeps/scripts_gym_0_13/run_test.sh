@@ -23,7 +23,7 @@ lib_dir="${env_dir}/lib"
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/pytorch/rl/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
 export MKL_THREADING_LAYER=GNU
 export BATCHED_PIPE_TIMEOUT=60
 

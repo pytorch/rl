@@ -478,6 +478,7 @@ Replay Buffer and Storage Configurations
     SliceSamplerConfig
     SliceSamplerWithoutReplacementConfig
     StreamingSliceSamplerConfig
+    SubgoalTripletConfig
     ListStorageConfig
     TensorStorageConfig
     LazyTensorStorageConfig
@@ -549,6 +550,7 @@ Trainer Hook Configurations
     CQLLossConfig
     TD3LossConfig
     TdMpc2LossConfig
+    TransitiveQLossConfig
     GAEConfig
     TargetNetUpdaterConfig
     SoftUpdateConfig

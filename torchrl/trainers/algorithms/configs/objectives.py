@@ -249,6 +249,27 @@ class TQCLossConfig(LossConfig):
 
 
 @dataclass
+class TransitiveQLossConfig(LossConfig):
+    """Hydra configuration for :class:`~torchrl.objectives.TransitiveQLoss`.
+
+    The actor, critic and oracle critic networks are supplied as instantiated
+    modules (or lists of modules for ensembles).
+    """
+
+    actor_network: Any = MISSING
+    qvalue_network: Any = MISSING
+    oracle_qvalue_network: Any = None
+    num_qvalue_nets: int = 2
+    discount: float = 0.99
+    expectile: float = 0.7
+    distance_weight: float = 0.0
+    alpha: float = 1.0
+    actor_action: str = "mode"
+    _target_: str = "torchrl.objectives.TransitiveQLoss"
+    _convert_: str = "object"
+
+
+@dataclass
 class PPOLossConfig(LossConfig):
     """Hydra configuration for the PPO loss family.
 

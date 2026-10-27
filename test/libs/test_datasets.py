@@ -4,24 +4,50 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import builtins
+import doctest
 import importlib.util
 import os
 import shutil
 import time
 from contextlib import nullcontext
+from decimal import Decimal
+from importlib.metadata import version
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
-from tensordict import assert_allclose_td, NonTensorData, TensorDict
 
+from packaging.version import Version
+from tensordict import (
+    assert_allclose_td,
+    MetaData,
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    TensorDictBase,
+    UnbatchedTensor,
+)
+from torch.utils.data import DataLoader, Dataset, Subset
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
+    LazyTensorStorage,
+    ListStorage,
     ReplayBuffer,
     ReplayBufferEnsemble,
     SamplerWithoutReplacement,
+    StorageDataset,
+    tensordict_collate,
+    TensorStorage,
     VideoClipRef,
+)
+from torchrl.data.datasets import (
+    huggingface,
+    HuggingFaceDatasetAdapter,
+    lerobot_adapter,
+    LeRobotDatasetAdapter,
+    ReplayDatasetAdapter,
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -65,6 +91,892 @@ _has_d4rl = importlib.util.find_spec("d4rl") is not None
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 _has_minari = importlib.util.find_spec("minari") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_datasets = importlib.util.find_spec("datasets") is not None
+_has_pyarrow = importlib.util.find_spec("pyarrow") is not None
+_has_lerobot_dataset = (
+    importlib.util.find_spec("lerobot") is not None
+    and importlib.util.find_spec("av") is not None
+    and _has_datasets
+    and _has_pyarrow
+    and Version(version("lerobot")) >= Version("0.6.1")
+)
+
+if _has_datasets and _has_pyarrow:
+    import datasets
+    import pyarrow as pa
+
+
+if _has_lerobot_dataset:
+    from lerobot.datasets import dataset_metadata as lerobot_dataset_metadata
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+
+class TestHuggingFaceDatasetAdapter:
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_export_cache_identity_tracks_contents(self, tmp_path):
+        data = TensorDict({"obs": torch.arange(5)}, [5])
+        source = TensorStorage(data).as_dataset()
+        adapter = HuggingFaceDatasetAdapter(batch_size=2)
+
+        def increment(row):
+            return {"obs": row["obs"] + 1}
+
+        cache_names = []
+        for index in range(3):
+            if index == 2:
+                data["obs"].add_(10)
+            external = adapter.to_external(source)
+            path = tmp_path / f"export-{index}"
+            external.save_to_disk(path)
+            processed = datasets.load_from_disk(path).map(increment)
+            assert processed[:]["obs"] == (
+                [11, 12, 13, 14, 15] if index == 2 else [1, 2, 3, 4, 5]
+            )
+            cache_names.append(Path(processed.cache_files[0]["filename"]).name)
+
+        assert cache_names[0] == cache_names[1]
+        assert cache_names[1] != cache_names[2]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("batch_size", [1, 4, 32])
+    def test_batched_columns_are_independent(self, batch_size):
+        data = TensorDict(
+            {
+                "observation": torch.arange(120, dtype=torch.int16).reshape(10, 3, 4),
+                ("next", "reward"): torch.arange(10, dtype=torch.float64),
+                ("next", "value"): torch.arange(10, dtype=torch.bfloat16),
+                ("metadata", "task"): [f"task_{index}" for index in range(10)],
+                "done": torch.arange(10) % 2 == 0,
+            },
+            [10],
+        )
+        source = Subset(
+            TensorStorage(data).as_dataset(), [9, 0, 7, 2, 5, 4, 3, 6, 1, 8]
+        )
+        adapter = HuggingFaceDatasetAdapter(batch_size=batch_size)
+        rng_state = torch.random.get_rng_state()
+        external = adapter.to_external(source)
+        assert torch.equal(torch.random.get_rng_state(), rng_state)
+        data.zero_()
+        imported = adapter.from_external(external)
+        for index, value in enumerate(source.indices):
+            assert imported[index]["observation"].dtype is torch.int16
+            assert (
+                imported[index]["observation"].tolist()
+                == torch.arange(value * 12, (value + 1) * 12).reshape(3, 4).tolist()
+            )
+            assert imported[index]["next", "reward"].dtype is torch.float64
+            assert imported[index]["next", "reward"].item() == value
+            assert imported[index]["next", "value"].dtype is torch.float32
+            assert imported[index]["next", "value"].item() == value
+            assert imported[index]["done"].item() == (value % 2 == 0)
+            assert imported[index]["metadata", "task"] == f"task_{value}"
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("batch_size", [1, 2, 4])
+    def test_export_repeats_compact_non_tensor_data(self, batch_size):
+        row_count = 3
+        data = TensorDict(
+            {
+                "observation": torch.arange(row_count),
+                # These values are one object shared by the whole TensorDict
+                # batch, not sequences of one value per row.
+                "same_length_text": NonTensorData("cat", batch_size=[row_count]),
+                "different_length_text": NonTensorData("goal", batch_size=[row_count]),
+                "none": NonTensorData(None, batch_size=[row_count]),
+                "integer": NonTensorData(7, batch_size=[row_count]),
+                "float": NonTensorData(1.5, batch_size=[row_count]),
+                "boolean": NonTensorData(True, batch_size=[row_count]),
+                "sequence": NonTensorData(["left", "right"], batch_size=[row_count]),
+                "numpy_array": NonTensorData(
+                    np.array([1, 2], dtype=np.int16), batch_size=[row_count]
+                ),
+                "tensor": NonTensorData(torch.tensor([3, 4]), batch_size=[row_count]),
+                "mapping": NonTensorData({"kind": "expert"}, batch_size=[row_count]),
+            },
+            batch_size=[row_count],
+        )
+        source = TensorStorage(data).as_dataset()
+
+        external = HuggingFaceDatasetAdapter(batch_size=batch_size).to_external(source)
+
+        assert len(external) == row_count
+        assert external[:]["same_length_text"] == ["cat"] * row_count
+        assert external[:]["different_length_text"] == ["goal"] * row_count
+        assert external[:]["none"] == [None] * row_count
+        assert external[:]["integer"] == [7] * row_count
+        assert external[:]["float"] == [1.5] * row_count
+        assert external[:]["boolean"] == [True] * row_count
+        assert external[:]["sequence"] == [["left", "right"]] * row_count
+        assert external[:]["numpy_array"] == [[1, 2]] * row_count
+        assert external[:]["tensor"] == [[3, 4]] * row_count
+        assert [external[index]["mapping"] for index in range(row_count)] == [
+            {"kind": "expert"}
+        ] * row_count
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_export_non_tensor_stack_and_nested_non_tensor_data(self):
+        row_count = 3
+        data = TensorDict(
+            {
+                "observation": torch.arange(row_count),
+                "task": ["pick", "pick", "drop"],
+                "metadata": TensorDict(
+                    {"source": NonTensorData("demonstration", batch_size=[row_count])},
+                    batch_size=[row_count],
+                ),
+            },
+            batch_size=[row_count],
+        )
+        assert isinstance(data.get("task"), NonTensorStack)
+
+        external = HuggingFaceDatasetAdapter().to_external(
+            TensorStorage(data).as_dataset()
+        )
+
+        assert external[:]["task"] == ["pick", "pick", "drop"]
+        assert [external[index]["metadata"] for index in range(row_count)] == [
+            {"source": "demonstration"}
+        ] * row_count
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_export_repeats_metadata(self):
+        row_count = 3
+        config = {"dataset": "replay", "version": 2}
+        data = TensorDict(
+            {
+                "observation": torch.arange(row_count),
+                "metadata": MetaData(config, batch_size=[row_count]),
+            },
+            batch_size=[row_count],
+        )
+
+        external = HuggingFaceDatasetAdapter().to_external(
+            TensorStorage(data).as_dataset()
+        )
+
+        assert [external[index]["metadata"] for index in range(row_count)] == [
+            config
+        ] * row_count
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_export_rejects_unbatched_tensor(self, nested):
+        key = ("next", "lookup") if nested else "lookup"
+        data = TensorDict(
+            {
+                "observation": torch.arange(3),
+                key: UnbatchedTensor(torch.tensor([10, 20])),
+            },
+            batch_size=[3],
+        )
+
+        with pytest.raises(ValueError, match="UnbatchedTensor at key") as exc:
+            HuggingFaceDatasetAdapter().to_external(TensorStorage(data).as_dataset())
+        assert repr(key) in str(exc.value)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_rejects_columns_changed_between_batches(self, nested):
+        source = [
+            TensorDict({"a": torch.tensor(0)}, []),
+            TensorDict({"b": torch.tensor(1)}, []),
+        ]
+        if nested:
+            source = [TensorDict({"row": item}, []) for item in source]
+        adapter = HuggingFaceDatasetAdapter(batch_size=1)
+        with pytest.raises(ValueError, match="row 1 has different column keys"):
+            adapter.to_external(source)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_variable_columns_across_batches(self):
+        source = [TensorDict({"obs": torch.arange(index)}, []) for index in range(4)]
+        external = HuggingFaceDatasetAdapter(batch_size=1).to_external(source)
+        assert external[:]["obs"] == [[], [0], [0, 1], [0, 1, 2]]
+        external = HuggingFaceDatasetAdapter(batch_size=1).to_external(
+            [
+                TensorDict({"value": NonTensorData(None)}, []),
+                TensorDict({"value": NonTensorData("present")}, []),
+            ]
+        )
+        assert external[:]["value"] == [None, "present"]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("batch_size", [1, 3, 8])
+    @pytest.mark.parametrize("inner_shape", [(2,), (2, 3), (0,)])
+    @pytest.mark.parametrize("shared_config", [False, True])
+    def test_nested_batch_metadata_fetch_paths(
+        self, batch_size, inner_shape, shared_config
+    ):
+        shape = (4, *inner_shape)
+        config = {"source": "replay"}
+        configs = (
+            MetaData(config, batch_size=shape)
+            if shared_config
+            else torch.stack(
+                [
+                    MetaData({"source": f"replay-{index}"}, batch_size=inner_shape)
+                    for index in range(4)
+                ]
+            )
+        )
+        data = TensorDict(
+            {
+                "obs": torch.arange(4),
+                "agents": TensorDict(
+                    {
+                        "value": torch.arange(np.prod(shape)).reshape(shape),
+                        "task": NonTensorData("goal", batch_size=shape),
+                        "config": configs,
+                    },
+                    shape,
+                ),
+            },
+            [4],
+        )
+        storage_source = TensorStorage(data).as_dataset()
+        adapter = HuggingFaceDatasetAdapter(batch_size=batch_size)
+        expected_tasks = np.full(inner_shape, "goal").tolist()
+        for source, order in (
+            (storage_source, range(4)),
+            (list(data.unbind(0)), range(4)),
+            (Subset(storage_source, [3, 1, 0, 2]), [3, 1, 0, 2]),
+        ):
+            external = adapter.to_external(source)
+            assert len(external) == 4
+            for index, original_index in enumerate(order):
+                assert external[index] == {
+                    "obs": original_index,
+                    "agents": {
+                        "value": data[original_index]["agents", "value"].tolist(),
+                        "task": expected_tasks,
+                        "config": config
+                        if shared_config
+                        else {"source": f"replay-{original_index}"},
+                    },
+                }
+            assert (
+                adapter.to_external(adapter.from_external(external))[:] == external[:]
+            )
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("batch_size", [1, 2])
+    @pytest.mark.parametrize(
+        "dtypes",
+        [
+            (torch.int64, torch.float32),
+            (torch.float32, torch.float64),
+            (torch.bool, torch.int64),
+        ],
+    )
+    def test_rejects_mixed_tensor_dtypes(self, batch_size, dtypes):
+        key = ("next", "value")
+        rows = [
+            TensorDict({key: torch.tensor(16777217, dtype=dtypes[0])}, []),
+            TensorDict({key: torch.tensor(0.5, dtype=dtypes[1])}, []),
+        ]
+        adapter = HuggingFaceDatasetAdapter(batch_size=batch_size)
+        storage = ListStorage(2)
+        storage.set(range(2), rows)
+        for source in (rows, storage.as_dataset()):
+            with pytest.raises(
+                ValueError, match="consistent tensor dtype per key"
+            ) as exc:
+                adapter.to_external(source)
+            assert repr(key) in str(exc.value)
+        # A failed export must not retain dtype state for the next source.
+        external = adapter.to_external(
+            [TensorDict({key: torch.tensor(16777217, dtype=torch.int64)}, [])]
+        )
+        assert external[0]["next"]["value"] == 16777217
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("batch_size", [1, 2, 8])
+    @pytest.mark.parametrize("observation", [False, True])
+    def test_rejects_empty_nested_structures(self, batch_size, observation):
+        rows = [
+            TensorDict({("metadata", "empty"): TensorDict({}, [])}, [])
+            for _ in range(3)
+        ]
+        if observation:
+            for index, row in enumerate(rows):
+                row["obs"] = torch.tensor(index)
+        with pytest.raises(ValueError, match="empty nested TensorDicts") as exc:
+            HuggingFaceDatasetAdapter(batch_size=batch_size).to_external(rows)
+        assert repr(("metadata", "empty")) in str(exc.value)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize(
+        "shape", [(), (0,), (2, 0), (2, 3), (0, 3), (2, 0, 3), (0, 0)]
+    )
+    def test_empty_tensor_dimensions(self, shape, tmp_path):
+        rows = [
+            TensorDict({("next", "obs"): torch.zeros(shape, dtype=torch.float64)}, [])
+            for _ in range(2)
+        ]
+        adapter = HuggingFaceDatasetAdapter()
+        if 0 in shape[:-1]:
+            with pytest.raises(ValueError, match="empty inner dimension") as exc:
+                adapter.to_external(rows)
+            assert repr(("next", "obs")) in str(exc.value)
+            return
+        external = adapter.to_external(rows)
+        path = tmp_path / "empty.parquet"
+        external.to_parquet(path)
+        reloaded = datasets.load_dataset("parquet", data_files=str(path), split="train")
+        for source in (external, reloaded):
+            imported = adapter.from_external(source)
+            assert len(imported) == 2
+            assert_allclose_td(imported[0], rows[0])
+            assert imported[0]["next", "obs"].shape == shape
+            assert imported[0]["next", "obs"].dtype is torch.float64
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("dtype", ["bool", "float32", "int16"])
+    @pytest.mark.parametrize("nested_lists", [False, True])
+    def test_nullable_numeric_sequences(self, dtype, nested_lists, tmp_path):
+        first, last = (True, False) if dtype == "bool" else (1, 3)
+        missing, present = [first, None, last], [first, last, first]
+        feature = datasets.Sequence(datasets.Value(dtype))
+        if nested_lists:
+            missing, present = [[first, None], None, [last, first]], [
+                [first, last],
+                [last, first],
+            ]
+            feature = datasets.Sequence(feature)
+        values = [missing, present, None]
+        external = datasets.Dataset.from_dict(
+            {"next": [{"value": value} for value in values]},
+            features=datasets.Features({"next": {"value": feature}}),
+        )
+        path = tmp_path / "nullable.parquet"
+        external.to_parquet(path)
+        reloaded = datasets.load_dataset("parquet", data_files=str(path), split="train")
+        adapter = HuggingFaceDatasetAdapter(batch_size=1)
+        for source in (external, reloaded):
+            imported = adapter.from_external(source)
+            assert isinstance(imported[0].get(("next", "value")), NonTensorData)
+            assert imported[0]["next", "value"] == missing
+            assert imported[1]["next", "value"].tolist() == present
+            assert imported[1]["next", "value"].dtype == getattr(torch, dtype)
+            assert imported[2]["next", "value"] is None
+            assert adapter.to_external(imported)[:] == external[:]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize(
+        "dtype, values",
+        [
+            ("bool", [False, True]),
+            ("uint8", [0, 255]),
+            ("uint64", [0, 2**63 + 1, 2**64 - 1]),
+            ("float32", [1.25, float("nan"), float("inf"), -0.0]),
+            ("float64", [1.123456789012345, float("nan"), -float("inf"), -0.0]),
+        ],
+    )
+    def test_import_numeric_arrays_with_and_without_nulls(self, dtype, values):
+        dense = [[values, values], [values, values]]
+        missing_leaf = [[values, values], [values, [*values[:-1], None]]]
+        missing_container = [None, [values, values]]
+        feature = datasets.Value(dtype)
+        for _ in range(3):
+            feature = datasets.Sequence(feature)
+        external = datasets.Dataset(
+            pa.Table.from_pydict(
+                {"value": [dense, missing_leaf, missing_container]},
+                schema=datasets.Features({"value": feature}).arrow_schema,
+            )
+        )
+
+        imported = HuggingFaceDatasetAdapter().from_external(external)
+        tensor = imported[0]["value"]
+        assert isinstance(tensor, torch.Tensor)
+        assert tensor.dtype == getattr(torch, dtype)
+        np.testing.assert_equal(tensor.numpy(), np.asarray(dense, dtype=dtype))
+        for index, expected in enumerate((missing_leaf, missing_container), start=1):
+            assert isinstance(imported[index].get("value"), NonTensorData)
+            np.testing.assert_equal(imported[index]["value"], expected)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_nullable_float_preserves_nan(self):
+        external = datasets.Dataset.from_dict(
+            {"value": [[None, float("nan"), 1.25]]},
+            features=datasets.Features(
+                {"value": datasets.Sequence(datasets.Value("float64"))}
+            ),
+        )
+        adapter = HuggingFaceDatasetAdapter()
+        for source in (external, adapter.to_external(adapter.from_external(external))):
+            value = adapter.from_external(source)[0]["value"]
+            assert value[0] is None
+            assert np.isnan(value[1])
+            assert value[2] == 1.25
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("in_sequence", [False, True])
+    @pytest.mark.parametrize(
+        "shape, value, expected_shape",
+        [
+            ((0, 2), [], (0, 2)),
+            ((2, 0, 3), [[], []], (2, 0, 3)),
+            ((None, 2), [], (0, 2)),
+            ((None, 0, 3), [[], []], (2, 0, 3)),
+            ((2, 2), [[1, 2], [3, 4]], (2, 2)),
+        ],
+    )
+    def test_import_declared_array_shapes(
+        self, shape, value, expected_shape, in_sequence, tmp_path
+    ):
+        feature = getattr(datasets, f"Array{len(shape)}D")(shape, "float64")
+        if in_sequence:
+            feature = datasets.Sequence(feature)
+            value = [value]
+            expected_shape = (1, *expected_shape)
+        external = datasets.Dataset.from_dict(
+            {"next": [{"value": value}]},
+            features=datasets.Features({"next": {"value": feature}}),
+        )
+        external.save_to_disk(tmp_path / "arrays")
+        for source in (external, datasets.load_from_disk(tmp_path / "arrays")):
+            result = HuggingFaceDatasetAdapter().from_external(source)[0][
+                "next", "value"
+            ]
+            assert result.shape == expected_shape
+            assert result.dtype is torch.float64
+            assert result.tolist() == value
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("dynamic", [False, True])
+    def test_import_array_beneath_empty_sequence(self, dynamic):
+        feature = datasets.Sequence(
+            datasets.Array2D((None if dynamic else 2, 3), "int16")
+        )
+        external = datasets.Dataset.from_dict(
+            {"value": [[]]}, features=datasets.Features({"value": feature})
+        )
+        imported = HuggingFaceDatasetAdapter().from_external(external)
+        if dynamic:
+            with pytest.raises(ValueError, match="dynamic.*empty sequence"):
+                imported[0]
+        else:
+            assert imported[0]["value"].shape == (0, 2, 3)
+            assert imported[0]["value"].dtype is torch.int16
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("length", [-1, 4])
+    def test_import_array_beneath_empty_nested_sequence(self, length):
+        feature = datasets.Sequence(
+            datasets.Sequence(datasets.Array2D((2, 3), "int16"), length=length)
+        )
+        external = datasets.Dataset.from_dict(
+            {"value": [[]]}, features=datasets.Features({"value": feature})
+        )
+        imported = HuggingFaceDatasetAdapter().from_external(external)
+        if length < 0:
+            with pytest.raises(ValueError, match="dynamic.*empty sequence"):
+                imported[0]
+        else:
+            assert imported[0]["value"].shape == (0, 4, 2, 3)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_nullable_array_features(self):
+        value = [[1, None], [2, 3]]
+        feature = datasets.Array2D((2, 2), "float32")
+        adapter = HuggingFaceDatasetAdapter()
+        external = datasets.Dataset.from_dict(
+            {"value": [value]}, features=datasets.Features({"value": feature})
+        )
+        with pytest.raises(ValueError) as original_error:
+            external[0]
+        with pytest.raises(ValueError, match="nullable ArrayXD") as error:
+            adapter.from_external(external)[0]
+        assert str(original_error.value) in str(error.value)
+        external = datasets.Dataset.from_dict(
+            {"value": [[value]]},
+            features=datasets.Features({"value": datasets.Sequence(feature)}),
+        )
+        assert adapter.from_external(external)[0]["value"] == [value]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.skipif(not hasattr(torch, "float8_e4m3fn"), reason="requires float8")
+    def test_float8_error_reports_nested_key(self):
+        value = torch.tensor([1.0, 2.0]).to(torch.float8_e4m3fn)
+        with pytest.raises(TypeError, match="Cannot convert tensor") as exc:
+            HuggingFaceDatasetAdapter().to_external(
+                [TensorDict({("next", "obs"): value}, [])]
+            )
+        assert repr(("next", "obs")) in str(exc.value)
+        assert str(value.dtype) in str(exc.value)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("format_type", ["torch", "numpy", "custom", "columns"])
+    def test_import_reads_unformatted_values(self, format_type):
+        values = [1.123456789012345, 2.987654321098765]
+        external = datasets.Dataset.from_dict(
+            {"value": values, "count": [7, 8]},
+            features=datasets.Features(
+                {"value": datasets.Value("float64"), "count": datasets.Value("int16")}
+            ),
+        ).select([1, 0])
+        if format_type == "custom":
+            external.set_transform(
+                lambda batch: {"value": [v + 0.5 for v in batch["value"]]}
+            )
+        elif format_type == "columns":
+            external.set_format("torch", columns=["value"])
+        else:
+            external.set_format(format_type)
+        original_format = external.format
+        imported = HuggingFaceDatasetAdapter().from_external(external)
+        for index, original_index in enumerate([1, 0]):
+            assert imported[index]["value"].item() == values[original_index]
+            assert imported[index]["value"].dtype is torch.float64
+            assert imported[index]["count"].item() == 7 + original_index
+            assert imported[index]["count"].dtype is torch.int16
+        assert external.format == original_format
+        if format_type == "custom":
+            assert external[0]["value"] == values[1] + 0.5
+        elif format_type == "columns":
+            assert set(external[0]) == {"value"}
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("payload_kind", ["numpy", "tensor"])
+    def test_non_tensor_payloads_are_snapshots(self, payload_kind):
+        payload = np.arange(4, dtype=np.int16).reshape(2, 2)
+        if payload_kind == "tensor":
+            payload = torch.from_numpy(payload)
+        data = TensorDict({"payload": NonTensorData(payload, batch_size=[3])}, [3])
+        external = HuggingFaceDatasetAdapter().to_external(
+            TensorStorage(data).as_dataset()
+        )
+        payload[...] = 99
+        assert external[:]["payload"] == [[[0, 1], [2, 3]]] * 3
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("kind", ["complex", "sparse", "quantized"])
+    def test_rejects_unsupported_tensors(self, kind):
+        value = torch.tensor([1.0, 2.0])
+        if kind == "complex":
+            value = torch.tensor([1 + 2j])
+        elif kind == "sparse":
+            value = value.to_sparse()
+        else:
+            value = torch.quantize_per_tensor(value, 0.1, 0, torch.qint8)
+        with pytest.raises(TypeError, match="tensor layout or dtype"):
+            HuggingFaceDatasetAdapter().to_external([TensorDict({"obs": value}, [])])
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("batch_size", [1, 4, 32])
+    @pytest.mark.parametrize("seed", [0, 1, 2, 3])
+    def test_shuffled_noncontiguous_round_trip(self, batch_size, seed):
+        dtype = (torch.float64, torch.int16, torch.bool, torch.bfloat16)[seed]
+        values = torch.arange(19 * 6).reshape(19, 2, 3).transpose(1, 2).to(dtype)
+        if dtype.is_floating_point:
+            values.requires_grad_()
+        expected = values.detach().clone()
+        tasks = [None if index % 3 == 0 else f"task-{index % 2}" for index in range(19)]
+        data = TensorDict(
+            {
+                ("next", "obs"): values,
+                "task": tasks,
+                "tags": NonTensorData([1, None, 3], batch_size=[19]),
+            },
+            [19],
+        )
+        indices = torch.randperm(
+            19, generator=torch.Generator().manual_seed(seed)
+        ).tolist()
+        sources = [
+            Subset(TensorStorage(data).as_dataset(), indices),
+            [data[index] for index in indices],
+        ]
+        adapter = HuggingFaceDatasetAdapter(batch_size=batch_size)
+        rng_state = torch.random.get_rng_state()
+        exports = [adapter.to_external(source) for source in sources]
+        assert torch.equal(torch.random.get_rng_state(), rng_state)
+        with torch.no_grad():
+            values.zero_()
+        for external in exports:
+            imported = adapter.from_external(external)
+            assert len(imported) == 19
+            for index, original_index in enumerate(indices):
+                row = imported[index]
+                assert row["next", "obs"].tolist() == expected[original_index].tolist()
+                assert row["next", "obs"].dtype == (
+                    torch.float32 if dtype is torch.bfloat16 else dtype
+                )
+                assert row["task"] == tasks[original_index]
+                assert row["tags"] == [1, None, 3]
+
+    @pytest.mark.parametrize("batch_size", [0, -1])
+    def test_invalid_batch_size(self, batch_size):
+        with pytest.raises(ValueError, match="positive"):
+            HuggingFaceDatasetAdapter(batch_size=batch_size)
+
+    @pytest.mark.parametrize("batch_size", [True, 1.5, "2", None])
+    def test_invalid_batch_size_type(self, batch_size):
+        with pytest.raises(TypeError, match="positive integer"):
+            HuggingFaceDatasetAdapter(batch_size=batch_size)
+
+    def test_missing_dependency(self, monkeypatch):
+        monkeypatch.setattr(huggingface, "_has_datasets", False)
+        with pytest.raises(ImportError, match="requires the `datasets` package"):
+            huggingface.HuggingFaceDatasetAdapter()
+
+        monkeypatch.setattr(huggingface, "_has_datasets", True)
+        monkeypatch.setattr(huggingface, "_has_pyarrow", False)
+        with pytest.raises(ImportError, match="requires the `pyarrow` package"):
+            huggingface.HuggingFaceDatasetAdapter()
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_docstring_examples(self):
+        runner = doctest.DocTestRunner()
+        example = doctest.DocTestParser().get_doctest(
+            HuggingFaceDatasetAdapter.__doc__, {}, "HuggingFaceDatasetAdapter", None, 0
+        )
+        assert runner.run(example).failed == 0
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_storage_parquet_round_trip(self, tmp_path):
+        rows = [
+            TensorDict(
+                {
+                    "observation": torch.tensor(
+                        [index, index + 0.5], dtype=torch.float64
+                    ),
+                    "action": torch.tensor(index, dtype=torch.int16),
+                    "done": torch.tensor(index == 1),
+                    "next": TensorDict(
+                        {"reward": torch.tensor(index / 2, dtype=torch.float32)},
+                        batch_size=[],
+                    ),
+                    "task": NonTensorData("pick" if index == 0 else "place"),
+                },
+                batch_size=[],
+            )
+            for index in range(2)
+        ]
+        storage = ListStorage(2)
+        storage.set(range(2), rows)
+        adapter: ReplayDatasetAdapter[datasets.Dataset] = HuggingFaceDatasetAdapter()
+
+        hf_dataset = adapter.to_external(storage.as_dataset())
+        direct = adapter.from_external(hf_dataset)
+
+        path = tmp_path / "replay.parquet"
+        hf_dataset.to_parquet(path)
+        reloaded = datasets.load_dataset("parquet", data_files=str(path), split="train")
+        imported = adapter.from_external(reloaded)
+
+        assert isinstance(hf_dataset, datasets.Dataset)
+        assert len(imported) == len(rows)
+        for index, expected in enumerate(rows):
+            assert_allclose_td(direct[index], expected)
+            assert_allclose_td(imported[index], expected)
+            assert imported[index]["observation"].dtype is torch.float64
+            assert imported[index]["action"].dtype is torch.int16
+            assert imported[index]["next", "reward"].dtype is torch.float32
+        batch = next(
+            iter(
+                DataLoader(
+                    imported,
+                    batch_size=2,
+                    collate_fn=tensordict_collate,
+                )
+            )
+        )
+        assert batch.batch_size == torch.Size([2])
+        assert list(batch["task"]) == ["pick", "place"]
+        storage[0]["observation"].fill_(99)
+        assert direct[0]["observation"].tolist() == [0, 0.5]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_rejects_batched_items(self):
+        storage = ListStorage(1)
+        storage.set(0, TensorDict({"observation": torch.arange(6).reshape(2, 3)}, [2]))
+        source = storage.as_dataset()
+        with pytest.raises(ValueError, match="unbatched TensorDict"):
+            HuggingFaceDatasetAdapter().to_external(source)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("picklable", [False, True])
+    def test_materializes_current_backing_data(self, tmp_path, picklable):
+        class FileRows(Dataset[TensorDictBase]):
+            def __init__(self, path, picklable):
+                self.path, self.picklable = path, picklable
+
+            def __len__(self):
+                return 2
+
+            def __getitem__(self, index):
+                value = int(self.path.read_text().splitlines()[index])
+                return TensorDict({"obs": torch.tensor(value)}, [])
+
+            def __getstate__(self):
+                if not self.picklable:
+                    raise TypeError("Source does not support serialization.")
+                return self.__dict__
+
+        path = tmp_path / "rows.txt"
+        path.write_text("1\n2\n")
+        source = FileRows(path, picklable)
+        adapter = HuggingFaceDatasetAdapter()
+
+        first = adapter.to_external(source)
+        path.write_text("1\n99\n")
+        second = adapter.to_external(source)
+
+        assert first[:]["obs"] == [1, 2]
+        assert second[:]["obs"] == [1, 99]
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_rejects_inconsistent_columns(self, nested):
+        rows = [
+            TensorDict({"a": torch.tensor(0)}, []),
+            TensorDict({"a": torch.tensor(1), "b": torch.tensor(7)}, []),
+        ]
+        if nested:
+            rows = [TensorDict({"row": item}, []) for item in rows]
+        storage = ListStorage(2)
+        storage.set(range(2), rows)
+        adapter = HuggingFaceDatasetAdapter()
+
+        with pytest.raises(ValueError, match="same keys and tensor shapes"):
+            adapter.to_external(storage.as_dataset())
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_empty_and_invalid_inputs(self):
+        storage = ListStorage(1)
+        adapter = HuggingFaceDatasetAdapter()
+        empty = adapter.to_external(storage.as_dataset())
+        assert len(empty) == len(adapter.from_external(empty)) == 0
+        storage.set(0, TensorDict({"obs": torch.tensor(0)}, []))
+        source = storage.as_dataset()
+
+        with pytest.raises(TypeError, match="expects TensorDict items"):
+            adapter.to_external([torch.tensor(0)])
+        with pytest.raises(ValueError, match="nonempty TensorDict"):
+            adapter.to_external([TensorDict({}, [])])
+
+        external = adapter.to_external(source)
+        with pytest.raises(TypeError, match="Select a split"):
+            adapter.from_external(datasets.DatasetDict(train=external))
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets and pyarrow"
+    )
+    def test_non_numpy_feature(self):
+        external = datasets.Dataset.from_dict(
+            {"price": [Decimal("1.25")]},
+            features=datasets.Features({"price": datasets.Value("decimal128(3, 2)")}),
+        )
+
+        imported = HuggingFaceDatasetAdapter().from_external(external)
+
+        assert imported[0]["price"] == Decimal("1.25")
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_pyarrow), reason="requires datasets"
+    )
+    @pytest.mark.parametrize("storage_type", [ListStorage, LazyTensorStorage])
+    @pytest.mark.parametrize("shared", [False, True])
+    def test_replay_buffer_episodic_export(self, storage_type, shared):
+        rb = ReplayBuffer(storage=storage_type(4), shared=shared)
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.tensor([11, 1, 10, 0]),
+                    ("collector", "traj_ids"): torch.tensor([1, 0, 1, 0]),
+                    "step": torch.tensor([1, 1, 0, 0]),
+                },
+                [4],
+            )
+        )
+        adapter = HuggingFaceDatasetAdapter()
+        external = rb.export(
+            adapter, trajectory_key=("collector", "traj_ids"), step_key="step"
+        )
+        rb.empty()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.tensor([99]),
+                    ("collector", "traj_ids"): torch.tensor([9]),
+                    "step": torch.tensor([0]),
+                },
+                [1],
+            )
+        )
+        imported = adapter.from_external(external)
+        assert [imported[i]["obs"].item() for i in range(len(imported))] == [
+            0,
+            1,
+            10,
+            11,
+        ]
+        assert [
+            imported[i]["collector", "traj_ids"].item() for i in range(len(imported))
+        ] == [0, 0, 1, 1]
 
 
 @pytest.mark.slow
@@ -1579,3 +2491,699 @@ class TestLeRobotExperienceReplay:
         assert torch.is_tensor(decoded)
         assert decoded.shape == torch.Size([8, 3, h, w])
         assert decoded.dtype == torch.uint8
+
+
+@pytest.mark.skipif(not _has_lerobot_dataset, reason="requires torchrl[lerobot]")
+class TestLeRobotDatasetAdapter:
+    @staticmethod
+    def _source():
+        return TensorDict(
+            {
+                ("robot", "state"): torch.arange(18, dtype=torch.float32).reshape(6, 3),
+                "action": torch.arange(12, dtype=torch.float32).reshape(6, 2),
+                ("next", "reward"): (
+                    torch.arange(6, dtype=torch.float64) + 0.123456789
+                )[:, None],
+                ("next", "done"): torch.tensor([False, False, True] * 2)[:, None],
+                "joint_ids": torch.arange(12, dtype=torch.int16).reshape(6, 2),
+                ("collector", "episode"): torch.tensor([0, 0, 0, 1, 1, 1]),
+                ("collector", "step"): torch.tensor([0, 1, 2, 0, 1, 2]),
+            },
+            [6],
+        )
+
+    @staticmethod
+    def _adapter(root, **kwargs):
+        return LeRobotDatasetAdapter(
+            repo_id="local/test",
+            root=root,
+            fps=10,
+            features={
+                "observation.state": {"dtype": "float32", "shape": (3,)},
+                "action": {"dtype": "float32", "shape": (2,)},
+                "next.reward": {"dtype": "float64", "shape": (1,)},
+                "next.done": {"dtype": "bool", "shape": (1,)},
+                "joint_ids": {"dtype": "int16", "shape": (2,)},
+            },
+            key_map={
+                "observation.state": ("robot", "state"),
+                "episode_index": ("collector", "episode"),
+                "frame_index": ("collector", "step"),
+            },
+            task="Perform the task.",
+            batch_size=2,
+            **kwargs,
+        )
+
+    @pytest.mark.parametrize("batch_size", [1, 2, 3])
+    @pytest.mark.parametrize("camera", [False, True])
+    def test_mixed_dtypes_rejected_before_collation(self, tmp_path, batch_size, camera):
+        rows = []
+        for index in range(3):
+            dtype = (
+                (torch.uint8 if index % 2 == 0 else torch.float32)
+                if camera
+                else (torch.float64 if index % 2 == 0 else torch.int64)
+            )
+            value = (
+                torch.ones(3, 4, 4, dtype=dtype)
+                if camera
+                else torch.tensor(
+                    [2**53 + 1 if dtype == torch.int64 else 0.5], dtype=dtype
+                )
+            )
+            rows.append(
+                TensorDict(
+                    {
+                        ("sensor", "value"): value,
+                        "episode": torch.tensor(0),
+                        "frame": torch.tensor(index),
+                    },
+                    [],
+                )
+            )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/mixed",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={
+                "value": {
+                    "dtype": "image" if camera else "float64",
+                    "shape": (3, 4, 4) if camera else (1,),
+                }
+            },
+            key_map={"value": ("sensor", "value")},
+            task="Inspect the sensor.",
+            batch_size=batch_size,
+        )
+        with pytest.raises(ValueError, match="dtype"):
+            adapter.to_external(rows)
+
+    @pytest.mark.parametrize("episode_length", [2, 4])
+    def test_reused_batched_buffer_is_snapshotted(self, tmp_path, episode_length):
+        class ReusedRows(Dataset):
+            def __init__(self):
+                self.buffer = torch.empty(2, 1)
+
+            def __len__(self):
+                return 4
+
+            def __getitem__(self, index):
+                return TensorDict(
+                    {
+                        "action": torch.tensor([float(index)]),
+                        "episode": torch.tensor(index // episode_length),
+                        "frame": torch.tensor(index % episode_length),
+                        "instruction": "go",
+                    },
+                    [],
+                )
+
+            def __getitems__(self, indices):
+                self.buffer[:, 0] = torch.tensor(indices)
+                index = torch.tensor(indices)
+                return TensorDict(
+                    {
+                        "action": self.buffer,
+                        "episode": index // episode_length,
+                        "frame": index % episode_length,
+                        "instruction": MetaData("go"),
+                    },
+                    [2],
+                )
+
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/reused",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (1,)}},
+            task_key="instruction",
+            batch_size=2,
+        )
+        native = adapter.to_external(ReusedRows())
+        assert native.hf_dataset.with_format(None)[:]["action"] == [0.0, 1.0, 2.0, 3.0]
+        assert [native[i]["task"] for i in range(4)] == ["go"] * 4
+
+    def test_unexported_fields_do_not_affect_collation(self, tmp_path):
+        rows = [
+            TensorDict(
+                {
+                    "action": torch.tensor([float(i)]),
+                    "episode": torch.tensor(0),
+                    "frame": torch.tensor(i),
+                    f"unused_{i}": torch.zeros(i + 1),
+                },
+                [],
+            )
+            for i in range(3)
+        ]
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/selected",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (1,)}},
+            task="Move the object.",
+            batch_size=3,
+        )
+        imported = adapter.from_external(adapter.to_external(rows))
+        assert [imported[i]["action"].item() for i in range(3)] == [0, 1, 2]
+        assert all(
+            not any(key.startswith("unused_") for key in imported[i].keys())
+            for i in range(3)
+        )
+
+    @pytest.mark.parametrize(
+        "dtype",
+        [
+            "bool",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "float16",
+            "float32",
+            "float64",
+        ],
+    )
+    def test_numeric_dtypes(self, tmp_path, dtype):
+        numpy_dtype = np.dtype(dtype)
+        if dtype == "uint64":
+            values = [0, 2**32 + 1]
+        elif numpy_dtype.kind in "iu":
+            limits = np.iinfo(numpy_dtype)
+            values = [limits.min, limits.max]
+        elif dtype == "bool":
+            values = [False, True]
+        else:
+            values = [0.0, 1.123456789012345]
+        source = TensorDict(
+            {
+                "action": torch.tensor(values, dtype=getattr(torch, dtype)).reshape(
+                    2, 1
+                ),
+                "episode": torch.zeros(2, dtype=torch.int64),
+                "frame": torch.arange(2),
+            },
+            [2],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/dtypes",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"motor-position": {"dtype": dtype, "shape": (1,)}},
+            key_map={"motor-position": "action"},
+            task="Move the object.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        assert native.features["motor-position"]["dtype"] == dtype
+        np.testing.assert_equal(
+            np.asarray(
+                native.hf_dataset.with_format(None)[:]["motor-position"],
+                dtype=numpy_dtype,
+            ),
+            source["action"].numpy().squeeze(-1),
+        )
+        imported = adapter.from_external(native)
+        for i in range(2):
+            torch.testing.assert_close(
+                imported[i]["action"], native[i]["motor-position"], rtol=0, atol=0
+            )
+
+    @pytest.mark.parametrize(
+        "shape", [(2,), (2, 2), (2, 1, 2), (1, 2, 1, 2), (1, 1, 2, 1, 2)]
+    )
+    def test_numeric_shapes(self, tmp_path, shape):
+        values = torch.arange(2 * int(np.prod(shape)), dtype=torch.float64).reshape(
+            2, *shape
+        )
+        source = TensorDict(
+            {
+                "action": values,
+                "episode": torch.zeros(2, dtype=torch.int64),
+                "frame": torch.arange(2),
+            },
+            [2],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/shapes",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": "float64", "shape": shape}},
+            task="Move the object.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        np.testing.assert_equal(
+            np.asarray(
+                native.hf_dataset.with_format(None)[:]["action"], dtype=np.float64
+            ),
+            values.numpy(),
+        )
+        imported = adapter.from_external(native)
+        for i in range(2):
+            torch.testing.assert_close(
+                imported[i]["action"], native[i]["action"], rtol=0, atol=0
+            )
+
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "bfloat16",
+            "sparse",
+            "quantized",
+            "unbatched",
+            "unbatched-batched",
+            pytest.param(
+                "float8",
+                marks=pytest.mark.skipif(
+                    not hasattr(torch, "float8_e4m3fn"), reason="requires float8"
+                ),
+            ),
+        ],
+    )
+    def test_unsupported_tensor_errors_name_feature(self, tmp_path, kind):
+        if kind == "bfloat16":
+            value = torch.ones(1, dtype=torch.bfloat16)
+        elif kind == "sparse":
+            value = torch.ones(1).to_sparse()
+        elif kind == "quantized":
+            value = torch.quantize_per_tensor(torch.ones(1), 0.1, 0, torch.quint8)
+        elif kind.startswith("unbatched"):
+            value = UnbatchedTensor(torch.ones(1))
+        else:
+            value = torch.ones(1).to(torch.float8_e4m3fn)
+        source = TensorDict(
+            {
+                ("motor", "value"): value,
+                "episode": torch.tensor(0),
+                "frame": torch.tensor(0),
+            },
+            [],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/unsupported",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (1,)}},
+            key_map={"action": ("motor", "value")},
+            task="Move the motor.",
+        )
+        dataset = (
+            StorageDataset(TensorStorage(source.unsqueeze(0)), share_memory=False)
+            if kind == "unbatched-batched"
+            else [source]
+        )
+        with pytest.raises(TypeError, match="action"):
+            adapter.to_external(dataset)
+
+    @pytest.mark.parametrize(
+        "dtype,values",
+        [("float64", [float("nan"), 1.000000000001]), ("uint64", [1, 2**32 + 1])],
+    )
+    def test_import_native_numeric_features(self, tmp_path, dtype, values):
+        native = LeRobotDataset.create(
+            repo_id="local/native",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": dtype, "shape": (1,)}},
+            video_backend="pyav",
+        )
+        for value in values:
+            native.add_frame({"action": np.array([value], dtype=dtype), "task": "go"})
+        native.save_episode()
+        native.finalize()
+        imported = LeRobotDatasetAdapter().from_external(native)
+        for i in range(len(native)):
+            torch.testing.assert_close(
+                imported[i]["action"],
+                native[i]["action"],
+                rtol=0,
+                atol=0,
+                equal_nan=True,
+            )
+
+    @pytest.mark.parametrize("storage_cls", [LazyTensorStorage, ListStorage])
+    def test_ordered_export_roundtrip_and_independence(self, tmp_path, storage_cls):
+        source = self._source()
+        replay = ReplayBuffer(storage=storage_cls(6))
+        replay.extend(source[torch.tensor([5, 2, 4, 0, 1, 3])])
+        adapter: ReplayDatasetAdapter = self._adapter(tmp_path / "dataset")
+        native = replay.export(
+            adapter,
+            trajectory_key=("collector", "episode"),
+            step_key=("collector", "step"),
+        )
+        replay.extend(source.clone().zero_())
+        # Reopen from disk to verify parquet footers and episode metadata.
+        loaded = type(native)(
+            repo_id="local/test", root=native.root, video_backend="pyav"
+        )
+        assert loaded.num_episodes == 2
+        assert loaded.meta.total_frames == 6
+        imported = adapter.from_external(loaded)
+        batch = next(
+            iter(DataLoader(imported, batch_size=6, collate_fn=tensordict_collate))
+        )
+        raw = loaded.hf_dataset.with_format(None)[:]
+        for name, key in {
+            "observation.state": ("robot", "state"),
+            "action": "action",
+            "next.reward": ("next", "reward"),
+            "next.done": ("next", "done"),
+            "joint_ids": "joint_ids",
+        }.items():
+            np.testing.assert_equal(
+                np.asarray(raw[name]).reshape(source[key].shape), source[key].numpy()
+            )
+            expected = torch.stack([loaded[i][name] for i in range(6)])
+            if isinstance(key, tuple) and key[0] == "next" and expected.ndim == 1:
+                expected = expected.unsqueeze(-1)
+            torch.testing.assert_close(batch[key], expected, rtol=0, atol=0)
+        assert batch["collector", "episode"].tolist() == [0, 0, 0, 1, 1, 1]
+        assert batch["collector", "step"].tolist() == [0, 1, 2, 0, 1, 2]
+        assert batch.get("language_instruction").tolist() == ["Perform the task."] * 6
+        torch.testing.assert_close(
+            batch["timestamp"], torch.tensor([0.0, 0.1, 0.2] * 2)
+        )
+
+    @pytest.mark.parametrize(
+        "kind,layout",
+        [
+            ("image", "chw"),
+            ("image", "hwc-float"),
+            ("video", "chw"),
+            ("video", "hwc-float"),
+        ],
+    )
+    def test_camera_compression(self, tmp_path, kind, layout):
+        pixels = (
+            torch.arange(4)[:, None, None, None] * 20
+            + torch.tensor([30, 80, 130])[None, :, None, None]
+            + torch.arange(16)[None, None, :, None]
+            + torch.arange(24)[None, None, None, :]
+        ).to(torch.uint8)
+        camera = pixels if layout == "chw" else pixels.permute(0, 2, 3, 1).float() / 255
+        source = TensorDict(
+            {
+                "pixels": camera,
+                ("camera", "wrist"): camera.flip(0),
+                "action": torch.arange(8, dtype=torch.float32).reshape(4, 2),
+                "episode": torch.tensor([0, 0, 1, 1]),
+                "frame": torch.tensor([0, 1, 0, 1]),
+                "instruction": NonTensorStack.from_list(
+                    ["stand", "stand", "walk", "walk"]
+                ),
+            },
+            [4],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/cameras",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={
+                "observation.images.front": {"dtype": kind, "shape": (3, 16, 24)},
+                "observation.images.wrist": {"dtype": kind, "shape": (3, 16, 24)},
+                "action": {"dtype": "float32", "shape": (2,)},
+            },
+            key_map={
+                "observation.images.front": "pixels",
+                "observation.images.wrist": ("camera", "wrist"),
+            },
+            task_key="instruction",
+            batch_size=3,
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        loaded = type(native)(
+            repo_id="local/cameras", root=native.root, video_backend="pyav"
+        )
+        imported = LeRobotDatasetAdapter(key_map=adapter.key_map).from_external(loaded)
+        decoded = torch.stack([imported[i]["pixels"] for i in range(4)])
+        # Float input is quantized to uint8; H.264 additionally uses lossy yuv420p.
+        tolerance = (
+            10 / 255
+            if kind == "video"
+            else (1 / 255 + 1e-7 if layout == "hwc-float" else 0)
+        )
+        torch.testing.assert_close(
+            decoded,
+            pixels.float() / 255,
+            atol=tolerance,
+            rtol=0,
+        )
+        torch.testing.assert_close(
+            torch.stack([imported[i]["camera", "wrist"] for i in range(4)]),
+            pixels.flip(0).float() / 255,
+            atol=tolerance,
+            rtol=0,
+        )
+        assert [imported[i]["language_instruction"] for i in range(4)] == [
+            "stand",
+            "stand",
+            "walk",
+            "walk",
+        ]
+        torch.testing.assert_close(
+            torch.stack([imported[i]["action"] for i in range(4)]), source["action"]
+        )
+        if kind == "video":
+            paths = list(native.root.rglob("*.mp4"))
+            assert paths and all(path.stat().st_size > 0 for path in paths)
+            assert not list(native.root.rglob("*.png"))
+        np.testing.assert_allclose(
+            loaded.meta.stats["observation.images.front"]["mean"],
+            np.array([79, 129, 179]).reshape(3, 1, 1) / 255,
+            atol=1 / 255 + 1e-7,
+            rtol=0,
+        )
+
+    @pytest.mark.parametrize(
+        "field,values,match",
+        [
+            (("collector", "episode"), [0, 1, 0, 1, 1, 1], "increasing ID"),
+            (("collector", "step"), [0, 1, 3, 0, 1, 2], "consecutive"),
+            (("collector", "step"), [-1, 0, 1, 0, 1, 2], "non-negative"),
+        ],
+    )
+    def test_invalid_order(self, tmp_path, field, values, match):
+        source = self._source()
+        source[field] = torch.tensor(values)
+        with pytest.raises(ValueError, match=match):
+            self._adapter(tmp_path / "dataset").to_external(
+                TensorStorage(source).as_dataset()
+            )
+
+    def test_partial_episode_rebased(self, tmp_path):
+        source = self._source()[:3].clone()
+        source["collector", "step"] += 7
+        native = self._adapter(tmp_path / "dataset").to_external(
+            TensorStorage(source).as_dataset()
+        )
+        assert [native[i]["frame_index"].item() for i in range(3)] == [0, 1, 2]
+        assert native.num_episodes == 1
+
+    @pytest.mark.parametrize(
+        "root", ["relative/dataset", "~torchrl-no-such-user/dataset", None]
+    )
+    def test_native_destination(self, tmp_path, monkeypatch, root):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            lerobot_dataset_metadata, "HF_LEROBOT_HOME", tmp_path / "default"
+        )
+        source = TensorDict(
+            {"episode": torch.zeros(2, dtype=torch.int64), "frame": torch.arange(2)},
+            [2],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/destination", root=root, fps=10, features={}, task="Go."
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        expected = (
+            Path(root) if root is not None else tmp_path / "default/local/destination"
+        )
+        assert native.root == expected
+        assert expected.is_dir()
+        assert native.num_frames == 2
+        assert native[1]["task"] == "Go."
+        with pytest.raises(FileExistsError):
+            adapter.to_external(TensorStorage(source).as_dataset())
+
+    @pytest.mark.parametrize("kind", ["image", "video"])
+    def test_export_imported_camera_with_hwc_schema(self, tmp_path, kind):
+        pixels = (
+            torch.tensor([30, 80, 130])[:, None, None]
+            + torch.arange(16)[None, :, None]
+            + torch.arange(24)[None, None, :]
+        ).to(torch.uint8)
+        source = TensorDict(
+            {
+                "pixels": pixels.unsqueeze(0),
+                "episode": torch.zeros(1, dtype=torch.long),
+                "frame": torch.zeros(1, dtype=torch.long),
+            },
+            [1],
+        )
+        features = {
+            "observation.images.front": {
+                "dtype": kind,
+                "shape": (16, 24, 3),
+                "names": ["height", "width", "channels"],
+            }
+        }
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/hwc",
+            root=tmp_path / "hwc",
+            fps=10,
+            features=features,
+            key_map={"observation.images.front": "pixels"},
+            task="Go.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        imported = adapter.from_external(native)[0]["pixels"]
+        tolerance = 10 / 255 if kind == "video" else 0
+        torch.testing.assert_close(
+            imported, pixels.float() / 255, atol=tolerance, rtol=0
+        )
+        second = LeRobotDatasetAdapter(
+            repo_id="local/roundtrip",
+            root=tmp_path / "roundtrip",
+            fps=10,
+            features=features,
+            key_map={"observation.images.front": "pixels"},
+            task="Go.",
+        )
+        roundtrip = second.from_external(
+            second.to_external(adapter.from_external(native))
+        )[0]["pixels"]
+        torch.testing.assert_close(
+            roundtrip, imported, atol=10 / 255 if kind == "video" else 1 / 255, rtol=0
+        )
+
+    def test_native_image_and_string_features(self, tmp_path):
+        depth = (
+            torch.tensor([1000, 2000], dtype=torch.uint16)[:, None, None, None]
+            .expand(2, 1, 4, 6)
+            .clone()
+        )
+        source = TensorDict(
+            {
+                "depth": depth,
+                "annotation": NonTensorStack.from_list(["first", "second"]),
+                "operator": MetaData("Alice"),
+                "episode": torch.zeros(2, dtype=torch.int64),
+                "frame": torch.arange(2),
+            },
+            [2],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/native-features",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={
+                "observation.images.depth": {
+                    "dtype": "image",
+                    "shape": (1, 4, 6),
+                    "info": {"is_depth_map": True, "depth_unit": "mm"},
+                },
+                "annotation": {"dtype": "string", "shape": (1,)},
+                "operator": {"dtype": "string", "shape": (1,)},
+            },
+            key_map={"observation.images.depth": "depth"},
+            task="Inspect.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        imported = adapter.from_external(native)
+        torch.testing.assert_close(
+            torch.stack([imported[i]["depth"] for i in range(2)]), depth.float()
+        )
+        assert [imported[i]["annotation"] for i in range(2)] == ["first", "second"]
+        assert [imported[i]["operator"] for i in range(2)] == ["Alice", "Alice"]
+
+    def test_validation(self, tmp_path):
+        with pytest.raises(ValueError, match="overlapping"):
+            LeRobotDatasetAdapter(
+                key_map={"episode_index": "same", "frame_index": ("same",)}
+            )
+        with pytest.raises(ValueError, match="empty"):
+            self._adapter(tmp_path / "empty").to_external([])
+        source = self._source()
+        source["action"] = source["action"].double()
+        with pytest.raises(ValueError, match="action.*dtype"):
+            self._adapter(tmp_path / "dtype").to_external(
+                TensorStorage(source).as_dataset()
+            )
+        with pytest.raises(TypeError, match="native LeRobotDataset"):
+            self._adapter(tmp_path / "type").from_external(source)
+
+    def test_export_requires_task_or_task_key(self, tmp_path):
+        root = tmp_path / "missing_task"
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/missing-task",
+            root=root,
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (1,)}},
+        )
+        with pytest.raises(ValueError, match="task or task_key"):
+            adapter.to_external(TensorStorage(self._source()).as_dataset())
+
+    def test_import_validation_and_failed_destination(self, tmp_path):
+        adapter = self._adapter(tmp_path / "dataset")
+        native = adapter.to_external(TensorStorage(self._source()).as_dataset())
+        native.delta_timestamps = {"action": [0.0, 0.1]}
+        with pytest.raises(ValueError, match="delta_timestamps"):
+            LeRobotDatasetAdapter().from_external(native)
+        native.delta_timestamps = None
+        with pytest.raises(ValueError, match="overlapping"):
+            LeRobotDatasetAdapter(
+                key_map={"observation.state": "action"}
+            ).from_external(native)
+        source = self._source()
+        source["collector", "step"][-1] = 4
+        failed = self._adapter(tmp_path / "failed")
+        with pytest.raises(ValueError, match="consecutive"):
+            failed.to_external(TensorStorage(source).as_dataset())
+        assert not failed.root.exists()
+        recovered = failed.to_external(TensorStorage(self._source()).as_dataset())
+        assert recovered.num_frames == 6
+        with pytest.raises(ValueError, match="Export requires"):
+            LeRobotDatasetAdapter().to_external(
+                TensorStorage(self._source()).as_dataset()
+            )
+
+    def test_docstring(self):
+        parser = doctest.DocTestParser()
+        test = parser.get_doctest(
+            LeRobotDatasetAdapter.__doc__, {}, "LeRobotDatasetAdapter", None, 0
+        )
+        assert doctest.DocTestRunner().run(test).failed == 0
+
+
+def test_lerobot_adapter_optional_dependency(monkeypatch, tmp_path):
+    monkeypatch.setattr(lerobot_adapter, "_has_lerobot", False)
+    with pytest.raises(ImportError, match=r"torchrl\[lerobot\]"):
+        LeRobotDatasetAdapter(
+            repo_id="local/test",
+            root=tmp_path,
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (2,)}},
+        )
+
+
+def test_lerobot_adapter_partial_install(monkeypatch):
+    monkeypatch.setattr(lerobot_adapter, "_has_lerobot", True)
+    real_import = builtins.__import__
+
+    def missing_dataset_dependencies(name, *args, **kwargs):
+        if name == "lerobot.configs":
+            raise ModuleNotFoundError("No module named 'datasets'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", missing_dataset_dependencies)
+    with pytest.raises(ImportError, match=r"torchrl\[lerobot\]"):
+        LeRobotDatasetAdapter()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "--capture", "no", "--exitfirst"])

@@ -491,6 +491,9 @@ class TensorStorage(Storage):
             leaves = tree_flatten(storage)[0]
         return [leaf for leaf in leaves if isinstance(leaf, torch.Tensor)]
 
+    def _content_devices(self) -> set[torch.device]:
+        return {leaf.device for leaf in self._content_leaves()}
+
     def _share_memory_(self) -> None:
         if not self.initialized:
             return

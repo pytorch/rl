@@ -5,10 +5,14 @@
 
 from __future__ import annotations
 
+from .adapters import ReplayDatasetAdapter, ReplayDatasetExporter, ReplayDatasetImporter
+
 # Import classes that don't have external dependencies
 from .atari_dqn import AtariDQNExperienceReplay
 from .common import BaseDatasetExperienceReplay
+from .huggingface import HuggingFaceDatasetAdapter
 from .lerobot import lerobot_columns_to_tensordict, LeRobotExperienceReplay
+from .lerobot_adapter import LeRobotDatasetAdapter
 from .utils import load_dataset, register_dataset
 
 # Conditional imports for classes with external dependencies
@@ -48,6 +52,11 @@ except ImportError:
     pass
 
 __all__ = [
+    "HuggingFaceDatasetAdapter",
+    "LeRobotDatasetAdapter",
+    "ReplayDatasetAdapter",
+    "ReplayDatasetExporter",
+    "ReplayDatasetImporter",
     "AtariDQNExperienceReplay",
     "BaseDatasetExperienceReplay",
     "load_dataset",

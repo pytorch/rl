@@ -51,6 +51,37 @@ discovery and buffer lifecycle.
     RemoteTensorDictReplayBuffer
 
 
+Exporting replay data
+---------------------
+
+:meth:`~torchrl.data.ReplayBuffer.export` converts the stored entries to an
+external dataset through a :class:`~torchrl.data.datasets.ReplayDatasetExporter`.
+The call runs synchronously, waits for pending replay work, and pauses writes
+and sampling through the buffer during conversion. Supply ``trajectory_key``
+and ``step_key`` to group records by episode and order each group by its step
+numbers. The exporter receives one dataset item per storage entry.
+
+.. code-block:: python
+
+    import torch
+    from tensordict import TensorDict
+    from torchrl.data import LazyTensorStorage, ReplayBuffer
+    from torchrl.data.datasets import HuggingFaceDatasetAdapter
+
+    rb = ReplayBuffer(storage=LazyTensorStorage(4))
+    rb.extend(TensorDict({
+        "observation": torch.tensor([11, 1, 10, 0]),
+        ("collector", "traj_ids"): torch.tensor([1, 0, 1, 0]),
+        "step_count": torch.tensor([1, 1, 0, 0]),
+    }, [4]))
+    dataset = rb.export(
+        HuggingFaceDatasetAdapter(),
+        trajectory_key=("collector", "traj_ids"),
+        step_key="step_count",
+    )
+    assert dataset["observation"][:] == [0, 1, 10, 11]
+
+
 Asynchronous readiness and statistics
 -------------------------------------
 
@@ -173,6 +204,16 @@ With ``B`` sampled anchors, the flat output contains
     sample, info = rb.sample(return_info=True)
     loss_mask = info["learning_mask"] & info["validity_mask"]
 
+:class:`~torchrl.data.replay_buffers.SubgoalTriplet` expands each anchor ``i``
+into four records of its own episode: the anchor, a subgoal ``k`` in
+``[i, j)``, a goal ``j > i`` and an independent policy goal. Goal offsets are
+geometric (or uniform) and truncated at the episode end, and the
+``"step_offset"`` info entry carries each record's distance to its anchor, so
+that a divide-and-conquer critic such as
+:class:`~torchrl.objectives.TransitiveQLoss` can use exact
+:math:`\gamma^{k - i}` values for one-step horizons. With ``B`` sampled
+anchors, the flat output contains ``4 * B`` records.
+
 Conditional record updates
 --------------------------
 
@@ -282,6 +323,7 @@ counting only generation-stale handles.
 
     SampleUnit
     Sequence
+    SubgoalTriplet
     Transition
     ConditionalUpdateResult
 
