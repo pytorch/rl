@@ -289,11 +289,9 @@ class ObservationNorm(ObservationTransform):
                 "Loc/Scale have not been initialized. Either pass in values in the constructor "
                 "or call the init_stats method"
             )
-        return torch.where(
-            self.standard_normal,
-            (obs - self.loc) / self.scale,
-            obs * self.scale + self.loc,
-        )
+        gain = torch.where(self.standard_normal, self.scale.reciprocal(), self.scale)
+        bias = torch.where(self.standard_normal, -self.loc * gain, self.loc)
+        return torch.addcmul(bias, obs, gain)
 
     def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
         if self.loc is None or self.scale is None:
@@ -301,11 +299,9 @@ class ObservationNorm(ObservationTransform):
                 "Loc/Scale have not been initialized. Either pass in values in the constructor "
                 "or call the init_stats method"
             )
-        return torch.where(
-            self.standard_normal,
-            state * self.scale + self.loc,
-            (state - self.loc) / self.scale,
-        )
+        gain = torch.where(self.standard_normal, self.scale, self.scale.reciprocal())
+        bias = torch.where(self.standard_normal, self.loc, -self.loc * gain)
+        return torch.addcmul(bias, state, gain)
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
