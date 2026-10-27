@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import shutil
 from collections.abc import Mapping
 from contextlib import suppress
 from functools import partial
@@ -16,6 +17,7 @@ import torch
 from tensordict import MetaData, TensorDict, TensorDictBase, UnbatchedTensor
 from tensordict.utils import NestedKey, unravel_key
 from torch.utils.data import DataLoader, Dataset
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.datasets._adapter_utils import _validate_export_dtypes
 from torchrl.data.datasets.lerobot import _DEFAULT_KEY_MAP, _map_lerobot_key
 from torchrl.data.replay_buffers.dataloader import tensordict_collate
@@ -94,15 +96,16 @@ class LeRobotDatasetAdapter:
             column names to their feature definitions. Only these columns are
             exported; LeRobot adds its generated metadata. Defaults to ``None``;
             required for export. An empty mapping exports only generated metadata.
+            Camera tensors may use CHW or HWC layout. CHW tensors are permuted
+            when the declared feature shape is HWC.
         key_map (Mapping[str, NestedKey] or None, optional): fixed overrides from
             LeRobot column names to source and imported TensorDict keys. Other
             columns use the canonical mapping of
             :func:`~torchrl.data.datasets.lerobot_columns_to_tensordict`.
             Defaults to ``None``. Duplicate or overlapping target keys are refused.
-        episode_key (NestedKey, optional): source episode ID. Defaults to
-            ``"episode"``. Not automatically exported as a feature.
-        step_key (NestedKey, optional): source step number. Defaults to ``"frame"``.
-            Not automatically exported as a feature.
+            The source episode ID and step number use the mappings for
+            ``episode_index`` and ``frame_index``, respectively (by default
+            ``"episode"`` and ``"frame"``). These are not exported as features.
         task (str or None, optional): fixed language instruction for every
             exported frame. Defaults to ``None``; export requires either
             ``task`` or ``task_key``.
@@ -150,8 +153,6 @@ class LeRobotDatasetAdapter:
         fps: int | None = None,
         features: Mapping[str, dict[str, Any]] | None = None,
         key_map: Mapping[str, NestedKey] | None = None,
-        episode_key: NestedKey = "episode",
-        step_key: NestedKey = "frame",
         task: str | None = None,
         task_key: NestedKey | None = None,
         robot_type: str | None = None,
@@ -178,20 +179,8 @@ class LeRobotDatasetAdapter:
         self.repo_id = repo_id
         self.root = root
         self.fps = fps
-        episode_path, step_path = (unravel_key(key) for key in (episode_key, step_key))
-        episode_path = (
-            (episode_path,) if isinstance(episode_path, str) else episode_path
-        )
-        step_path = (step_path,) if isinstance(step_path, str) else step_path
-        if (
-            episode_path == step_path[: len(episode_path)]
-            or step_path == episode_path[: len(step_path)]
-        ):
-            raise ValueError(
-                "episode_key and step_key must be distinct, non-overlapping keys."
-            )
-        self.episode_key = episode_key
-        self.step_key = step_key
+        self.episode_key = _map_lerobot_key("episode_index", self.key_map)
+        self.step_key = _map_lerobot_key("frame_index", self.key_map)
         self.task = task
         self.task_key = task_key
         self._source_keys = tuple(
@@ -201,8 +190,8 @@ class LeRobotDatasetAdapter:
                         _map_lerobot_key(name, self.key_map)
                         for name in (self.features or {})
                     ),
-                    episode_key,
-                    step_key,
+                    self.episode_key,
+                    self.step_key,
                     *([task_key] if task_key is not None else []),
                 ]
             )
@@ -261,7 +250,16 @@ class LeRobotDatasetAdapter:
                     raise TypeError(
                         f"Cannot convert LeRobot feature {name!r} with dtype {value.dtype} to NumPy."
                     ) from error
-                if tuple(feature["shape"]) == (1,) and array.ndim == 1:
+                shape = tuple(feature["shape"])
+                if (
+                    feature["dtype"] in ("image", "video")
+                    and len(shape) == 3
+                    and array.ndim == 4
+                    and tuple(array.shape[1:]) != shape
+                    and tuple(array.shape[1:]) == (shape[2], shape[0], shape[1])
+                ):
+                    array = array.transpose(0, 2, 3, 1)
+                if shape == (1,) and array.ndim == 1:
                     array = array[:, None]
                 if feature["dtype"] not in ("image", "video"):
                     # LeRobot retains numeric rows until save_episode().
@@ -375,12 +373,19 @@ class LeRobotDatasetAdapter:
             native.finalize()
         except BaseException:
             if native is not None:
-                # Discard unsaved images before finalizing the saved episodes.
-                # Preserve the original exception if the backend also fails cleanup.
+                # Close writers before removing the incomplete dataset.
                 with suppress(Exception):
                     native.clear_episode_buffer()
                 with suppress(Exception):
                     native.finalize()
+                try:
+                    shutil.rmtree(native.root)
+                except OSError as cleanup_error:
+                    torchrl_logger.warning(
+                        "Could not remove incomplete LeRobot dataset %s: %s",
+                        native.root,
+                        cleanup_error,
+                    )
             raise
         return native
 

@@ -2525,9 +2525,11 @@ class TestLeRobotDatasetAdapter:
                 "next.done": {"dtype": "bool", "shape": (1,)},
                 "joint_ids": {"dtype": "int16", "shape": (2,)},
             },
-            key_map={"observation.state": ("robot", "state")},
-            episode_key=("collector", "episode"),
-            step_key=("collector", "step"),
+            key_map={
+                "observation.state": ("robot", "state"),
+                "episode_index": ("collector", "episode"),
+                "frame_index": ("collector", "step"),
+            },
             task="Perform the task.",
             batch_size=2,
             **kwargs,
@@ -2860,8 +2862,8 @@ class TestLeRobotDatasetAdapter:
             if isinstance(key, tuple) and key[0] == "next" and expected.ndim == 1:
                 expected = expected.unsqueeze(-1)
             torch.testing.assert_close(batch[key], expected, rtol=0, atol=0)
-        assert batch["episode"].tolist() == [0, 0, 0, 1, 1, 1]
-        assert batch["frame"].tolist() == [0, 1, 2, 0, 1, 2]
+        assert batch["collector", "episode"].tolist() == [0, 0, 0, 1, 1, 1]
+        assert batch["collector", "step"].tolist() == [0, 1, 2, 0, 1, 2]
         assert batch.get("language_instruction").tolist() == ["Perform the task."] * 6
         torch.testing.assert_close(
             batch["timestamp"], torch.tensor([0.0, 0.1, 0.2] * 2)
@@ -3008,6 +3010,57 @@ class TestLeRobotDatasetAdapter:
         with pytest.raises(FileExistsError):
             adapter.to_external(TensorStorage(source).as_dataset())
 
+    @pytest.mark.parametrize("kind", ["image", "video"])
+    def test_export_imported_camera_with_hwc_schema(self, tmp_path, kind):
+        pixels = (
+            torch.tensor([30, 80, 130])[:, None, None]
+            + torch.arange(16)[None, :, None]
+            + torch.arange(24)[None, None, :]
+        ).to(torch.uint8)
+        source = TensorDict(
+            {
+                "pixels": pixels.unsqueeze(0),
+                "episode": torch.zeros(1, dtype=torch.long),
+                "frame": torch.zeros(1, dtype=torch.long),
+            },
+            [1],
+        )
+        features = {
+            "observation.images.front": {
+                "dtype": kind,
+                "shape": (16, 24, 3),
+                "names": ["height", "width", "channels"],
+            }
+        }
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/hwc",
+            root=tmp_path / "hwc",
+            fps=10,
+            features=features,
+            key_map={"observation.images.front": "pixels"},
+            task="Go.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        imported = adapter.from_external(native)[0]["pixels"]
+        tolerance = 10 / 255 if kind == "video" else 0
+        torch.testing.assert_close(
+            imported, pixels.float() / 255, atol=tolerance, rtol=0
+        )
+        second = LeRobotDatasetAdapter(
+            repo_id="local/roundtrip",
+            root=tmp_path / "roundtrip",
+            fps=10,
+            features=features,
+            key_map={"observation.images.front": "pixels"},
+            task="Go.",
+        )
+        roundtrip = second.from_external(
+            second.to_external(adapter.from_external(native))
+        )[0]["pixels"]
+        torch.testing.assert_close(
+            roundtrip, imported, atol=10 / 255 if kind == "video" else 1 / 255, rtol=0
+        )
+
     def test_native_image_and_string_features(self, tmp_path):
         depth = (
             torch.tensor([1000, 2000], dtype=torch.uint16)[:, None, None, None]
@@ -3049,8 +3102,10 @@ class TestLeRobotDatasetAdapter:
         assert [imported[i]["operator"] for i in range(2)] == ["Alice", "Alice"]
 
     def test_validation(self, tmp_path):
-        with pytest.raises(ValueError, match="distinct"):
-            LeRobotDatasetAdapter(episode_key="same", step_key=("same",))
+        with pytest.raises(ValueError, match="overlapping"):
+            LeRobotDatasetAdapter(
+                key_map={"episode_index": "same", "frame_index": ("same",)}
+            )
         with pytest.raises(ValueError, match="empty"):
             self._adapter(tmp_path / "empty").to_external([])
         source = self._source()
@@ -3089,9 +3144,9 @@ class TestLeRobotDatasetAdapter:
         failed = self._adapter(tmp_path / "failed")
         with pytest.raises(ValueError, match="consecutive"):
             failed.to_external(TensorStorage(source).as_dataset())
-        assert failed.root.exists()
-        with pytest.raises(FileExistsError):
-            failed.to_external(TensorStorage(self._source()).as_dataset())
+        assert not failed.root.exists()
+        recovered = failed.to_external(TensorStorage(self._source()).as_dataset())
+        assert recovered.num_frames == 6
         with pytest.raises(ValueError, match="Export requires"):
             LeRobotDatasetAdapter().to_external(
                 TensorStorage(self._source()).as_dataset()
