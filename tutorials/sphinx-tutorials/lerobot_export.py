@@ -17,8 +17,7 @@ controller is the closed-form gait from TorchRL's MicroDuck example.
 What you will learn
 -------------------
 
-- Record pixels, actions, rewards, and episode boundaries with TorchRL building
-  blocks.
+- Collect pixels, actions, rewards, and episode boundaries into replay.
 - Export replay entries in episode order, with compressed LeRobot camera videos.
 - Reopen the result and load a batch of decoded frames into TensorDict.
 - Upload the complete dataset and open it in the LeRobot Dataset Visualizer.
@@ -47,6 +46,7 @@ import torchrl
 from huggingface_hub import HfApi
 from IPython.display import Video
 from torch.utils.data import DataLoader
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer, tensordict_collate
 from torchrl.data.datasets import LeRobotDatasetAdapter
 from torchrl.envs import Compose, MicroDuckEnv, StepCounter, TrajCounter, TransformedEnv
@@ -84,14 +84,13 @@ OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 # ----------------------------------------
 #
 # ``from_pixels=True`` adds uint8 HWC camera frames to the observation. The gait
-# is already a TensorDict module: ``env.rollout`` calls it and records its action
-# next to the observation that produced it.
+# is already a TensorDict module, so the collector can use it as its policy.
 #
 # ``StepCounter`` limits each episode and marks the last transition as truncated.
 # ``TrajCounter`` gives resets distinct episode IDs. These are stored observations,
 # so the exporter can order frames even if the replay buffer wraps around later.
-# A physical fall can end an episode earlier; ``break_when_any_done=False`` lets
-# rollout reset and keep collecting until the frame budget is reached.
+# A physical fall can end an episode earlier; the collector resets the env and
+# keeps collecting until the frame budget is reached.
 
 policy = MicroDuckGaitActor()
 base_env = MicroDuckEnv(
@@ -114,36 +113,49 @@ env = TransformedEnv(
 )
 # Match timestamps to the simulation's actual control period, rather than its
 # display metadata. LeRobot takes an integer frame rate.
-try:
-    fps = round(1 / base_env.dt)
-    assert abs(fps * base_env.dt - 1) < 1e-6
-    with torch.no_grad():
-        rollout = env.rollout(TOTAL_FRAMES, policy=policy, break_when_any_done=False)
-finally:
-    env.close()
+fps = round(1 / base_env.dt)
+assert abs(fps * base_env.dt - 1) < 1e-6
 
 # %%
-# Keep the frames in replay
-# -------------------------
+# Collect into replay
+# -------------------
 #
-# MicroDuck returns a batch shaped ``[1, time]``. Flatten the environment and
-# time dimensions so each replay entry is one transition. We retain current
-# pixels, observations, actions, counters, and transition signals. Selecting
-# these fields avoids storing a second copy of the camera under ``"next"``.
+# A collector yields batches as it interacts with the environment. As in a
+# training loop, add each batch to replay as it arrives. A training algorithm
+# could sample from replay and update its policy here; this example only records
+# the fixed gait.
+#
+# MicroDuck batches have shape ``[1, time]``. Flatten the environment and time
+# dimensions so each replay entry is one transition. Select current pixels,
+# observations, actions, counters, and transition signals to avoid storing a
+# second copy of the camera under ``"next"``.
 
-frames = rollout.select(
-    "pixels",
-    "observation",
-    "action",
-    "episode",
-    "frame",
-    ("next", "reward"),
-    ("next", "done"),
-    ("next", "terminated"),
-    ("next", "truncated"),
-).reshape(-1)
 replay = ReplayBuffer(storage=LazyTensorStorage(TOTAL_FRAMES), batch_size=8)
-replay.extend(frames)
+collector = Collector(
+    env,
+    policy,
+    frames_per_batch=EPISODE_STEPS,
+    total_frames=TOTAL_FRAMES,
+)
+try:
+    for batch in collector:
+        replay.extend(
+            batch.select(
+                "pixels",
+                "observation",
+                "action",
+                "episode",
+                "frame",
+                ("next", "reward"),
+                ("next", "done"),
+                ("next", "terminated"),
+                ("next", "truncated"),
+            ).reshape(-1)
+        )
+finally:
+    collector.shutdown()
+
+frames = replay[:]
 
 # Sphinx and notebooks display expression values without extra logging code.
 recording_summary = {
@@ -308,7 +320,7 @@ visualizer_url = (
 # ----------
 #
 # We collected a short robot recording with a TensorDict policy and env
-# transforms, stored transitions in replay, and exported a native LeRobot v3
+# transforms, stored each batch in replay, and exported a native LeRobot v3
 # dataset with synchronized camera videos. The same export step works with
 # collector data when you supply globally unique episode IDs and consecutive
 # step counters. Check the videos and episode boundaries before building a larger
