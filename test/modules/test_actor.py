@@ -1723,26 +1723,19 @@ class TestExportOnnxPolicy:
         policy = self._make_policy(rnn)
         path = export_onnx_policy(policy, tmp_path / "policy.onnx", (5,))
         session = onnxruntime.InferenceSession(str(path))
-        inputs = [(i.name, i.shape) for i in session.get_inputs()]
-        outputs = [(o.name, o.shape) for o in session.get_outputs()]
-        if rnn is None:
-            assert inputs == [("obs", [1, 5])]
-            assert outputs == [("actions", [1, 3])]
-        else:
-            assert inputs == [("obs", [1, 5]), ("h_in", [2, 1, 8]), ("c_in", [2, 1, 8])]
-            assert outputs == [
-                ("actions", [1, 3]),
-                ("h_out", [2, 1, 8]),
-                ("c_out", [2, 1, 8]),
-            ]
+        states = [] if rnn is None else ["h", "c"]
+        assert [(i.name, i.shape) for i in session.get_inputs()] == [
+            ("obs", [1, 5])
+        ] + [(f"{name}_in", [2, 1, 8]) for name in states]
+        assert [(o.name, o.shape) for o in session.get_outputs()] == [
+            ("actions", [1, 3])
+        ] + [(f"{name}_out", [2, 1, 8]) for name in states]
 
         observations = torch.randn(1, 6, 5)
         episode = TensorDict(
             {
                 self.observation_key: observations,
-                "is_init": torch.zeros(1, 6, 1, dtype=torch.bool).index_fill_(
-                    1, torch.tensor([0]), True
-                ),
+                "is_init": torch.arange(6).eq(0).view(1, 6, 1),
             },
             batch_size=[1, 6],
         )

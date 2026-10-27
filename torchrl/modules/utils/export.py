@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import importlib.util
 from collections.abc import Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -21,9 +20,6 @@ from torchrl.modules.tensordict_module.rnn import (
     LSTMModule,
     set_recurrent_mode,
 )
-
-_has_onnx = importlib.util.find_spec("onnx") is not None
-_has_onnxscript = importlib.util.find_spec("onnxscript") is not None
 
 
 class _ExplicitStatePolicy(nn.Module):
@@ -76,23 +72,19 @@ def export_onnx_policy(
 ) -> Path:
     """Write a feed-forward or LSTM policy as a self-contained ONNX graph with explicit recurrent state.
 
-    The graph takes one observation of batch size 1 and returns the action the
-    policy takes under ``ExplorationType.DETERMINISTIC``. A feed-forward policy
-    becomes ``obs -> actions``. A policy holding one
-    :class:`~torchrl.modules.LSTMModule` becomes
-    ``(obs, h_in, c_in) -> (actions, h_out, c_out)`` with states of shape
-    ``(num_layers, 1, hidden_size)``: the explicit-state layout of ``rsl_rl``
-    and ``mjlab`` exports, which robot runtimes such as MicroDuck's load. The
-    caller owns the state: feeding zeros starts an episode, which is what
-    ``is_init`` does inside TorchRL, so ``is_init`` is not a graph input.
+    The graph maps one observation (batch size 1) to the action the policy
+    takes under ``ExplorationType.DETERMINISTIC``: ``obs -> actions`` for a
+    feed-forward policy, and ``(obs, h_in, c_in) -> (actions, h_out, c_out)``
+    with states of shape ``(num_layers, 1, hidden_size)`` for a policy holding
+    one :class:`~torchrl.modules.LSTMModule`. That is the explicit-state layout
+    of ``rsl_rl`` and ``mjlab`` exports, which robot runtimes such as
+    MicroDuck's load. The caller owns the state and starts an episode by
+    feeding zeros, so ``is_init`` is not a graph input.
 
-    Anything the policy needs at deployment must be part of ``policy``. In
-    particular, observation normalization applied by the training env (for
-    instance an :class:`~torchrl.envs.ObservationNorm`, or the frozen
-    statistics of a :class:`~torchrl.envs.VecNorm` from
-    :meth:`~torchrl.envs.VecNorm.to_observation_norm`) is placed in front of
-    the actor so the graph receives raw observations. A CPU copy of the policy
-    is exported, so ``policy`` itself is left untouched.
+    Observation normalization must be part of ``policy`` so the graph reads raw
+    observations: put the training env's :class:`~torchrl.envs.ObservationNorm`
+    (or :meth:`~torchrl.envs.VecNorm.to_observation_norm`) in front of the
+    actor. A CPU copy of ``policy`` is exported; ``policy`` is not modified.
 
     Args:
         policy (TensorDictModuleBase): the policy to export. It reads one
@@ -115,10 +107,11 @@ def export_onnx_policy(
         The path written.
 
     Raises:
-        ImportError: if ``onnx`` or ``onnxscript`` is not installed.
         NotImplementedError: if ``policy`` contains a
             :class:`~torchrl.modules.GRUModule` or more than one
             :class:`~torchrl.modules.LSTMModule`.
+
+    .. note:: Exporting requires the ``onnx`` and ``onnxscript`` packages.
 
     Examples:
         >>> import torch
@@ -152,11 +145,6 @@ def export_onnx_policy(
         >>> export_onnx_policy(policy, "walk.onnx", (61,))  # doctest: +SKIP
         PosixPath('walk.onnx')
     """
-    if not (_has_onnx and _has_onnxscript):
-        raise ImportError(
-            "export_onnx_policy requires onnx and onnxscript. "
-            "Install them with `pip install onnx onnxscript`."
-        )
     if any(isinstance(module, GRUModule) for module in policy.modules()):
         raise NotImplementedError(
             "The explicit-state ONNX layout carries LSTM states (h, c); "
