@@ -59,6 +59,7 @@ register_dataset(
 | [`datasets.ReplayDatasetImporter`](generated/torchrl.data.datasets.ReplayDatasetImporter.html#torchrl.data.datasets.ReplayDatasetImporter)(*args, **kwargs) | Expose an external dataset as a TorchRL map-style dataset. |
 | [`datasets.ReplayDatasetAdapter`](generated/torchrl.data.datasets.ReplayDatasetAdapter.html#torchrl.data.datasets.ReplayDatasetAdapter)(*args, **kwargs) | Import and export an external dataset format for use with replay buffers. |
 | [`datasets.HuggingFaceDatasetAdapter`](generated/torchrl.data.datasets.HuggingFaceDatasetAdapter.html#torchrl.data.datasets.HuggingFaceDatasetAdapter)(*[, ...]) | Convert between TorchRL map-style datasets and Hugging Face datasets. |
+| [`datasets.LeRobotDatasetAdapter`](generated/torchrl.data.datasets.LeRobotDatasetAdapter.html#torchrl.data.datasets.LeRobotDatasetAdapter)(*[, repo_id, ...]) | Exchange trajectory data between TorchRL and LeRobot. |
 | [`datasets.AtariDQNExperienceReplay`](generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay)(*args[, ...]) | Atari DQN Experience replay class. |
 | [`datasets.D4RLExperienceReplay`](generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay)(*args[, ...]) | An Experience replay class for D4RL. |
 | [`datasets.GenDGRLExperienceReplay`](generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay)(*args[, ...]) | Gen-DGRL Experience Replay dataset. |

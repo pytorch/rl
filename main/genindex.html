@@ -8563,6 +8563,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.data.datasets.HuggingFaceDatasetAdapter.html#torchrl.data.datasets.HuggingFaceDatasetAdapter.from_external">from_external() (torchrl.data.datasets.HuggingFaceDatasetAdapter method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotDatasetAdapter.html#torchrl.data.datasets.LeRobotDatasetAdapter.from_external">(torchrl.data.datasets.LeRobotDatasetAdapter method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.ReplayDatasetAdapter.html#torchrl.data.datasets.ReplayDatasetAdapter.from_external">(torchrl.data.datasets.ReplayDatasetAdapter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.ReplayDatasetImporter.html#torchrl.data.datasets.ReplayDatasetImporter.from_external">(torchrl.data.datasets.ReplayDatasetImporter method)</a>
@@ -12580,6 +12582,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.data.datasets.lerobot_columns_to_tensordict.html#torchrl.data.datasets.lerobot_columns_to_tensordict">lerobot_columns_to_tensordict (class in torchrl.data.datasets)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.datasets.LeRobotDatasetAdapter.html#torchrl.data.datasets.LeRobotDatasetAdapter">LeRobotDatasetAdapter (class in torchrl.data.datasets)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay">LeRobotExperienceReplay (class in torchrl.data.datasets)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.vla.LeRobotPolicyWrapper.html#torchrl.modules.vla.LeRobotPolicyWrapper">LeRobotPolicyWrapper (class in torchrl.modules.vla)</a>
@@ -12874,6 +12878,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput.load_memmap">(torchrl.objectives.llm.SFTLossOutput method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.load_memmap_">load_memmap_() (torchrl.data.ConditionalUpdateResult method)</a>
 
       <ul>
@@ -12914,8 +12920,6 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput.load_memmap_">(torchrl.objectives.llm.SFTLossOutput method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.render.load_render_policy.html#torchrl.render.load_render_policy">load_render_policy() (in module torchrl.render)</a>
 </li>
       <li><a href="reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState.load_state_dict">load_state_dict() (torchrl.checkpoint.GlobalRNGState method)</a>
@@ -15408,12 +15412,12 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor">OnlineDTActor (class in torchrl.modules)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss">OnlineDTLoss (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer">OnPolicyTrainer (class in torchrl.trainers.algorithms)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig">OnPolicyTrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction.open_gripper">open_gripper() (torchrl.envs.transforms.RobotMacroAction class method)</a>
@@ -15503,13 +15507,19 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.objectives.ACTLoss.html#torchrl.objectives.ACTLoss.out_keys">(torchrl.objectives.ACTLoss property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.BCLoss.html#torchrl.objectives.BCLoss.out_keys">(torchrl.objectives.BCLoss property)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss.out_keys">(torchrl.objectives.ClipPPOLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss.out_keys">(torchrl.objectives.CQLLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.out_keys">(torchrl.objectives.CrossQLoss property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss.out_keys">(torchrl.objectives.DDPGLoss property)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.DiffusionBCLoss.html#torchrl.objectives.DiffusionBCLoss.out_keys">(torchrl.objectives.DiffusionBCLoss property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss.out_keys">(torchrl.objectives.DQNLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.DTLoss.html#torchrl.objectives.DTLoss.out_keys">(torchrl.objectives.DTLoss property)</a>
 </li>
@@ -23445,6 +23455,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.data.datasets.HuggingFaceDatasetAdapter.html#torchrl.data.datasets.HuggingFaceDatasetAdapter.to_external">to_external() (torchrl.data.datasets.HuggingFaceDatasetAdapter method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotDatasetAdapter.html#torchrl.data.datasets.LeRobotDatasetAdapter.to_external">(torchrl.data.datasets.LeRobotDatasetAdapter method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.ReplayDatasetAdapter.html#torchrl.data.datasets.ReplayDatasetAdapter.to_external">(torchrl.data.datasets.ReplayDatasetAdapter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.ReplayDatasetExporter.html#torchrl.data.datasets.ReplayDatasetExporter.to_external">(torchrl.data.datasets.ReplayDatasetExporter method)</a>

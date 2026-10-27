@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.datasets
+
+
+LeRobotDatasetAdapter
+=====================
+
+.. autoclass:: LeRobotDatasetAdapter
+    :members:
+    :inherited-members:

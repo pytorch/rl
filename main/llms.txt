@@ -130,6 +130,7 @@
 - [D4RLExperienceReplay](reference/generated/torchrl.data.datasets.D4RLExperienceReplay.md)
 - [GenDGRLExperienceReplay](reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.md)
 - [HuggingFaceDatasetAdapter](reference/generated/torchrl.data.datasets.HuggingFaceDatasetAdapter.md)
+- [LeRobotDatasetAdapter](reference/generated/torchrl.data.datasets.LeRobotDatasetAdapter.md)
 - [LeRobotExperienceReplay](reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.md)
 - [MinariExperienceReplay](reference/generated/torchrl.data.datasets.MinariExperienceReplay.md)
 - [OpenMLExperienceReplay](reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.md)

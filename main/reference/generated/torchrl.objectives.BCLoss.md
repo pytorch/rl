@@ -126,6 +126,13 @@ TensorDict with key "loss_bc".
 
 The keys that the module reads from the input tensordict.
 
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.
+
 set_keys(***kwargs*) → None[[source]](../../_modules/torchrl/objectives/bc.html#BCLoss.set_keys)
 
 Set tensordict key names.
