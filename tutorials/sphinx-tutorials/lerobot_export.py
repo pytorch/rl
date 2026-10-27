@@ -23,15 +23,10 @@ What you will learn
 - Reopen the result and load a batch of decoded frames into TensorDict.
 - Upload the complete dataset and open it in the LeRobot Dataset Visualizer.
 
-Run this from a TorchRL checkout with Python 3.12 or newer::
-
-    uv run --python 3.12 --no-sources --extra lerobot --with ipython \
-        python tutorials/sphinx-tutorials/lerobot_export.py
-
-The ``lerobot`` extra installs the native dataset writer and video dependencies;
-MuJoCo is in the checkout's default development dependencies. ``--no-sources``
-selects released packages, since LeRobot's supported torch versions may lag the
-TensorDict Git main branch. The pinned MicroDuck assets download on first use.
+This tutorial requires Python 3.12 or newer, MuJoCo, IPython, and TorchRL
+installed with the ``lerobot`` extra. Run it from a TorchRL checkout with TorchRL
+installed in editable mode to use the MicroDuck example policy. The pinned
+MicroDuck assets download on first use.
 On a headless Linux machine, set ``MUJOCO_GL=egl`` before starting Python if your
 MuJoCo installation uses EGL. macOS uses its native offscreen renderer.
 
