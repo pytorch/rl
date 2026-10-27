@@ -105,6 +105,10 @@
   - changed-files:
     - any-glob-to-any-file: ['torchrl/data/datasets/gen_dgrl.py']
 
+"Data/lerobot":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/data/datasets/lerobot*.py']
+
 "Data/minari":
   - changed-files:
     - any-glob-to-any-file: ['torchrl/data/datasets/minari_data.py']
