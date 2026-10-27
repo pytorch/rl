@@ -74,18 +74,11 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.modules.tensordict_module.zoo import MicroDuckMLPPolicy, MicroDuckSkills
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
 from torchrl.render import load_checkpoint
 
-_has_onnx_export = all(
-    importlib.util.find_spec(name) is not None
-    for name in ("onnx", "onnxscript", "onnxruntime")
-)
 if _has_mujoco:
     import mujoco
-if _has_onnx_export:
-    import onnx
-    import onnxruntime
 
 _AVAILABLE_BACKENDS: list[str] = []
 if _has_mujoco_torch:
@@ -412,64 +405,6 @@ class TestMujoco:
             robot[..., 48:61],
             torch.tensor([0.0, 0.15] + [0.0] * 11).expand(num_envs, -1),
         )
-        env.close()
-
-    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    @pytest.mark.skipif(
-        not _has_onnx_export, reason="onnx, onnxscript and onnxruntime are needed"
-    )
-    def test_microduck_mlp_policy_runs_on_robot_observation_and_exports(self, tmp_path):
-        env = MicroDuckEnv(
-            self._write_microduck_fixture(tmp_path, MicroDuckEnv.JOINT_NAMES),
-            backend="mujoco",
-            tasks=MicroDuckEnv.tracking_task(0.2),
-            policy_observation=True,
-            action_scale=0.5,
-            seed=0,
-        )
-        torch.manual_seed(0)
-        policy = MicroDuckMLPPolicy(num_cells=(32, 16), initial_policy_scale=0.3)
-        with torch.no_grad():
-            for parameter in policy.parameters():
-                parameter.normal_(0.0, 0.5)
-        with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
-            rollout = env.rollout(6, policy)
-        observation = rollout["policy_observation"].reshape(-1, 61)
-        action = rollout["action"].reshape(-1, 14)
-        assert action.abs().max() < 1.0
-        assert action.std(0).min() > 0
-
-        loc = torch.linspace(-0.2, 0.2, 61)
-        scale = torch.linspace(0.5, 2.0, 61)
-        path = policy.to_onnx(
-            tmp_path / "walk.onnx",
-            action_scale=env.action_scale,
-            observation_loc=loc,
-            observation_scale=scale,
-        )
-        session = onnxruntime.InferenceSession(str(path))
-        assert [(i.name, i.shape) for i in session.get_inputs()] == [("obs", [1, 61])]
-        assert [(o.name, o.shape) for o in session.get_outputs()] == [
-            ("actions", [1, 14])
-        ]
-        exported = torch.cat(
-            [
-                torch.as_tensor(session.run(None, {"obs": row[None].numpy()})[0])
-                for row in observation
-            ]
-        )
-        with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
-            expected = policy(
-                TensorDict(
-                    policy_observation=(observation - loc) / scale,
-                    batch_size=observation.shape[:1],
-                )
-            )["action"]
-        torch.testing.assert_close(exported, expected, atol=1e-4, rtol=1e-4)
-        metadata = {entry.key: entry.value for entry in onnx.load(path).metadata_props}
-        assert metadata["joint_names"].split(",") == list(MicroDuckEnv.JOINT_NAMES)
-        assert metadata["action_scale"] == "0.500"
-        assert metadata["command_names"] == "twist,head_pose,body_pose"
         env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)

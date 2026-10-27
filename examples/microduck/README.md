@@ -12,7 +12,7 @@ raises an error listing the options.
 
 | File | What it does | Needs |
 | --- | --- | --- |
-| [`ppo_mujoco.py`](ppo_mujoco.py) | Recurrent PPO on `torchrl.envs.MicroDuckEnv`, or a feed-forward policy exported to ONNX for the robot, configured by Hydra from [`config.yaml`](config.yaml); native MuJoCo, MJX or `mujoco-torch` | `mujoco`, the `utils` extra (+ `mujoco-mjx`/`jax` or `mujoco-torch`) |
+| [`ppo_mujoco.py`](ppo_mujoco.py) | Recurrent PPO on `torchrl.envs.MicroDuckEnv`, configured by Hydra from [`config.yaml`](config.yaml); native MuJoCo, MJX or `mujoco-torch` | `mujoco`, the `utils` extra (+ `mujoco-mjx`/`jax` or `mujoco-torch`) |
 | [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait as a TensorDict policy, contact-based gait metrics, `rlrender` policy | `mujoco` |
 | [`ppo_mjlab.py`](ppo_mjlab.py) | PPO on the upstream `Mjlab-Velocity-Flat-MicroDuck` task through `MJLabWrapper` | MJLab, `mjlab_microduck`, CUDA |
 
@@ -318,38 +318,6 @@ Every run survives all 500 steps for every command. What the ablations show:
   about 0.006 per step against 0.03 for velocity tracking, and body-frame
   tracking is blind to heading. Judge speed by the tracking error; a tighter
   yaw-rate term or a heading-error term is the next reward change to try.
-
-## Deploying to the robot
-
-The robot runtime loads feed-forward ONNX policies listed in a policy manifest
-([pollen-robotics/microduck-policies](https://huggingface.co/pollen-robotics/microduck-policies)
-is the shipped set). Each maps a `[1, 61]` observation to `[1, 14]` joint
-targets at 50 Hz, and the recurrent policy above cannot run there. Its
-observation also holds the linear velocity and the gait clock, which the
-robot cannot measure. Train the deployable policy with:
-
-```bash
-python examples/microduck/ppo_mujoco.py env.download=true \
-    policy.architecture=mlp env.policy_observation=true \
-    policy.export_onnx=walk.onnx logger.entity=YOUR_ENTITY
-```
-
-The actor is a `MicroDuckMLPPolicy` (512-256-128 ELU, the shipped policies'
-architecture) reading the env's `policy_observation`: gyro, projected gravity,
-joint positions and velocities, the previous action and the 13-D robot
-command, of which the env fills `(vx, vy)`. The critic keeps the privileged
-`observation` and the task index. `walk.onnx` takes an `obs` input and
-returns `actions`, normalized like the env's actions; set the manifest's
-`action_scale` to the training `env.action_scale` (`1.0` by default here).
-
-The observation layout is checked against the robot's own policies: Pollen's
-shipped `velstand.onnx`, fed `policy_observation`, stands indefinitely in
-`MicroDuckEnv` and turns at the commanded yaw rate, while swapping the gyro
-and gravity entries or mirroring the legs makes it fall immediately. Its
-forward and lateral tracking is weaker in `MicroDuckEnv` than on its training
-simulator, which models the servos with a different actuator model (BAM
-friction and backlash) and full collision meshes; treat sim tracking numbers
-from this env as optimistic for hardware.
 
 ## Rendering
 

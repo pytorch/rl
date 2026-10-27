@@ -5,6 +5,6 @@
 
 """Task-specific policy architectures built from TorchRL modules."""
 
-from .microduck_policy import MicroDuckMLPPolicy, MicroDuckSkillPolicy, MicroDuckSkills
+from .microduck_policy import MicroDuckSkillPolicy, MicroDuckSkills
 
-__all__ = ["MicroDuckMLPPolicy", "MicroDuckSkillPolicy", "MicroDuckSkills"]
+__all__ = ["MicroDuckSkillPolicy", "MicroDuckSkills"]
