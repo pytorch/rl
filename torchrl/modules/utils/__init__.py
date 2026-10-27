@@ -24,6 +24,7 @@ else:
             )
 
 
+from .export import export_onnx_policy
 from .mappings import biased_softplus, inv_softplus, mappings
 from .utils import get_env_transforms_from_module, get_primers_from_module
 
@@ -36,4 +37,5 @@ __all__ = [
     "mappings",
     "get_env_transforms_from_module",
     "get_primers_from_module",
+    "export_onnx_policy",
 ]

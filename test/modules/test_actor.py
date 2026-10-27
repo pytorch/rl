@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 
 import numpy as np
 import pytest
@@ -12,7 +13,13 @@ import torch
 from _modules_common import _has_transformers
 from pyvers import implement_for
 from tensordict import NonTensorData, NonTensorStack, TensorDict
-from tensordict.nn import CompositeDistribution, InteractionType, TensorDictModule
+from tensordict.nn import (
+    AddStateIndependentNormalScale,
+    CompositeDistribution,
+    InteractionType,
+    TensorDictModule,
+    TensorDictSequential,
+)
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import distributions as dist, nn
@@ -24,17 +31,29 @@ from torchrl.data.vla import (
     VLAImages,
     VLAObservation,
 )
-from torchrl.envs import CatFrames, Compose, InitTracker, SerialEnv, TransformedEnv
+from torchrl.envs import (
+    CatFrames,
+    Compose,
+    InitTracker,
+    ObservationNorm,
+    SerialEnv,
+    TransformedEnv,
+)
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     DiffusionActor,
+    export_onnx_policy,
     FlowMatchingModel,
     FlowMatchingPolicy,
+    GRUModule,
+    LSTMModule,
+    MLP,
     MultiStepActorWrapper,
     OneStepPolicy,
     ProbabilisticActor,
     SafeModule,
     SafeProbabilisticModule,
+    set_recurrent_mode,
     TanhDelta,
     TanhModule,
     TanhNormal,
@@ -50,6 +69,13 @@ from torchrl.modules.vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv, NestedCountingEnv
+
+_has_onnx_export = all(
+    importlib.util.find_spec(name) is not None
+    for name in ("onnx", "onnxscript", "onnxruntime")
+)
+if _has_onnx_export:
+    import onnxruntime
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -1645,6 +1671,102 @@ class TestLeRobotPolicyWrapper:
         with pytest.raises(ImportError, match="lerobot"):
             LeRobotPolicyWrapper.from_pretrained(
                 "fake/repo", action_dim=7, chunk_size=4
+            )
+
+
+@pytest.mark.skipif(
+    not _has_onnx_export, reason="onnx, onnxscript and onnxruntime are needed"
+)
+class TestExportOnnxPolicy:
+    observation_key = ("robot", "observation")
+
+    def _make_policy(self, rnn):
+        torch.manual_seed(0)
+        layers, width, in_key = [], 5, self.observation_key
+        if rnn is not None:
+            layers.append(
+                rnn(
+                    input_size=5,
+                    hidden_size=8,
+                    num_layers=2,
+                    in_key=self.observation_key,
+                    out_key="features",
+                )
+            )
+            width, in_key = 8, "features"
+        head = TensorDictModule(
+            nn.Sequential(
+                MLP(in_features=width, out_features=3, num_cells=[16]),
+                AddStateIndependentNormalScale(3),
+            ),
+            in_keys=[in_key],
+            out_keys=["loc", "scale"],
+        )
+        actor = ProbabilisticActor(
+            TensorDictSequential(*layers, head),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+        )
+        with torch.no_grad():
+            for parameter in actor.parameters():
+                parameter.normal_(0.0, 0.5)
+        norm = ObservationNorm(
+            loc=torch.linspace(-1.0, 1.0, 5),
+            scale=torch.linspace(0.5, 2.0, 5),
+            in_keys=[self.observation_key],
+            standard_normal=True,
+        )
+        return TensorDictSequential(norm, actor)
+
+    @pytest.mark.parametrize("rnn", [None, LSTMModule])
+    def test_graph_matches_policy_over_an_episode(self, tmp_path, rnn):
+        policy = self._make_policy(rnn)
+        path = export_onnx_policy(policy, tmp_path / "policy.onnx", (5,))
+        session = onnxruntime.InferenceSession(str(path))
+        inputs = [(i.name, i.shape) for i in session.get_inputs()]
+        outputs = [(o.name, o.shape) for o in session.get_outputs()]
+        if rnn is None:
+            assert inputs == [("obs", [1, 5])]
+            assert outputs == [("actions", [1, 3])]
+        else:
+            assert inputs == [("obs", [1, 5]), ("h_in", [2, 1, 8]), ("c_in", [2, 1, 8])]
+            assert outputs == [
+                ("actions", [1, 3]),
+                ("h_out", [2, 1, 8]),
+                ("c_out", [2, 1, 8]),
+            ]
+
+        observations = torch.randn(1, 6, 5)
+        episode = TensorDict(
+            {
+                self.observation_key: observations,
+                "is_init": torch.zeros(1, 6, 1, dtype=torch.bool).index_fill_(
+                    1, torch.tensor([0]), True
+                ),
+            },
+            batch_size=[1, 6],
+        )
+        with set_exploration_type(ExplorationType.DETERMINISTIC), set_recurrent_mode(
+            True
+        ), torch.no_grad():
+            expected = policy(episode)["action"][0]
+
+        state = [np.zeros((2, 1, 8), dtype=np.float32)] * 2
+        exported = []
+        for observation in observations[0]:
+            feed = {"obs": observation[None].numpy()}
+            if rnn is not None:
+                feed.update(h_in=state[0], c_in=state[1])
+            action, *state = session.run(None, feed)
+            exported.append(torch.as_tensor(action[0]))
+        torch.testing.assert_close(
+            torch.stack(exported), expected, atol=1e-5, rtol=1e-5
+        )
+
+    def test_gru_policy_is_rejected(self, tmp_path):
+        with pytest.raises(NotImplementedError, match="GRUModule"):
+            export_onnx_policy(
+                self._make_policy(GRUModule), tmp_path / "policy.onnx", (5,)
             )
 
 
