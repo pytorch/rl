@@ -18,6 +18,7 @@ from typing import Literal, TypeVar
 
 import torch
 from tensordict import (
+    is_leaf_nontensor,
     is_tensor_collection,
     lazy_stack,
     NestedKey,
@@ -25,7 +26,6 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import (
     CompositeDistribution,
     ProbabilisticTensorDictModule,
@@ -89,6 +89,16 @@ _MCADVANTAGE_STATS = (
 
 def _make_mcadvantage_queue(candidate_group_size: int) -> deque:
     return deque(maxlen=candidate_group_size)
+
+
+def _group_mean_std(values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    # Reduce the values shifted by a member of the group. A group of identical
+    # values then has a mean equal to that value and an exactly zero std, so
+    # its advantage is zero. Reducing the raw values leaves a float rounding
+    # residue in ``values - mean`` that the std normalization amplifies.
+    shift = values.amin()
+    shifted = values - shift
+    return shifted.mean() + shift, shifted.std()
 
 
 def _get_ray():
@@ -1362,8 +1372,8 @@ class MCAdvantage(Transform):
         # contiguous() can silently turn stacked NonTensorData entries (e.g.
         # string prompts) into empty TensorDicts. Keep the lazy input whenever
         # materialization would lose entries.
-        lazy_keys = set(tensordict.keys(True, True, is_leaf=_is_leaf_nontensor))
-        concrete_keys = set(out.keys(True, True, is_leaf=_is_leaf_nontensor))
+        lazy_keys = set(tensordict.keys(True, True, is_leaf=is_leaf_nontensor))
+        concrete_keys = set(out.keys(True, True, is_leaf=is_leaf_nontensor))
         if lazy_keys - concrete_keys:
             torchrl_logger.debug(
                 "MCAdvantage: keeping lazy tensordict; contiguous() dropped "
@@ -1506,8 +1516,7 @@ class MCAdvantage(Transform):
             # regular strided tensor rather than a nested one.
             reward = tds.get(self.rewards_key, as_nested_tensor=True)
             reward_values = reward.values() if reward.is_nested else reward
-            reward_mean = reward_values.mean()
-            reward_scale = reward_values.std()
+            reward_mean, reward_scale = _group_mean_std(reward_values)
             advantage = (reward - reward_mean) / reward_scale.clamp_min(1e-6)
             if self.verbose:
                 torchrl_logger.info(f"Advantage: {reward_mean=} {reward_scale=}")
@@ -1580,7 +1589,8 @@ class MCAdvantage(Transform):
                         f"Dropping group: mean return {mean_return} outside ({low}, {high})."
                     )
                 return None
-        advantage = (returns - returns.mean()) / returns.std().clamp_min(1e-6)
+        returns_mean, returns_scale = _group_mean_std(returns)
+        advantage = (returns - returns_mean) / returns_scale.clamp_min(1e-6)
         if self.verbose:
             torchrl_logger.info(f"Group returns: {returns=} {advantage=}")
         for traj, reward, adv in zip(trajs, rewards, advantage.unbind(0)):

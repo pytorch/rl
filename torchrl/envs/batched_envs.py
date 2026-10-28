@@ -25,14 +25,13 @@ from warnings import warn
 
 import torch
 from tensordict import (
+    is_leaf_nontensor,
     is_tensor_collection,
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
     unravel_key,
 )
-from tensordict.base import _is_leaf_nontensor
-from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 
 from torchrl._utils import (
@@ -1098,7 +1097,9 @@ class BatchedEnvBase(EnvBase):
                 raise RuntimeError(
                     f"len(kwargs) and num_workers mismatch, got {len(kwargs)} and {self.num_workers}."
                 )
-            for _kwargs, _new_kwargs in _zip_strict(self.create_env_kwargs, kwargs):
+            for _kwargs, _new_kwargs in zip(
+                self.create_env_kwargs, kwargs, strict=True
+            ):
                 _kwargs.update(_new_kwargs)
 
     def _get_in_keys_to_exclude(self, tensordict):
@@ -1857,7 +1858,7 @@ class SerialEnv(BatchedEnvBase):
                 filter_empty=True,
                 device=result.device,
                 batch_size=result.batch_size,
-                is_leaf=_is_leaf_nontensor,
+                is_leaf=is_leaf_nontensor,
                 default=None,
             )
 
@@ -2417,7 +2418,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 filter_empty=True,
                 device=result.device,
                 batch_size=result.batch_size,
-                is_leaf=_is_leaf_nontensor,
+                is_leaf=is_leaf_nontensor,
                 default=None,
             )
 
@@ -2821,7 +2822,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 filter_empty=True,
                 device=result.device,
                 batch_size=result.batch_size,
-                is_leaf=_is_leaf_nontensor,
+                is_leaf=is_leaf_nontensor,
                 default=None,
             )
 
@@ -2986,7 +2987,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 filter_empty=True,
                 device=result.device,
                 batch_size=result.batch_size,
-                is_leaf=_is_leaf_nontensor,
+                is_leaf=is_leaf_nontensor,
                 default=None,
             )
 

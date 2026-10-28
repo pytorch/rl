@@ -31,7 +31,7 @@ uv_pip_install \
   "hydra-core<1.4" \
   hypothesis \
   importlib_metadata \
-  orjson \
+  'orjson; python_version < "3.13"' \
   packaging \
   psutil \
   "pyvers>=0.2.3,<0.3.0" \
@@ -61,7 +61,7 @@ fi
 
 # Install TensorDict before TorchRL. Nightly CI validates against TensorDict main.
 if [[ "$RELEASE" == 0 ]]; then
-  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
+  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
   uv_pip_install --no-deps tensordict
 fi

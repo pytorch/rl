@@ -23,7 +23,6 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.utils import _zip_strict
 from torchrl._utils import _STRDTYPE2DTYPE
 
 from torchrl.data.replay_buffers.utils import (
@@ -328,7 +327,9 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
                 raise ValueError(
                     f"Length of compressed data ({len(compressed_data)}) does not match length of data indices ({len(data_indices)})"
                 )
-            for i, (data, mtdt) in enumerate(_zip_strict(compressed_data, metadata)):
+            for i, (data, mtdt) in enumerate(
+                zip(compressed_data, metadata, strict=True)
+            ):
                 if mtdt["type"] == "tensor":
                     compressed_data[i] = data["data"]
                 else:

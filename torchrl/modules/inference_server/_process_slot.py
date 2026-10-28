@@ -12,7 +12,7 @@ from multiprocessing.queues import SimpleQueue
 from multiprocessing.synchronize import Event, Lock, Semaphore
 
 import torch
-from tensordict.base import _is_leaf_nontensor, TensorDictBase
+from tensordict import is_leaf_nontensor, TensorDictBase
 from tensordict.utils import NestedKey
 
 from torchrl._comm import MailboxPeerClosedError, MailboxTransportError
@@ -280,7 +280,7 @@ class ProcessSlotTransport(InferenceTransport):
 
         request_keys = list(
             request_spec.keys(
-                include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor
+                include_nested=True, leaves_only=True, is_leaf=is_leaf_nontensor
             )
         )
         if not request_keys:

@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import itertools
+import math
 import os
 import queue as queue_lib
 import sys
@@ -191,6 +192,31 @@ def _isaaclab_rollout(seed: int, *, native_autoreset: bool, max_steps: int = 4):
 
 def _isaaclab_native_rollout(seed: int, max_steps: int = 4):
     return _isaaclab_rollout(seed, native_autoreset=True, max_steps=max_steps)
+
+
+def _assert_rollouts_match(rollout, other):
+    """Assert that two Isaac Lab rollouts agree up to GPU physics noise.
+
+    Newton physics (Isaac Lab 3.x) is not bitwise reproducible across
+    processes: observations of identically seeded rollouts differ by up to
+    about 1.5e-4, and rewards, computed from the same physics state, by up to
+    about 6.5e-5. Both are compared with a 1e-3 tolerance, far below the error
+    of a wrong reset. Actions and done flags, as well as the positions of the
+    NaN terminal observations, must match exactly.
+    """
+    physics_keys = ["policy", ("next", "policy"), ("next", "reward")]
+    assert_allclose_td(
+        rollout.select(*physics_keys, strict=False),
+        other.select(*physics_keys, strict=False),
+        rtol=1e-3,
+        atol=1e-3,
+    )
+    assert_allclose_td(
+        rollout.exclude(*physics_keys),
+        other.exclude(*physics_keys),
+        rtol=0,
+        atol=0,
+    )
 
 
 def _isaaclab_transition_keys(rollout):
@@ -403,6 +429,29 @@ def test_isaaclab_data_to_torch():
     assert dlpack_out.data_ptr() == tensor.data_ptr()
     torch.testing.assert_close(
         isaac_lab_lib._isaac_data_to_torch([[1.0, 2.0]]), torch.tensor([[1.0, 2.0]])
+    )
+
+
+@pytest.mark.skipif(not _has_isaaclab, reason="Isaaclab not found")
+def test_isaaclab_tiled_camera_default_view_pitches_down():
+    """The default camera looks forward and 12 degrees down on any Isaac Lab version.
+
+    Isaac Lab 3.x writes quaternions as ``(x, y, z, w)`` and 2.x as
+    ``(w, x, y, z)``; Isaac Lab's own ``quat_apply`` reads the installed one.
+    """
+    from isaaclab.utils.math import quat_apply
+
+    env_cfg = IsaacLabWrapper.add_tiled_camera_config(
+        types.SimpleNamespace(scene=types.SimpleNamespace())
+    )
+    rot = torch.tensor(env_cfg.scene.tiled_camera.offset.rot)
+    forward = quat_apply(rot, torch.tensor([1.0, 0.0, 0.0]))
+    pitch = math.radians(12.0)
+    torch.testing.assert_close(
+        forward,
+        torch.tensor([math.cos(pitch), 0.0, -math.sin(pitch)]),
+        rtol=0,
+        atol=1e-3,
     )
 
 
@@ -754,7 +803,7 @@ class TestIsaacLab:
         rollout1 = _isaaclab_native_rollout(seed)
 
         assert rollout0["next", "done"].any()
-        assert_allclose_td(rollout0, rollout1, rtol=1e-6, atol=1e-6)
+        _assert_rollouts_match(rollout0, rollout1)
 
     @pytest.mark.parametrize("seed", [0, 1])
     def test_isaaclab_native_autoreset_rollout_matches_default_signals(self, seed):
@@ -767,12 +816,7 @@ class TestIsaacLab:
         done_native = rollout_native["next", "done"].squeeze(-1)
         assert torch.isnan(rollout["next", "policy"][done]).all()
         assert torch.isnan(rollout_native["next", "policy"][done_native]).all()
-        assert_allclose_td(
-            rollout.select(*keys),
-            rollout_native.select(*keys),
-            rtol=1e-6,
-            atol=1e-6,
-        )
+        _assert_rollouts_match(rollout.select(*keys), rollout_native.select(*keys))
 
     @pytest.mark.parametrize("seed", [0, 1])
     def test_isaaclab_native_autoreset_rollout_reset_obs_continuity(self, seed):
@@ -1032,6 +1076,7 @@ class TestIsaacLab:
 
         # Verify rollout works with the LSTM policy
         rollout = test_env.rollout(10, policy=policy, break_when_any_done=False)
+        assert rollout["action"].requires_grad
         assert rollout.shape[0] == env.batch_size[0]
         assert rollout.shape[1] == 10
         # Verify recurrent states are carried through the rollout

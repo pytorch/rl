@@ -22,9 +22,11 @@ from unittest import mock
 import pytest
 import torch
 from _rb_common import (
+    _episode_data,
     _has_snapshot,
     _has_zstandard,
     _os_is_windows,
+    _ReplayRowsExporter,
     torch_2_3,
     TORCH_VERSION,
 )
@@ -1573,6 +1575,201 @@ class TestCompressedListStorage:
         assert (
             compression_ratio > 1.5
         ), f"Compression ratio {compression_ratio} is too low"
+
+
+class TestStorageExport:
+    @pytest.mark.parametrize("shared", [False, True])
+    @pytest.mark.parametrize(
+        "storage_type", [LazyTensorStorage, ListStorage, CompressedListStorage]
+    )
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="requires CUDA"
+                    ),
+                ],
+            ),
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="requires MPS"
+                ),
+            ),
+        ],
+    )
+    def test_device_storage(self, device, storage_type, shared):
+        rb = ReplayBuffer(storage=storage_type(4, device=device), shared=shared)
+        rb.extend(
+            _episode_data([11, 1, 10, 0], [1, 0, 1, 0], [1, 1, 0, 0], device=device)
+        )
+        if shared and device != "cpu":
+            with pytest.raises(NotImplementedError, match="requires CPU-backed data"):
+                rb.export(_ReplayRowsExporter())
+            return
+        rows = rb.export(
+            _ReplayRowsExporter(), trajectory_key="episode", step_key="step"
+        )
+        assert [row["obs"].item() for row in rows] == [0, 1, 10, 11]
+        assert all(row["obs"].device.type == device for row in rows)
+
+    @pytest.mark.parametrize("shared", [False, True])
+    def test_empty_list_with_accelerator_device(self, shared):
+        rb = ReplayBuffer(storage=ListStorage(2, device="cuda"), shared=shared)
+        assert rb.export(_ReplayRowsExporter()) == []
+
+    @pytest.mark.parametrize("storage_type", [ListStorage, CompressedListStorage])
+    def test_loaded_cpu_records_keep_cpu_device(self, storage_type):
+        source = storage_type(2)
+        source.set(range(2), _episode_data([0, 1], [0, 0], [0, 1]))
+        target = storage_type(2, device="cuda")
+        target.load_state_dict(source.state_dict())
+
+        rows = ReplayBuffer(storage=target).export(_ReplayRowsExporter())
+
+        assert [row["obs"].item() for row in rows] == [0, 1]
+        assert [row["obs"].device.type for row in rows] == ["cpu", "cpu"]
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="requires CUDA"
+                    ),
+                ],
+            ),
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="requires MPS"
+                ),
+            ),
+        ],
+    )
+    def test_mixed_device_list_export_preserves_rows(self, device):
+        rb = ReplayBuffer(storage=ListStorage(4))
+        rb.extend(
+            [
+                TensorDict(
+                    {
+                        "obs": torch.tensor(obs, device=leaf_device),
+                        "episode": torch.tensor(episode, device=leaf_device),
+                        "step": torch.tensor(step, device=leaf_device),
+                    },
+                    [],
+                )
+                for obs, episode, step, leaf_device in (
+                    (11, 1, 1, "cpu"),
+                    (1, 0, 1, device),
+                    (10, 1, 0, "cpu"),
+                    (0, 0, 0, device),
+                )
+            ]
+        )
+
+        physical = rb.export(_ReplayRowsExporter())
+        episodic = rb.export(
+            _ReplayRowsExporter(), trajectory_key="episode", step_key="step"
+        )
+
+        for rows, values, devices in (
+            (physical, [11, 1, 10, 0], ["cpu", device, "cpu", device]),
+            (episodic, [0, 1, 10, 11], [device, device, "cpu", "cpu"]),
+        ):
+            assert [row["obs"].item() for row in rows] == values
+            assert all(
+                row[key].device.type == device
+                for row, device in zip(rows, devices)
+                for key in ("obs", "episode", "step")
+            )
+        assert [row["episode"].item() for row in episodic] == [0, 0, 1, 1]
+        assert [row["step"].item() for row in episodic] == [0, 1, 0, 1]
+        assert all(row.batch_size == torch.Size([]) for row in episodic)
+
+    @pytest.mark.parametrize("storage_type", [ListStorage, LazyStackStorage])
+    def test_ragged_items(self, storage_type):
+        rb = ReplayBuffer(storage=storage_type(2))
+        rb.extend(
+            [
+                TensorDict({"obs": torch.arange(2)}, [2]),
+                TensorDict({"obs": torch.arange(3)}, [3]),
+            ]
+        )
+        rows = rb.export(_ReplayRowsExporter())
+        assert [row.batch_size for row in rows] == [torch.Size([2]), torch.Size([3])]
+        assert [row["obs"].tolist() for row in rows] == [[0, 1], [0, 1, 2]]
+
+    def test_scalar_metadata_with_different_item_shapes(self):
+        rb = ReplayBuffer(storage=ListStorage(3))
+        rb.extend(
+            [
+                TensorDict(
+                    {
+                        "obs": torch.full(shape, value),
+                        ("collector", "traj_ids"): torch.zeros(shape, dtype=torch.long),
+                        "step": torch.full(shape, value),
+                    },
+                    shape,
+                )
+                for shape, value in (([], 2), ([1], 0), ([1, 1], 1))
+            ]
+        )
+
+        rows = rb.export(
+            _ReplayRowsExporter(),
+            trajectory_key=("collector", "traj_ids"),
+            step_key="step",
+        )
+
+        assert [row["obs"].item() for row in rows] == [0, 1, 2]
+        assert [row.batch_size for row in rows] == [
+            torch.Size([1]),
+            torch.Size([1, 1]),
+            torch.Size([]),
+        ]
+
+    def test_integer_indexed_storage(self):
+        class IntegerStorage(ListStorage):
+            def get(self, index):
+                assert isinstance(index, int)
+                return super().get(index)
+
+        rb = ReplayBuffer(storage=IntegerStorage(2))
+        rb.extend(_episode_data([1, 0], [0, 0], [1, 0]))
+        assert [row["obs"].item() for row in rb.export(_ReplayRowsExporter())] == [1, 0]
+        assert [
+            row["obs"].item()
+            for row in rb.export(
+                _ReplayRowsExporter(), trajectory_key="episode", step_key="step"
+            )
+        ] == [0, 1]
+
+    def test_compressed_storage_decodes_only_exported_rows(self):
+        decoded = []
+
+        def decode(payload, metadata):
+            decoded.append(payload.numel())
+            return payload - 10
+
+        storage = CompressedListStorage(
+            2, compression_fn=lambda value: value + 10, decompression_fn=decode
+        )
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(TensorDict({"obs": torch.arange(2)}, [2]))
+
+        rows = rb.export(_ReplayRowsExporter())
+
+        assert [row["obs"].item() for row in rows] == [0, 1]
+        assert decoded == [1, 1]
 
 
 class TestRBLazyInit:

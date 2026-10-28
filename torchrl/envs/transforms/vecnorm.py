@@ -15,7 +15,6 @@ from typing import Any
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
-from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 
 try:
@@ -512,7 +511,7 @@ class VecNormV2(Transform):
 
         tensordict = tensordict.copy()
         loc, scale = self._get_loc_scale()
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             if out_key not in tensordict.keys(include_nested=True):
                 continue
             value = tensordict.get(out_key)
@@ -591,7 +590,7 @@ class VecNormV2(Transform):
         data_update = (data - loc) / scale
         if self.out_keys[: len(self.in_keys)] != self.in_keys:
             # map names
-            for in_key, out_key in _zip_strict(self._in_keys_safe, self.out_keys):
+            for in_key, out_key in zip(self._in_keys_safe, self.out_keys, strict=True):
                 if in_key in data_update:
                     data_update.rename_key_(in_key, out_key)
         else:
@@ -830,7 +829,7 @@ class VecNormV2(Transform):
 
         loc, scale = self._get_loc_scale()
 
-        for key, key_out in _zip_strict(self.in_keys, self.out_keys):
+        for key, key_out in zip(self.in_keys, self.out_keys, strict=True):
             local_result = ObservationNorm(
                 loc=loc.get(key),
                 scale=scale.get(key),

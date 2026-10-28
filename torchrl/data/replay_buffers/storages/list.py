@@ -16,14 +16,13 @@ import numpy as np
 import tensordict
 import torch
 from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase
-from tensordict.utils import _zip_strict
 from torch.utils._pytree import tree_map
 
 from torchrl.data.replay_buffers.checkpointers import (
     CompressedListStorageCheckpointer,
     ListStorageCheckpointer,
 )
-from torchrl.data.replay_buffers.utils import INT_CLASSES
+from torchrl.data.replay_buffers.utils import INT_CLASSES, tree_iter
 
 from .base import Storage
 
@@ -103,7 +102,7 @@ class ListStorage(Storage):
                     np.ndarray,
                 ),
             ):
-                for _cursor, _data in _zip_strict(cursor, data):
+                for _cursor, _data in zip(cursor, data, strict=True):
                     self.set(_cursor, _data, set_cursor=set_cursor)
             else:
                 raise TypeError(
@@ -166,6 +165,13 @@ class ListStorage(Storage):
     def _get_list(self, index: list) -> list:
         """Get a list of items from the storage."""
         return [self._storage[i] for i in index]
+
+    def _content_devices(self) -> set[torch.device]:
+        return {
+            leaf.device
+            for leaf in tree_iter(self._storage)
+            if isinstance(leaf, torch.Tensor)
+        }
 
     def __len__(self):
         """Get the length of the storage."""
@@ -543,6 +549,11 @@ class CompressedListStorage(ListStorage):
     def __len__(self) -> int:
         """Get the length of the compressed storage."""
         return len([item for item in self._storage if item is not None])
+
+    def _content_devices(self) -> set[torch.device]:
+        return super()._content_devices() | {
+            leaf for leaf in tree_iter(self._metadata) if isinstance(leaf, torch.device)
+        }
 
     def _contains_int(self, item: int) -> bool:
         """Check if an integer index is contained in the compressed storage."""

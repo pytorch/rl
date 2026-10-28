@@ -448,6 +448,56 @@ class TestRanges:
             assert row_one_hot.shape == (5,)
             assert (row_one_hot == row_spec.to_one_hot(row_sample)).all()
 
+    def test_binary_to_one_hot_accepts_non_long_samples(self):
+        binary = Binary(n=4, shape=(3, 4))
+        assert binary.dtype is torch.int8
+        zeros = torch.zeros((3, 4), dtype=binary.dtype)
+        encoded = binary.to_one_hot(zeros)
+        expected = torch.zeros((3, 4, 2), dtype=torch.bool)
+        expected[..., 0] = True
+        assert encoded.shape == (3, 4, 2)
+        assert encoded.dtype is torch.bool
+        assert encoded.device == zeros.device
+        assert torch.equal(encoded, expected)
+        assert binary.to_one_hot_spec().is_in(encoded)
+        assert zeros.dtype is torch.int8
+        assert torch.equal(zeros, torch.zeros((3, 4), dtype=torch.int8))
+        assert binary.dtype is torch.int8
+
+        rand = binary.rand()
+        assert rand.dtype is torch.int8
+        encoded_rand = binary.to_one_hot(rand)
+        assert encoded_rand.shape == (3, 4, 2)
+        assert encoded_rand.dtype is torch.bool
+        assert binary.to_one_hot_spec().is_in(encoded_rand)
+        assert rand.dtype is torch.int8
+
+        small_binary = Binary(n=2)
+        assert small_binary.dtype is torch.int8
+        small_sample = torch.tensor([0, 1], dtype=small_binary.dtype)
+        small_expected = torch.tensor([[True, False], [False, True]])
+        assert torch.equal(small_binary.to_one_hot(small_sample), small_expected)
+
+    def test_categorical_to_one_hot_accepts_non_long_samples(self):
+        categorical = Categorical(5, shape=(4,), dtype=torch.int32)
+        categ_zeros = torch.zeros((4,), dtype=categorical.dtype)
+        categ_encoded = categorical.to_one_hot(categ_zeros)
+        categ_expected = torch.zeros((4, 5), dtype=torch.bool)
+        categ_expected[..., 0] = True
+        assert categ_encoded.shape == (4, 5)
+        assert categ_encoded.dtype is torch.bool
+        assert categ_encoded.device == categ_zeros.device
+        assert torch.equal(categ_encoded, categ_expected)
+        assert categorical.to_one_hot_spec().is_in(categ_encoded)
+        assert categ_zeros.dtype is torch.int32
+        assert categorical.dtype is torch.int32
+
+        small_categorical = Categorical(3, dtype=torch.int32)
+        assert small_categorical.dtype is torch.int32
+        small_sample = torch.tensor(2, dtype=small_categorical.dtype)
+        small_expected = torch.tensor([False, False, True])
+        assert torch.equal(small_categorical.to_one_hot(small_sample), small_expected)
+
 
 @pytest.mark.parametrize("is_complete", [True, False])
 @pytest.mark.parametrize("device", [None, *get_default_devices()])
@@ -2403,10 +2453,29 @@ class TestTo:
             shape1 = (3,)
         else:
             shape1 = (*shape1, 3)
+        mask = torch.zeros(15, dtype=torch.bool)
+        mask[[1, 6, 12]] = True
         spec = MultiCategorical(
-            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+            nvec=(4, 5, 6),
+            shape=shape1,
+            device="cpu",
+            dtype=torch.long,
+            mask=mask,
         )
-        assert spec.to(device).device == device
+        spec = spec.to(device)
+        assert spec.device == device
+
+        converted = spec.to(torch.int32)
+        assert converted.dtype == torch.int32
+        assert converted.mask.dtype == torch.bool
+        torch.testing.assert_close(
+            converted.mask, mask.to(device).expand_as(converted.mask)
+        )
+        sample = converted.rand()
+        expected = torch.tensor([1, 2, 3], dtype=torch.int32, device=device)
+        torch.testing.assert_close(sample, expected.expand_as(sample))
+        assert spec.dtype == torch.long
+        torch.testing.assert_close(spec.mask, mask.to(device).expand_as(spec.mask))
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_multionehot(self, shape1, device):
@@ -2414,8 +2483,33 @@ class TestTo:
             shape1 = (15,)
         else:
             shape1 = (*shape1, 15)
-        spec = MultiOneHot(nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long)
-        assert spec.to(device).device == device
+        mask = torch.zeros(15, dtype=torch.bool)
+        mask[[1, 6, 12]] = True
+        spec = MultiOneHot(
+            nvec=(4, 5, 6),
+            shape=shape1,
+            device="cpu",
+            dtype=torch.long,
+            mask=mask,
+        )
+        spec = spec.to(device)
+        assert spec.device == device
+
+        converted = spec.to(torch.int32)
+        assert converted.dtype == torch.int32
+        assert converted.mask.dtype == torch.bool
+        torch.testing.assert_close(
+            converted.mask, mask.to(device).expand_as(converted.mask)
+        )
+        sample = converted.rand()
+        expected = torch.tensor(
+            [0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0],
+            dtype=torch.int32,
+            device=device,
+        )
+        torch.testing.assert_close(sample, expected.expand_as(sample))
+        assert spec.dtype == torch.long
+        torch.testing.assert_close(spec.mask, mask.to(device).expand_as(spec.mask))
 
     def test_non_tensor(self, device):
         spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")

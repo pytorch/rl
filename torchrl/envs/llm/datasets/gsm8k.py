@@ -11,7 +11,6 @@ from typing import Any, Literal, TYPE_CHECKING
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
 from torchrl.data import TensorSpec
 from torchrl.envs import StepCounter, Transform
@@ -47,7 +46,7 @@ class GSM8KPrepareQuestion(Transform):
         super().__init__(in_keys, out_keys)
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             string = tensordict.get(in_key)
             tensordict.set(out_key, self._modify_str(string))
         return tensordict
@@ -67,7 +66,7 @@ class GSM8KPrepareQuestion(Transform):
         return obs
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             if out_key != in_key:
                 observation_spec[out_key] = observation_spec[in_key].clone()
         return observation_spec

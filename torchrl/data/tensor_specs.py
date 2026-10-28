@@ -3340,6 +3340,7 @@ class MultiOneHot(OneHot):
         dtype (str or torch.dtype, optional): dtype of the tensors.
         mask (torch.Tensor or None): mask some of the possible outcomes when a
             sample is taken. See :meth:`update_mask` for more information.
+            The mask stays boolean when the spec is cast to another dtype.
 
     Examples:
         >>> ts = MultiOneHot((3,2,3))
@@ -3455,7 +3456,7 @@ class MultiOneHot(OneHot):
             shape=self.shape,
             device=dest_device,
             dtype=dest_dtype,
-            mask=self.mask.to(dest) if self.mask is not None else None,
+            mask=self.mask.to(dest_device) if self.mask is not None else None,
         )
 
     def clone(self) -> MultiOneHot:
@@ -4132,7 +4133,7 @@ class Categorical(TensorSpec):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
-        return torch.nn.functional.one_hot(val, self.space.n).bool()
+        return torch.nn.functional.one_hot(val.to(torch.long), self.space.n).bool()
 
     def to_categorical(
         self, val: torch.Tensor, safe: bool | None = None
@@ -4642,6 +4643,7 @@ class MultiCategorical(Categorical):
             will be squeezed. Defaults to ``True``.
         mask (torch.Tensor or None): mask some of the possible outcomes when a
             sample is taken. See :meth:`update_mask` for more information.
+            The mask stays boolean when the spec is cast to another dtype.
 
     Examples:
         >>> ts = MultiCategorical((3, 2, 3))
@@ -4764,7 +4766,7 @@ class MultiCategorical(Categorical):
             dest_device = torch.device(dest)
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
-        mask = self.mask.to(dest) if self.mask is not None else None
+        mask = self.mask.to(dest_device) if self.mask is not None else None
         return self.__class__(
             nvec=self.nvec.to(dest),
             shape=None,
@@ -6639,6 +6641,10 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
             for spec, v in zip(self._specs, torch.unbind(val, dim=self.dim)):
                 spec.assert_is_in(v)
         return {key: self[key].to_numpy(val) for key, val in val.items()}
+
+    def __contains__(self, key: NestedKey) -> bool:
+        key = unravel_key(key)
+        return key in self.keys(include_nested=isinstance(key, tuple))
 
     def __len__(self):
         return self.shape[0]

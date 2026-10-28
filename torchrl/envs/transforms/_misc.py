@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase, unravel_key
-from tensordict.utils import _zip_strict, expand_as_right, NestedKey
+from tensordict.utils import expand_as_right, NestedKey
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.common import EnvBase
@@ -228,7 +228,7 @@ class TimeMaxPool(Transform):
 
     def _call(self, next_tensordict: TensorDictBase, _reset=None) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             # Lazy init of buffers
             buffer_name = self._buffer_name(in_key)
             buffer = getattr(self, buffer_name)
@@ -345,7 +345,7 @@ class RandomCropTensorDict(Transform):
         if self.mask_key is None or self.mask_key not in tensordict.keys(
             isinstance(self.mask_key, tuple)
         ):
-            idx_0 = torch.randint(max_idx_0, idx_shape, device=device)
+            idx_0 = torch.randint(max_idx_0 + 1, idx_shape, device=device)
         else:
             # get the traj length for each entry
             mask = tensordict.get(self.mask_key)
@@ -361,9 +361,10 @@ class RandomCropTensorDict(Transform):
                     f"Cannot sample trajectories of length {self.sub_seq_len} when the minimum "
                     f"trajectory length is {traj_lengths.min()}."
                 )
-            # take a random number between 0 and traj_lengths - self.sub_seq_len
+            # take a random number between 0 and traj_lengths - self.sub_seq_len (inclusive)
             idx_0 = (
-                torch.rand(idx_shape, device=device) * (traj_lengths - self.sub_seq_len)
+                torch.rand(idx_shape, device=device)
+                * (traj_lengths - self.sub_seq_len + 1)
             ).to(torch.long)
         arange = torch.arange(self.sub_seq_len, device=idx_0.device)
         arange_shape = [1 for _ in range(tensordict.ndimension())]

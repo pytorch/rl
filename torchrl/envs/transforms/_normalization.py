@@ -17,7 +17,7 @@ from typing import Any, TYPE_CHECKING
 import torch
 
 from tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _zip_strict, NestedKey
+from tensordict.utils import NestedKey
 from torch import nn
 
 from torchrl._utils import _append_last
@@ -637,7 +637,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         if self.lock is not None:
             self.lock.acquire()
 
-        for key, key_out in _zip_strict(self.in_keys, self.out_keys):
+        for key, key_out in zip(self.in_keys, self.out_keys, strict=True):
             if key not in next_tensordict.keys(include_nested=True):
                 # TODO: init missing rewards with this
                 # for key_suffix in [_append_last(key, suffix) for suffix in ("_sum", "_ssq", "_count")]:
@@ -780,7 +780,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
 
         tensordict = tensordict.copy()
         loc, scale = self._get_loc_scale()
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             if out_key not in tensordict.keys(include_nested=True):
                 continue
             value = tensordict.get(out_key)
@@ -817,7 +817,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         out = []
         loc = self.loc
         scale = self.scale
-        for key, key_out in _zip_strict(self.in_keys, self.out_keys):
+        for key, key_out in zip(self.in_keys, self.out_keys, strict=True):
             _out = ObservationNorm(
                 loc=loc.get(key),
                 scale=scale.get(key),

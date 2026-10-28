@@ -102,12 +102,12 @@ fi
 echo "=== Installing build dependencies ==="
 conda install anaconda::cmake -y
 python -m pip install "pybind11[global]"
-python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
+python -m pip install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
 
 # install tensordict
 echo "=== Installing tensordict ==="
 if [[ "$RELEASE" == 0 ]]; then
-  python -m pip install --no-deps git+https://github.com/pytorch/tensordict@$(cat .github/ci_commit_pins/tensordict.txt)
+  python -m pip install --no-deps git+https://github.com/pytorch/tensordict
 else
   python -m pip install --no-deps tensordict
 fi

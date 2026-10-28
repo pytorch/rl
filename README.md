@@ -414,7 +414,7 @@ with old or optional dependency stacks.
 
 ## Installation
 
-TorchRL 0.13 targets Python 3.10+, PyTorch 2.1+, and TensorDict 0.13.x.
+TorchRL targets Python 3.10+, PyTorch 2.11+, and TensorDict 0.15.x (0.15.2 or later).
 
 Install the stable release:
 

@@ -13,7 +13,6 @@ from typing import Literal, TYPE_CHECKING
 import torch
 from tensordict import NestedKey, TensorClass, TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict.utils import _zip_strict
 from torchrl.data import History
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.objectives.common import LossModule
@@ -395,7 +394,7 @@ class SFTLoss(LossModule):
         # apply mask
         if not all(
             mask.shape == lp.shape
-            for mask, lp in _zip_strict(assistant_masks, log_probs)
+            for mask, lp in zip(assistant_masks, log_probs, strict=True)
         ):
             if token_struct is not None:
                 suffix = f"Tokens from current template: {[inp.shape for inp in token_struct.get('input_ids', as_padded_tensor=True)]}"
@@ -408,7 +407,7 @@ class SFTLoss(LossModule):
 
         log_probs_masked = [
             lp.masked_fill(~mask, 0.0)
-            for lp, mask in _zip_strict(log_probs, assistant_masks)
+            for lp, mask in zip(log_probs, assistant_masks, strict=True)
         ]
 
         # Sum log probs, optionally normalize by sequence length
@@ -440,7 +439,7 @@ class SFTLoss(LossModule):
 
                 log_probs_masked = [
                     lp.masked_fill(~mask, 0.0)
-                    for lp, mask in _zip_strict(log_probs, assistant_masks)
+                    for lp, mask in zip(log_probs, assistant_masks, strict=True)
                 ]
 
                 loss_kl, kl_penalty = self._kl_to_ref(
@@ -474,7 +473,7 @@ class SFTLoss(LossModule):
                 with torch.no_grad():
                     log_probs_masked = [
                         lp.masked_fill(~mask, 0.0)
-                        for lp, mask in _zip_strict(log_probs, assistant_masks)
+                        for lp, mask in zip(log_probs, assistant_masks, strict=True)
                     ]
                     loss_kl, kl_penalty = self._kl_to_ref(
                         log_probs_masked,

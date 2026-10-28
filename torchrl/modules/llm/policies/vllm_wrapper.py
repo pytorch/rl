@@ -21,7 +21,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.tensorclass import from_dataclass, TensorClass
-from tensordict.utils import _zip_strict, NestedKey
+from tensordict.utils import NestedKey
 from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
 
@@ -1136,14 +1136,14 @@ class vLLMWrapper(LLMWrapperBase):
                 raise ValueError("assistant_mask_padded is None")
             text_full_tokens = [
                 tokens[mask.bool()].long()
-                for tokens, mask in _zip_strict(
-                    tokens_full_padded, attention_mask_padded
+                for tokens, mask in zip(
+                    tokens_full_padded, attention_mask_padded, strict=True
                 )
             ]
             text_response_tokens = [
                 tokens[mask.bool()].long()
-                for tokens, mask in _zip_strict(
-                    tokens_full_padded, assistant_mask_padded
+                for tokens, mask in zip(
+                    tokens_full_padded, assistant_mask_padded, strict=True
                 )
             ]
             text_full = self.tokenizer.batch_decode(
@@ -1173,8 +1173,8 @@ class vLLMWrapper(LLMWrapperBase):
             history_chat_flat.response = h_responses
             full_histories = [
                 prompt_history.append(response_history, inplace=False, dim=-1)
-                for prompt_history, response_history in _zip_strict(
-                    prompt_histories.unbind(0), response_histories
+                for prompt_history, response_history in zip(
+                    prompt_histories.unbind(0), response_histories, strict=True
                 )
             ]
             history_chat_flat.full = lazy_stack(full_histories)
@@ -1399,7 +1399,9 @@ class vLLMWrapper(LLMWrapperBase):
         ), f"response_text must be str or list, got {type(response_text)}"
 
         if isinstance(text, list):
-            return [self._cat_text(t, t_) for t, t_ in _zip_strict(text, response_text)]
+            return [
+                self._cat_text(t, t_) for t, t_ in zip(text, response_text, strict=True)
+            ]
         else:
             return text + response_text
 
@@ -1665,7 +1667,7 @@ class vLLMWrapper(LLMWrapperBase):
         if isinstance(tokens, list) or isinstance(response_tokens, list):
             return [
                 self._cat_tensors(t, t_)
-                for t, t_ in _zip_strict(tokens, response_tokens)
+                for t, t_ in zip(tokens, response_tokens, strict=True)
             ]
         else:
             return torch.cat([tokens, response_tokens], dim=-1)
@@ -1821,8 +1823,8 @@ class vLLMWrapper(LLMWrapperBase):
                         ],
                         dim=-1,
                     )
-                    for prompt, response in _zip_strict(
-                        prompt_list, tokens_response_unpadded
+                    for prompt, response in zip(
+                        prompt_list, tokens_response_unpadded, strict=True
                     )
                 ]
         masks_obj.padded = MetaData(self.pad_output)
@@ -2361,7 +2363,7 @@ def _nan_like_prompt_tokens(
         )
         return [
             r.new_full(t.shape, float("nan"))
-            for t, r in _zip_strict(prompt_tokens, refs)
+            for t, r in zip(prompt_tokens, refs, strict=True)
         ]
     ref = response_lp[0] if isinstance(response_lp, list) else response_lp
     return ref.new_full(prompt_tokens.shape, float("nan"))
@@ -2375,7 +2377,9 @@ def _cat_prompt_response(
     if prompt is None or response is None:
         return None
     if isinstance(prompt, list) or isinstance(response, list):
-        return [_cat_prompt_response(p, r) for p, r in _zip_strict(prompt, response)]
+        return [
+            _cat_prompt_response(p, r) for p, r in zip(prompt, response, strict=True)
+        ]
     return torch.cat([prompt, response], dim=-1)
 
 
