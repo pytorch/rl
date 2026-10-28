@@ -3537,6 +3537,28 @@ class TestAsyncBatchedCollector:
         finally:
             collector.shutdown()
 
+    @pytest.mark.filterwarnings(
+        "error:The int written over the NonTensorData entry:FutureWarning"
+    )
+    def test_thread_worker_env_index_is_long_tensor(self):
+        """Thread workers store env_index as an integer tensor."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=4,
+            total_frames=4,
+            server_config=InferenceServerConfig(max_batch_size=2),
+            env_backend="threading",
+        )
+        try:
+            batch = next(iter(collector))
+        finally:
+            collector.shutdown()
+        env_index = batch.get("env_index")
+        assert isinstance(env_index, torch.Tensor)
+        assert env_index.dtype == torch.long
+        assert set(env_index.tolist()) <= {0, 1}
+
     def test_policy_factory(self):
         """policy_factory is called to create the policy."""
         num_envs = 2
