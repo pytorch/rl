@@ -159,6 +159,20 @@ def _validate_iterable(
                 )
 
 
+def _index_outcome_mask(mask: torch.Tensor, idx: SHAPE_INDEX_TYPING) -> torch.Tensor:
+    """Indexes the batch dims of a mask whose last dim holds the outcomes of each element.
+
+    The outcome dim is kept whole, as the last dim of the spec is in
+    ``__getitem__``: an ellipsis in ``idx`` only spans the batch dims.
+    """
+    if not isinstance(idx, tuple):
+        idx = (idx,)
+    if mask.ndim == 1:
+        # Without batch dims, only None changes the shape.
+        idx = tuple(item for item in idx if item is None)
+    return mask.movedim(-1, 0)[(slice(None), *idx)].movedim(0, -1)
+
+
 def _slice_indexing(shape: list[int], idx: slice) -> list[int]:
     """Given an input shape and a slice index, returns the new indexed shape.
 
@@ -2131,7 +2145,7 @@ class OneHot(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             use_register=self.use_register,
-            mask=self.mask[idx] if self.mask is not None else None,
+            mask=_index_outcome_mask(self.mask, idx) if self.mask is not None else None,
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -3830,6 +3844,7 @@ class MultiOneHot(OneHot):
             shape=_size(indexed_shape + [self.shape[-1]]),
             device=self.device,
             dtype=self.dtype,
+            mask=_index_outcome_mask(self.mask, idx) if self.mask is not None else None,
         )
 
 
