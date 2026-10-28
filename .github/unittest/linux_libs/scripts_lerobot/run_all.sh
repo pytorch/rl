@@ -4,7 +4,7 @@ set -euo pipefail
 
 # python3-venv is also needed for the reusable job's cache synchronization.
 apt-get update
-apt-get install -y curl python3-venv
+apt-get install -y curl python3-dev python3-venv
 # The checkout is owned by a different user inside the container.
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
