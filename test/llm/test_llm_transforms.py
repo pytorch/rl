@@ -912,6 +912,14 @@ class _DummyTokensParent:
         input_mode = "tokens"
 
 
+class TestKLRewardTransformKeys:
+    def test_kl_reward_transform_rejects_non_string_key(self):
+        # unravel_key turns ("reward", 1) into the empty key (); the transform
+        # must reject it rather than read and write the root.
+        with pytest.raises(ValueError, match="invalid in_keys"):
+            KLRewardTransform(_MockLLMModule(), in_keys=[("reward", 1)])
+
+
 class TestKLModuleDevice:
     @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
     def test_retrieve_log_prob_constructor_device_moves_cpu_input(self, accelerator):

@@ -22,12 +22,7 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from tensordict import (
-    lazy_stack,
-    NonTensorData,
-    set_capture_non_tensor_stack,
-    TensorDict,
-)
+from tensordict import lazy_stack, NonTensorData, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.nn.probabilistic import (
@@ -464,8 +459,7 @@ class TestInferenceServerCore:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
 
-    @pytest.mark.parametrize("capture", [False, True])
-    def test_static_batch_preserves_non_tensor_metadata(self, capture):
+    def test_static_batch_preserves_non_tensor_metadata(self):
         policy = TensorDictModule(
             _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
         )
@@ -482,8 +476,7 @@ class TestInferenceServerCore:
             )
             for index, value in enumerate((1.0, 2.0))
         ]
-        with set_capture_non_tensor_stack(capture):
-            batch = server._collate_model_batch(items, pad_to_static=True)
+        batch = server._collate_model_batch(items, pad_to_static=True)
         assert batch.batch_size == (4,)
         assert [batch[i]["env_index"] for i in range(4)] == [0, 1, 1, 1]
         assert [batch[i]["metadata", "label"] for i in range(4)] == ["0", "1", "1", "1"]
@@ -545,7 +538,6 @@ class TestInferenceServerCore:
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
     @pytest.mark.parametrize("metadata", [False, True])
-    @set_capture_non_tensor_stack(True)
     def test_static_batch_pads_slices_and_owns_results(self, metadata):
         policy = TensorDictModule(
             _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
@@ -4073,23 +4065,23 @@ class TestAsyncBatchedCollector:
             obs = stored[stored["env_index"] == env_id]["observation"].flatten()
             torch.testing.assert_close(obs, torch.arange(len(obs), dtype=obs.dtype))
 
-    @pytest.mark.parametrize("capture", [False, True])
-    def test_process_slot_chunks_preserve_non_tensor_metadata(self, capture):
-        with set_capture_non_tensor_stack(capture):
-            rows = [
-                TensorDict(
-                    observation=torch.tensor([index]),
-                    metadata=TensorDict(label=NonTensorData(label)),
-                )
-                for index, label in enumerate(("a", "b", "b", "b"))
-            ]
-            # The first chunk has varying labels; the second has one shared
-            # label and may collapse it to a NonTensorData leaf.
-            chunks = [
-                lazy_stack(rows[:2]).contiguous(),
-                lazy_stack(rows[2:]).contiguous(),
-            ]
-            batch = AsyncBatchedCollector._cat_chunks(chunks)
+    @pytest.mark.parametrize("shared_label", ["stack", "data"])
+    def test_process_slot_chunks_preserve_non_tensor_metadata(self, shared_label):
+        rows = [
+            TensorDict(
+                observation=torch.tensor([index]),
+                metadata=TensorDict(label=NonTensorData(label)),
+            )
+            for index, label in enumerate(("a", "b", "b", "b"))
+        ]
+        # The first chunk has varying labels (a NonTensorStack); the second
+        # has one shared label, stored as a stack or as one batched
+        # NonTensorData leaf.
+        second = lazy_stack(rows[2:]).contiguous()
+        if shared_label == "data":
+            second.set(("metadata", "label"), NonTensorData("b", batch_size=[2]))
+        chunks = [lazy_stack(rows[:2]).contiguous(), second]
+        batch = AsyncBatchedCollector._cat_chunks(chunks)
         assert batch.batch_size == (4,)
         assert [batch[i]["metadata", "label"] for i in range(4)] == ["a", "b", "b", "b"]
         torch.testing.assert_close(batch["observation"], torch.arange(4).unsqueeze(-1))

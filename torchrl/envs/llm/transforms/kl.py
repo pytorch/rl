@@ -13,7 +13,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import NestedKey, set_list_to_stack, TensorDictBase, unravel_key
-from tensordict.utils import is_seq_of_nested_key, logger as torchrl_logger
+from tensordict.utils import logger as torchrl_logger
 from torch.nn.utils.rnn import pad_sequence
 from torchrl._utils import _RayServiceMetaClass
 from torchrl.data import Composite, Unbounded
@@ -271,8 +271,8 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
                 "The out_keys must have the same length as the in_keys (plus two additional optional kl entries for logging)."
             )
         super().__init__(in_keys=in_keys, out_keys=out_keys)
-        if not is_seq_of_nested_key(self.in_keys) or not is_seq_of_nested_key(
-            self.out_keys
+        if not all(
+            isinstance(key, NestedKey) for key in (*self.in_keys, *self.out_keys)
         ):
             raise ValueError(
                 f"invalid in_keys / out_keys:\nin_keys={self.in_keys} \nout_keys={self.out_keys}"

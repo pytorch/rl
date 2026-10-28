@@ -836,9 +836,7 @@ def make_dreamer(
 
     # Initialize model-based environment, actor and critic
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = (
-            model_based_env.fake_tensordict().unsqueeze(-1).to(value_model.device)
-        )
+        tensordict = model_based_env.fake_tensordict().unsqueeze(-1).to(device)
         tensordict = tensordict
         tensordict = actor_simulator(tensordict)
         value_model(tensordict)

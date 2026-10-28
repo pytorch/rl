@@ -469,6 +469,9 @@ class TestDT(LossModuleTestBase):
             assert loss["loss"].shape == torch.Size([])
 
 
+@pytest.mark.filterwarnings(
+    "error:TensorDictModule.device is deprecated:DeprecationWarning"
+)
 class TestGAIL(LossModuleTestBase):
     seed = 0
 
