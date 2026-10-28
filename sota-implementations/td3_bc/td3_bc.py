@@ -116,15 +116,25 @@ def main(cfg: DictConfig):  # noqa: F821
         metadata.set("actor_loss", actor_loss.detach())
         return metadata
 
+    # One function (and one CUDA graph) per branch: a captured graph replays
+    # the Python flag it was captured with.
+    def update_all(sampled_tensordict):
+        return update(sampled_tensordict, True)
+
+    def update_qloss(sampled_tensordict):
+        return update(sampled_tensordict, False)
+
     if cfg.compile.compile:
-        update = compile_with_warmup(update, mode=compile_mode, warmup=1)
+        update_all = compile_with_warmup(update_all, mode=compile_mode, warmup=1)
+        update_qloss = compile_with_warmup(update_qloss, mode=compile_mode, warmup=1)
 
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
         )
-        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
+        update_all = CudaGraphModule(update_all, in_keys=[], out_keys=[], warmup=5)
+        update_qloss = CudaGraphModule(update_qloss, in_keys=[], out_keys=[], warmup=5)
 
     gradient_steps = cfg.optim.gradient_steps
     evaluation_interval = cfg.logger.eval_iter
@@ -144,7 +154,8 @@ def main(cfg: DictConfig):  # noqa: F821
 
         with timeit("update"):
             torch.compiler.cudagraph_mark_step_begin()
-            metadata = update(sampled_tensordict, update_actor).clone()
+            update_fn = update_all if update_actor else update_qloss
+            metadata = update_fn(sampled_tensordict).clone()
 
         metrics_to_log = {}
         if update_actor:
