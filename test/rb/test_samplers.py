@@ -3527,6 +3527,39 @@ class TestFindStartStopTraj:
         assert third[0].data_ptr() != first[0].data_ptr()
         assert third[1].squeeze(-1).tolist() == [9]
 
+    @pytest.mark.parametrize("output_layout", ["flat", "batch_time"])
+    def test_slice_sampler_without_replacement_strict_skips_short(self, output_layout):
+        # Trajectories 1 and 3 are shorter than slice_len: with strict_length
+        # they must never be drawn, so no batch comes back short or empty.
+        lengths = [7, 2, 9, 1, 5, 12, 4, 3]
+        episode = torch.cat(
+            [torch.full((length,), i) for i, length in enumerate(lengths)]
+        )
+        done = torch.zeros(episode.numel(), dtype=torch.bool)
+        done[torch.tensor(lengths).cumsum(0) - 1] = True
+        sampler = SliceSamplerWithoutReplacement(
+            slice_len=3,
+            end_key="done",
+            strict_length=True,
+            output_layout=output_layout,
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(episode.numel()), sampler=sampler, batch_size=6
+        )
+        rb.extend(TensorDict({"episode": episode, "done": done}, [episode.numel()]))
+        drawn = []
+        for _ in range(30):
+            sample = rb.sample()
+            assert sample.numel() == 6, "strict_length batches must be full"
+            drawn.append(sample["episode"].reshape(-1, 3)[:, 0])
+        drawn = torch.cat(drawn)
+        assert not torch.isin(
+            drawn, torch.tensor([1, 3])
+        ).any(), "short trajectory drawn"
+        long_enough = [0, 2, 4, 5, 6, 7]
+        for epoch in drawn.split(6):
+            assert sorted(epoch.tolist()) == long_enough, "epoch skipped a trajectory"
+
     def test_boundary_distance_kernel_fullgraph(self):
         start = torch.tensor([8, 3, 5])
         stop = torch.tensor([2, 4, 7])
