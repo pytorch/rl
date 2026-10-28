@@ -29,7 +29,9 @@ SKIP_TUTORIALS = {
     "export.py",  # Requires PyTorch 2.6+ for aoti_compile_and_package
 }
 
-# Tested in the LeRobot integration job, which has a compatible PyTorch version.
+# Keep this separate from SKIP_TUTORIALS so the LeRobot integration job can
+# opt in and run it with a compatible PyTorch version.
+# TODO: Re-evaluate a general way to run tutorials with different PyTorch versions.
 LEROBOT_TUTORIAL = "lerobot_export.py"
 
 # Tutorials that require GPU
