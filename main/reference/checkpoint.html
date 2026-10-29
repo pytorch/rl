@@ -2700,7 +2700,7 @@ weights-only dump cannot restart training.</p>
 <p><strong>Training setup</strong></p>
 <ul class="simple">
 <li><p><strong>Training model.</strong> The <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> (or
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>) being optimized. Save that module. The
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>) being optimized. Save that module. The
 adapter writes its <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>; you do not need a wrapper type that
 exists only for serialization.</p></li>
 <li><p><strong>Optimizer.</strong> Adam / RMSprop moments, step counts, and param-group
@@ -2815,7 +2815,7 @@ distinct snapshot.</p>
 <p><code class="docutils literal notranslate"><span class="pre">components</span></code> on <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.load" title="torchrl.checkpoint.Checkpoint.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Checkpoint.load()</span></code></a> selects which already-registered
 objects to restore. Unrequested payloads, including a large replay
 buffer, stay on disk. <code class="docutils literal notranslate"><span class="pre">map_location</span></code> is forwarded to the state-dict
-adapter, the same way it is for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>.</p>
+adapter, the same way it is for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>.</p>
 <p>To persist only the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> – still a
 <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>, not a pickle of the Python object – register that
 module alone:</p>
@@ -3025,7 +3025,7 @@ independent of the outer <a class="reference internal" href="generated/torchrl.c
 </pre></div>
 </div>
 <p>Use <code class="docutils literal notranslate"><span class="pre">payload_format=&quot;consolidated&quot;</span></code> for consolidated TensorDict storage.
-Pickle-based <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> remains available explicitly with
+Pickle-based <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> remains available explicitly with
 <code class="docutils literal notranslate"><span class="pre">payload_format=&quot;torch&quot;</span></code>. TensorDict payloads reject unsupported Python
 objects with an error that points to this opt-in rather than silently falling
 back to pickle.</p>

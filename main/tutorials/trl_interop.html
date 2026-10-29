@@ -1599,7 +1599,7 @@ no real checkpoints need to be downloaded.</p>
 <section id="part-1-torchrl-trl-torchrlbufferdataset">
 <h1>Part 1 – TorchRL -&gt; TRL: TorchRLBufferDataset<a class="headerlink" href="#part-1-torchrl-trl-torchrlbufferdataset" title="Link to this heading">#</a></h1>
 <p>We start with the <code class="docutils literal notranslate"><span class="pre">TorchRL</span> <span class="pre">-&gt;</span> <span class="pre">TRL</span></code> direction.  The goal is to produce a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.IterableDataset</span></code></a>. Current <code class="docutils literal notranslate"><span class="pre">trl</span></code> trainers require
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.IterableDataset</span></code></a>. Current <code class="docutils literal notranslate"><span class="pre">trl</span></code> trainers require
 a Hugging Face <code class="docutils literal notranslate"><span class="pre">datasets.IterableDataset</span></code>; the adapter exposes that form
 through <code class="docutils literal notranslate"><span class="pre">as_hf_dataset()</span></code> when the optional dependency is installed.</p>
 <section id="step-1-build-and-populate-a-replay-buffer">

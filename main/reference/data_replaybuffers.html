@@ -2681,7 +2681,7 @@ discovery and buffer lifecycle.</p>
 <td><p>A replay buffer combining an immutable offline dataset with a growing online buffer.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.ReplayBufferDataset.html#torchrl.data.ReplayBufferDataset" title="torchrl.data.ReplayBufferDataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReplayBufferDataset</span></code></a>(replay_buffer, *[, ...])</p></td>
-<td><p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.IterableDataset</span></code></a> streaming batches from a replay buffer.</p></td>
+<td><p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.IterableDataset</span></code></a> streaming batches from a replay buffer.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.ReplayBufferEnsemble"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>(*args[, ...])</p></td>
 <td><p>An ensemble of replay buffers.</p></td>
@@ -3104,17 +3104,17 @@ are rejected explicitly.</p>
 <section id="reading-buffers-with-torch-utils-data">
 <h3>Reading buffers with <code class="docutils literal notranslate"><span class="pre">torch.utils.data</span></code><a class="headerlink" href="#reading-buffers-with-torch-utils-data" title="Link to this heading">#</a></h3>
 <p><a class="reference internal" href="generated/torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage.as_dataset" title="torchrl.data.replay_buffers.Storage.as_dataset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">as_dataset()</span></code></a> wraps a storage in a
-map-style <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Dataset" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.Dataset</span></code></a> and
+map-style <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Dataset" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.Dataset</span></code></a> and
 <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.as_dataset" title="torchrl.data.ReplayBuffer.as_dataset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">as_dataset()</span></code></a> wraps a buffer in a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.IterableDataset</span></code></a>, so a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.DataLoader</span></code></a> can own the parallelism of the sample
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.IterableDataset</span></code></a>, so a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.DataLoader</span></code></a> can own the parallelism of the sample
 path. Pass <a class="reference internal" href="generated/torchrl.data.tensordict_collate.html#torchrl.data.tensordict_collate" title="torchrl.data.tensordict_collate"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict_collate()</span></code></a> as <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code>: the
 default torch collation does not handle tensordicts.</p>
 <p>A storage dataset reads like any map-style dataset. Torch samplers pick the
 indices and every index batch is fetched with a single storage read. The
 collate function also stacks lists of samples, lazily when their shapes
 differ, so storage datasets compose with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.ConcatDataset" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.ConcatDataset</span></code></a> and per-item storages such as
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.ConcatDataset" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.ConcatDataset</span></code></a> and per-item storages such as
 <a class="reference internal" href="generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage" title="torchrl.data.replay_buffers.ListStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">ListStorage</span></code></a>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
@@ -3175,7 +3175,7 @@ are scanned once per worker rather than once per batch:</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.tensordict_collate.html#torchrl.data.tensordict_collate" title="torchrl.data.tensordict_collate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensordict_collate</span></code></a>(batch)</p></td>
-<td><p>Collate function for a <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.DataLoader</span></code></a> reading TorchRL storages or buffers.</p></td>
+<td><p>Collate function for a <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.DataLoader</span></code></a> reading TorchRL storages or buffers.</p></td>
 </tr>
 </tbody>
 </table>
