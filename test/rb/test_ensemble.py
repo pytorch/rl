@@ -1104,6 +1104,47 @@ class TestCheckpointers:
             assert_allclose_td(rb_test[:], rb[:])
             assert rb.writer._cursor == rb_test._writer._cursor
 
+    @staticmethod
+    def _ted_batch(nsteps, done):
+        obs = torch.arange(3 * nsteps, dtype=torch.float32).view(3, nsteps)
+        done = torch.full((3, nsteps, 1), done)
+        return TensorDict(
+            {
+                "observation": obs,
+                "action": torch.zeros(3, nsteps),
+                "done": torch.zeros_like(done),
+                "terminated": torch.zeros_like(done),
+                "next": {
+                    "observation": obs + 1,
+                    "done": done,
+                    "terminated": done,
+                    "reward": torch.ones(3, nsteps, 1),
+                },
+            },
+            batch_size=[3, nsteps],
+        )
+
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    @pytest.mark.parametrize(
+        "checkpointer",
+        [FlatStorageCheckpointer, NestedStorageCheckpointer, H5StorageCheckpointer],
+    )
+    def test_partial_storage_ignores_unwritten_rows(
+        self, storage_type, checkpointer, tmpdir
+    ):
+        """Done flags left in rows past the cursor do not end trajectories in a checkpoint."""
+        rb = ReplayBuffer(storage=storage_type(102, ndim=2))
+        rb_test = ReplayBuffer(storage=storage_type(102, ndim=2))
+        rb.storage.checkpointer = checkpointer()
+        rb_test.storage.checkpointer = checkpointer()
+        rb.extend(self._ted_batch(34, done=True))
+        rb.empty()
+        rb.extend(self._ted_batch(7, done=False))
+        rb.dumps(tmpdir)
+        rb_test.loads(tmpdir)
+        assert len(rb_test) == 21
+        assert_allclose_td(rb_test[:], rb[:])
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
