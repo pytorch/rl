@@ -955,6 +955,8 @@ class TensorSpec(metaclass=abc.ABCMeta):
     def expand(self, *shape: int) -> T:
         """Returns a new Spec with the expanded shape.
 
+        If the spec has an outcome mask, it is broadcast to the expanded shape.
+
         Args:
             *shape (tuple or iterable of int): the new shape of the Spec.
                 Must be broadcastable with the current shape:
@@ -4175,7 +4177,11 @@ class Categorical(TensorSpec):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+            n=self.space.n,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=self.mask,
         )
 
     def _reshape(self, shape):
@@ -4985,17 +4991,12 @@ class MultiCategorical(Categorical):
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
-        mask = (
-            self.mask.expand(*shape, self.mask.shape[-1])
-            if self.mask is not None
-            else None
-        )
         return self.__class__(
             nvec=self.nvec,
             shape=shape,
             device=self.device,
             dtype=self.dtype,
-            mask=mask,
+            mask=self.mask,
         )
 
     def _reshape(self, shape):

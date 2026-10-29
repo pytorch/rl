@@ -1760,6 +1760,18 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
+    @pytest.mark.parametrize("batch_shape", [(2, 4), (3, 2, 4)])
+    def test_discrete_masked(self, batch_shape):
+        mask = torch.tensor([[False, True, False], [False, False, True]]).unsqueeze(1)
+        spec = Categorical(3, shape=(2, 1), mask=mask)
+
+        expanded = spec.expand(batch_shape)
+        torch.testing.assert_close(expanded.mask, mask.expand(*batch_shape, 3))
+        sample = expanded.rand((5,))
+        expected = torch.tensor([[1], [2]]).expand(5, *batch_shape)
+        torch.testing.assert_close(sample, expected)
+        assert spec.is_in(sample)
+
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_multidiscrete(self, shape1, shape2):
@@ -1787,6 +1799,20 @@ class TestExpand:
         assert (spec2.zero() == spec.zero()).all()
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
+
+    @pytest.mark.parametrize("batch_shape", [(2, 4), (3, 2, 4)])
+    def test_multidiscrete_masked(self, batch_shape):
+        mask = torch.tensor(
+            [[False, True, False, True, False], [False, False, True, False, True]]
+        ).unsqueeze(1)
+        spec = MultiCategorical([3, 2], shape=(2, 1, 2), mask=mask)
+
+        expanded = spec.expand(*batch_shape, 2)
+        torch.testing.assert_close(expanded.mask, mask.expand(*batch_shape, 5))
+        sample = expanded.rand((5,))
+        expected = torch.tensor([[[1, 0]], [[2, 1]]]).expand(5, *batch_shape, 2)
+        torch.testing.assert_close(sample, expected)
+        assert spec.is_in(sample)
 
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
