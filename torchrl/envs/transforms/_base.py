@@ -108,6 +108,19 @@ def _key_is_under(key: NestedKey, prefix: NestedKey) -> bool:
     return key[: len(prefix)] == prefix
 
 
+def _stateful_keys(input_spec: Composite) -> set[tuple[str, ...]]:
+    """Returns the keys of the state spec of ``input_spec`` as tuples.
+
+    Transforms do not advertise the state they keep. By convention they register it
+    in ``full_state_spec`` (see :class:`~torchrl.envs.RewardSum`), so the entries a
+    transform adds to it are taken as the state it reads back in ``_step``.
+    """
+    state_spec = input_spec.get("full_state_spec", None)
+    if state_spec is None:
+        return set()
+    return {_unravel_key_to_tuple(key) for key in state_spec.keys(True, True)}
+
+
 def _apply_to_composite(function):
     @wraps(function)
     def new_fun(self, observation_spec):
@@ -1863,7 +1876,7 @@ class Compose(Transform):
         # To know what the action spec is to the 'outside world' (ie, to the policy) we must take
         # the action spec from the env, map it using t0 then t1 (going from in to out).
         for i, t in enumerate(self.transforms):
-            state_keys = self._state_keys(input_spec)
+            stateful_keys = _stateful_keys(input_spec)
             input_spec = t.transform_input_spec(input_spec)
             if not isinstance(input_spec, Composite):
                 raise TypeError(
@@ -1873,7 +1886,7 @@ class Compose(Transform):
             # ``_step``, which runs after the inverse of the *whole* chain: if
             # the inverse of any other transform, before or after ``t``,
             # removes it, ``t`` would silently read it as missing at every step.
-            for key in self._state_keys(input_spec) - state_keys:
+            for key in _stateful_keys(input_spec) - stateful_keys:
                 for j, other in enumerate(self.transforms):
                     if j != i and other._inv_drops_key(key):
                         warnings.warn(
@@ -1887,13 +1900,6 @@ class Compose(Transform):
                             stacklevel=2,
                         )
         return input_spec
-
-    @staticmethod
-    def _state_keys(input_spec: Composite) -> set[tuple[str, ...]]:
-        state_spec = input_spec.get("full_state_spec", None)
-        if state_spec is None:
-            return set()
-        return {_unravel_key_to_tuple(key) for key in state_spec.keys(True, True)}
 
     def _inv_drops_key(self, key: NestedKey) -> bool:
         return any(t._inv_drops_key(key) for t in self.transforms)
