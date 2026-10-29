@@ -224,7 +224,7 @@ def mock_tokenizer():
 
 
 @pytest.fixture(autouse=True)
-def prevent_leaking_rng():
+def prevent_leaking_rng(request: pytest.FixtureRequest):
     # Prevent each test from leaking the rng to all other test when they call
     # torch.manual_seed() or random.seed() or np.random.seed().
     # Note: the numpy rngs should never leak anyway, as we never use
@@ -242,4 +242,14 @@ def prevent_leaking_rng():
     random.setstate(builtin_rng_state)
     np.random.set_state(nunmpy_rng_state)
     if torch.cuda.is_available():
+        try:
+            torch.empty(1, device="cuda").uniform_()
+        except RuntimeError as err:
+            if "graph capture" not in str(err):
+                raise
+            pytest.exit(
+                f"{request.node.nodeid} left the CUDA generator in graph-capture "
+                "state; every later CUDA RNG call in this process would fail.",
+                returncode=1,
+            )
         torch.cuda.set_rng_state(cuda_rng_state)

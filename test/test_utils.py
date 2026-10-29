@@ -9,10 +9,12 @@ import asyncio
 import os
 import subprocess
 import sys
+import textwrap
 import threading
 import warnings
 from copy import copy
 from importlib import import_module
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -700,6 +702,63 @@ def test_rng_decorator(device):
         s1b = torch.randn(3)
         torch.testing.assert_close(s0a, s1a)
         torch.testing.assert_close(s0b, s1b)
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_conftest_stops_after_failed_cuda_graph_capture(tmp_path):
+    """A failed capture ends the session instead of failing every later test.
+
+    The session runs in a subprocess because a failed capture leaves the CUDA
+    generator unusable for the rest of the process.
+    """
+    (tmp_path / "conftest.py").write_text(
+        Path(__file__).with_name("conftest.py").read_text()
+    )
+    (tmp_path / "test_capture.py").write_text(
+        textwrap.dedent(
+            """
+            import pytest
+            import torch
+
+
+            def test_failed_capture():
+                graph = torch.cuda.CUDAGraph()
+                with pytest.raises(RuntimeError):
+                    with torch.cuda.graph(graph):
+                        torch.cuda.synchronize()
+
+
+            def test_cuda_rng():
+                torch.rand(1, device="cuda")
+            """
+        )
+    )
+    env = {key: value for key, value in os.environ.items() if key != "PYTEST_ADDOPTS"}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-v",
+            "-p",
+            "no:cacheprovider",
+            "test_capture.py",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    output = proc.stdout + proc.stderr
+    assert proc.returncode != 0, output
+    assert (
+        "test_capture.py::test_failed_capture left the CUDA generator in "
+        "graph-capture state" in output
+    ), output
+    assert "test_capture.py::test_cuda_rng" not in output, output
 
 
 def add_one(x):
