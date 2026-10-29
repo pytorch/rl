@@ -83,13 +83,12 @@ class NetworkConfig(ConfigBase):
 class LowLevelControllerConfig(NetworkConfig):
     """Hydra configuration for :class:`~torchrl.modules.LowLevelController`.
 
-    Pass the pretrained policy to Hydra's instantiate and declare the unbatched
-    Composite decision spec with a Hydra target. Adapter and nested keys can
-    also be configured in YAML.
+    Pass the pretrained policy to Hydra's instantiate. Adapter and nested keys
+    can also be configured in YAML. The high-level decision spec belongs to
+    :class:`~torchrl.trainers.algorithms.configs.ClosedLoopMultiActionConfig`.
     """
 
     policy: Any = MISSING
-    decision_spec: Any = MISSING
     adapter: Any = None
     group_key: Any = None
     state_key: Any = "controller"
@@ -105,7 +104,6 @@ def _make_low_level_controller(**kwargs: Any) -> LowLevelController:
     """Convert Hydra lists to nested TensorDict keys before construction."""
     return LowLevelController(
         policy=kwargs.pop("policy"),
-        decision_spec=kwargs.pop("decision_spec"),
         adapter=kwargs.pop("adapter", None),
         group_key=_normalize_hydra_key(kwargs.pop("group_key", None)),
         state_key=_normalize_hydra_key(kwargs.pop("state_key", "controller")),
