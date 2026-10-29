@@ -495,7 +495,7 @@ class TestStack(TransformBase):
         # Stack.inv removes the stacked entry before the transforms' _step is
         # called, so a RewardSum storing its state under it would be silently
         # reset at every step. The wiring is rejected instead.
-        with pytest.raises(ValueError, match="stacked_agents"):
+        with pytest.warns(FutureWarning, match="stacked_agents"):
             _stack_agents_env("after").input_spec
         # A Stack that is not inverted never removes anything
         env = _stack_agents_env("after", in_key_inv=False)

@@ -309,7 +309,15 @@ class TestExcludeTransform(TransformBase):
             ContinuousActionVecMockEnv(),
             Compose(ExcludeTransform("episode_reward", inverse=True), RewardSum()),
         )
-        with pytest.raises(ValueError, match="episode_reward"):
+        with pytest.warns(FutureWarning, match="episode_reward"):
+            env.input_spec
+        # _step runs after the inverse of the whole chain: placing the exclusion
+        # after the RewardSum hides the state just the same
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(RewardSum(), ExcludeTransform("episode_reward", inverse=True)),
+        )
+        with pytest.warns(FutureWarning, match="episode_reward"):
             env.input_spec
         # Excluding another key, or excluding on the way out, is fine
         env = TransformedEnv(
@@ -907,7 +915,7 @@ class TestRenameTransform(TransformBase):
         if create_copy:
             assert "ep" in env.state_spec.keys(True, True)
         else:
-            with pytest.raises(ValueError, match="ep"):
+            with pytest.warns(FutureWarning, match="ep"):
                 env.input_spec
 
     def test_rename_action(self, create_copy):

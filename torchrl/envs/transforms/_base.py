@@ -626,22 +626,20 @@ class Transform(nn.Module):
         return tensordict
 
     def _inv_drops_key(self, key: NestedKey) -> bool:
-        """Declare whether :meth:`_inv_call` removes ``key`` from the data seen by later transforms.
-
-        This declaration lets a transform advertise a restriction on how it can be composed
+        """Declare whether :meth:`_inv_call` removes ``key`` from the data handed to the ``_step`` of the transforms.
 
         :meth:`TransformedEnv._step` inverts the input data through the whole
         chain and hands the result to the :meth:`_step` of every transform. A
         transform whose inverse removes, or renames away, an entry therefore
-        hides it from the transforms placed after it. This is harmless for
+        hides it from the ``_step`` of every transform of the chain,
+        wherever they sit relative to it. This is harmless for
         stateless transforms, but a stateful one (e.g.
         :class:`~torchrl.envs.RewardSum`) that registers its state under such an
         entry would read it as missing at every step.
 
         Override this method to return ``True`` for the keys the inverse pass
-        removes: Such that users (such as :class:`Compose`) can refuse to build a 
-        chain where a transform registering a new state entry under one of these 
-        keys comes after this transform.
+        removes, so that :class:`Compose` can refuse to build a chain where another
+        transform registers a new state entry under one of these keys.
 
         Args:
             key (NestedKey): an entry of the input (state) spec of the
@@ -1871,18 +1869,22 @@ class Compose(Transform):
                 raise TypeError(
                     f"Expected Compose but got {type(input_spec)} with transform {t}"
                 )
-            # A state entry registered by ``t`` is read from the data at time t
-            # in ``_step``. If the inverse of a previous transform removed it,
-            # ``t`` would silently read it as missing at every step.
+            # A state entry registered by ``t`` is read from the data in
+            # ``_step``, which runs after the inverse of the *whole* chain: if
+            # the inverse of any other transform, before or after ``t``,
+            # removes it, ``t`` would silently read it as missing at every step.
             for key in self._state_keys(input_spec) - state_keys:
-                for previous in self.transforms[:i]:
-                    if previous._inv_drops_key(key):
-                        raise ValueError(
+                for j, other in enumerate(self.transforms):
+                    if j != i and other._inv_drops_key(key):
+                        warnings.warn(
                             f"{t} registers the state entry {key}, which the inverse "
-                            f"pass of the preceding transform {previous} removes before "
-                            f"{t}._step reads it, so its state would be lost at every "
-                            f"step. Place {t} before {previous} in the Compose and "
-                            f"build its keys from the keys of the base environment."
+                            f"pass of {other} removes before {t}._step reads it, so "
+                            f"its state would be lost at every step. This will raise a "
+                            f"ValueError in v0.15. Build the keys of {t} from the keys of "
+                            f"the base environment and make sure {other} does not drop "
+                            f"them.",
+                            category=FutureWarning,
+                            stacklevel=2,
                         )
         return input_spec
 

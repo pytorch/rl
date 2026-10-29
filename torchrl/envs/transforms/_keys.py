@@ -48,10 +48,10 @@ class ExcludeTransform(Transform):
         inverse (bool, optional): if ``True``, the exclusion will occur during the ``inv`` call.
             Defaults to ``False``.
 
-    .. note:: With ``inverse=True`` the excluded entries are hidden from the transforms
-        placed after this one, so a stateful transform (e.g.
-        :class:`~torchrl.envs.RewardSum`) cannot keep its state under an excluded key:
-        building such a chain raises a ``ValueError``.
+    .. note:: With ``inverse=True`` the excluded entries are hidden from the ``_step`` of
+        every transform of the chain, so a stateful transform (e.g.
+        :class:`~torchrl.envs.RewardSum`) cannot keep its state under an excluded key,
+        wherever it is placed: building such a chain emits a ``FutureWarning`` and will raise a ``ValueError`` in v0.15.
 
     Examples:
         >>> import gymnasium
@@ -272,10 +272,10 @@ class RenameTransform(Transform):
             renaming immutable entries such as ``"reward"`` and ``"done"``.
 
     .. note:: With ``create_copy=False``, the inverse pass renames the ``out_keys_inv``
-        entries back to ``in_keys_inv``, so they are hidden from the transforms
-        placed after this one. A stateful transform (e.g.
+        entries back to ``in_keys_inv``, so they are hidden from the ``_step`` of
+        every transform of the chain. A stateful transform (e.g.
         :class:`~torchrl.envs.RewardSum`) cannot keep its state under such a key:
-        building such a chain raises a ``ValueError``.
+        building such a chain emits a ``FutureWarning`` and will raise a ``ValueError`` in v0.15.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
