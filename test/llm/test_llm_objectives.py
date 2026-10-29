@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import multiprocessing as mp
+import warnings
 
 import numpy as np
 import pytest
@@ -165,6 +166,23 @@ class TestMCAdvantage:
         out = adv_t.inv(_make_group_traj(0, [0.7, 0.7]))
         assert out is not None
         assert (out["advantage"] == 0).all()
+
+    def test_mc_advantage_same_length_trajectories(self):
+        # Same-length trajectories concatenate into a regular TensorDict, whose
+        # rewards must be read as a regular tensor. get(as_nested_tensor=True)
+        # warns there with tensordict 0.15 and returns a nested tensor from
+        # 0.17 on, which leaves a nested advantage in a regular TensorDict.
+        adv_t = MCAdvantage(grpo_size=2, prompt_key="group_id")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert adv_t.inv(_make_group_traj(0, [0.0, 1.0])) is None
+            out = adv_t.inv(_make_group_traj(0, [1.0, 1.0]))
+        rewards = torch.tensor([0.0, 1.0, 1.0, 1.0])
+        expected = (rewards - rewards.mean()) / rewards.std()
+        assert not out["advantage"].is_nested
+        torch.testing.assert_close(out["advantage"].squeeze(-1), expected)
+        # the group can be sliced, as a replay buffer does
+        torch.testing.assert_close(out[:2]["advantage"].squeeze(-1), expected[:2])
 
     def test_mc_advantage_string_prompt_survives_contiguous(self):
         # String prompts are stored as NonTensorData in lazy-stacked
