@@ -941,6 +941,84 @@ class TestMaskedCategorical:
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3), (2, 3, 4)])
+    @pytest.mark.parametrize("sample_shape", [(), (5,), (2, 3)])
+    @pytest.mark.parametrize("use_probs", [False, True])
+    def test_sparse_sample_batch_shapes(
+        self, device, batch_shape, sample_shape, use_probs
+    ):
+        torch.manual_seed(0)
+        logits = torch.randn(*batch_shape, 5, device=device)
+        indices = torch.tensor([3, 0, 2], device=device).expand(*batch_shape, 3)
+        params = {"probs": logits.softmax(-1)} if use_probs else {"logits": logits}
+        dist = MaskedCategorical(**params, indices=indices)
+        compact = torch.distributions.Categorical(logits=logits.gather(-1, indices))
+
+        torch.manual_seed(1)
+        sample = dist.sample(sample_shape)
+        torch.manual_seed(1)
+        compact_sample = compact.sample(sample_shape)
+        expected = (
+            indices.expand(*sample_shape, *batch_shape, 3)
+            .gather(-1, compact_sample.unsqueeze(-1))
+            .squeeze(-1)
+        )
+        assert sample.shape == torch.Size(sample_shape + batch_shape)
+        torch.testing.assert_close(sample, expected)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3), (2, 3, 4)])
+    @pytest.mark.parametrize("sample_shape", [(), (5,), (2, 3)])
+    @pytest.mark.parametrize("use_cross_entropy", [False, True])
+    def test_sparse_log_prob_batch_shapes(
+        self, device, batch_shape, sample_shape, use_cross_entropy
+    ):
+        torch.manual_seed(0)
+        logits = torch.randn(*batch_shape, 5, device=device, requires_grad=True)
+        ref_logits = logits.detach().clone().requires_grad_()
+        # Transposing the batch axes leaves the action indices non-contiguous.
+        indices = torch.tensor([3, 0, 2], device=device).expand(*batch_shape, 3)
+        if len(batch_shape) > 1:
+            indices = indices.transpose(0, 1).contiguous().transpose(0, 1)
+        dist = MaskedCategorical(
+            logits=logits, indices=indices, use_cross_entropy=use_cross_entropy
+        )
+        compact = torch.distributions.Categorical(logits=ref_logits.gather(-1, indices))
+        compact_sample = compact.sample(sample_shape)
+        sample = (
+            indices.expand(*sample_shape, *batch_shape, 3)
+            .gather(-1, compact_sample.unsqueeze(-1))
+            .squeeze(-1)
+        )
+        # Interleaving storage exercises non-contiguous values without changing shape.
+        sample = torch.stack((sample, sample), -1)[..., 0]
+        actual = dist.log_prob(sample)
+        expected = compact.log_prob(compact_sample)
+        assert actual.shape == torch.Size(sample_shape + batch_shape)
+        torch.testing.assert_close(actual, expected)
+        actual.sum().backward()
+        expected.sum().backward()
+        torch.testing.assert_close(logits.grad, ref_logits.grad)
+        invalid = torch.ones_like(sample)
+        assert torch.isneginf(dist.log_prob(invalid)).all()
+
+    @pytest.mark.parametrize("use_cross_entropy", [False, True])
+    def test_sparse_log_prob_broadcast_and_compile(self, use_cross_entropy):
+        logits = torch.randn(2, 3, 4, 5)
+        indices = torch.tensor([3, 0, 2]).expand(2, 3, 4, 3)
+        dist = MaskedCategorical(
+            logits=logits, indices=indices, use_cross_entropy=use_cross_entropy
+        )
+        reference = torch.distributions.Categorical(logits=logits.gather(-1, indices))
+        expected = reference.log_prob(torch.tensor(1))
+        torch.testing.assert_close(dist.log_prob(torch.tensor(0)), expected)
+        value = torch.tensor(0).expand(5, 2, 3, 4)
+        expected = expected.expand(5, 2, 3, 4)
+        torch.testing.assert_close(dist.log_prob(value), expected)
+        compiled = torch.compile(dist.log_prob, backend="eager", fullgraph=True)
+        torch.testing.assert_close(compiled(value), expected)
+
     def test_sparse_mode_uses_original_indices(self) -> None:
         logits = torch.tensor([[0.0, 1.0, 10.0, 2.0], [0.0, 9.0, 1.0, 8.0]])
         indices = torch.tensor([[0, 2], [1, 3]])
