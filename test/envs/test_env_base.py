@@ -25,7 +25,7 @@ from tensordict.tensorclass import TensorClass
 from torch import nn
 
 from torchrl.data.tensor_specs import Binary, Composite, NonTensor, Unbounded
-from torchrl.envs import EnvBase, ParallelEnv, SerialEnv
+from torchrl.envs import AsyncEnvPool, EnvBase, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import StepCounter, Transform, TransformedEnv
 from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
@@ -1099,6 +1099,28 @@ class TestResetSetState:
             warnings.simplefilter("error", FutureWarning)
             out = env.reset(td)
         assert (out["observation"] == 0).all()
+
+    @pytest.mark.parametrize(
+        ("backend", "envs_per_worker"),
+        [("threading", 1), ("multiprocessing", 1), ("multiprocessing", 2)],
+    )
+    def test_set_state_batched_async(self, backend, envs_per_worker):
+        """Tests that set_state kwargs and deterministic state tensordicts are forwarded in AsyncEnvPool."""
+        env = AsyncEnvPool(
+            [_NestedStatelessEnv, _NestedStatelessEnv],
+            backend=backend,
+            envs_per_worker=envs_per_worker,
+        )
+        try:
+            td = env.reset()
+            td["nested", "x"] = torch.full((2, 1), 5.0)
+            out = env.reset(td.clone(), set_state=True)
+            assert (out["nested", "x"] == 5.0).all()
+
+            out_false = env.reset(td.clone(), set_state=False)
+            assert (out_false["nested", "x"] == 0.0).all()
+        finally:
+            env.close()
 
 
 _MOCK_ENV_KEY_CASES = [
