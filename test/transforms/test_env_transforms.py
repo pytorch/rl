@@ -569,19 +569,23 @@ class TestStepCounter(TransformBase):
                     torch.tensor([[group_reached_limit]]),
                 )
                 expected_agent_truncated = torch.tensor(
-                    [[
-                        group_name == "right" or group_reached_limit,
-                        group_reached_limit,
-                        group_reached_limit,
-                    ]],
+                    [
+                        [
+                            group_name == "right" or group_reached_limit,
+                            group_reached_limit,
+                            group_reached_limit,
+                        ]
+                    ],
                     dtype=torch.bool,
                 ).reshape(1, 3, 1)
                 expected_agent_done = torch.tensor(
-                    [[
-                        group_name == "right" or step_counter_sets_done,
-                        step_counter_sets_done,
-                        step_counter_sets_done,
-                    ]],
+                    [
+                        [
+                            group_name == "right" or step_counter_sets_done,
+                            step_counter_sets_done,
+                            step_counter_sets_done,
+                        ]
+                    ],
                     dtype=torch.bool,
                 ).reshape(1, 3, 1)
                 torch.testing.assert_close(
