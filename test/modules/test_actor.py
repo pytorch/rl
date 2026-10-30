@@ -90,6 +90,11 @@ def test_truncated_normal_actor_fullgraph(tensor_bounds):
     assert ((action >= -1) & (action <= 1)).all()
     dist = TruncatedNormal(compiled["agent", "loc"], compiled["agent", "scale"])
     torch.testing.assert_close(compiled["agent", "log_prob"], dist.log_prob(action))
+    params = tuple(policy.parameters())
+    eager_grads = torch.autograd.grad(eager["agent", "log_prob"].sum(), params)
+    compiled_grads = torch.autograd.grad(compiled["agent", "log_prob"].sum(), params)
+    for eager_grad, compiled_grad in zip(eager_grads, compiled_grads):
+        torch.testing.assert_close(compiled_grad, eager_grad)
 
 
 @pytest.mark.parametrize("device", get_default_devices())
