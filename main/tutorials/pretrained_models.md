@@ -204,10 +204,10 @@ data after sampling: TensorDict(batch_size=[32], device=cpu, fields={
  r3m_vec: f32[2048],
  terminated: bool[1],
  truncated: bool[1]})
-Directory '/tmp/tmpyfzqv1ay' deleted successfully.
+Directory '/tmp/tmphxfkur6h' deleted successfully.
 ```
 
-**Total running time of the script:** (0 minutes 9.384 seconds)
+**Total running time of the script:** (0 minutes 10.189 seconds)
 
 [`Download Jupyter notebook: pretrained_models.ipynb`](../_downloads/3ba23a9a93590a43a3046afd5406df88/pretrained_models.ipynb)
 

@@ -501,7 +501,16 @@ will change to turning on `auto_batch_size` when
 the result: the leading dimensions that all its entries share.
 Exclusive with `auto_batch_size`. Defaults to `None`, which
 gives each nested tensordict the largest batch size that its
-entries share.
+entries share, and every nested tensordict `batch_size` when
+it is passed. A file written by `to_h5()` stores the
+batch sizes and the dim names. Starting with TensorDict 0.17,
+the default will change to restoring the stored ones, as
+`from_zarr` does: with `batch_size`, the nested
+tensordicts get their stored batch sizes, and with
+`auto_batch_size=True`, the stored names are kept and the
+batch sizes are inferred from the stored ones, which an empty
+tensordict or a non-tensor entry keeps. `from_h5` warns when
+this changes its result.
 - **non_tensor_as_stack** (*bool**,**optional*) - if `True`, a non-tensor
 dataset that tensordict did not write, such as a string column
 with one string per row, reads as a
