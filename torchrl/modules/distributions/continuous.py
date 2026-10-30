@@ -219,7 +219,9 @@ class TruncatedNormal(D.Independent):
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if not (high > low).all():
+            if is_compiling():
+                torch._assert_async((high > low).all(), err_msg)
+            elif not (high > low).all():
                 raise RuntimeError(err_msg)
         elif isinstance(high, Number) and isinstance(low, Number):
             if not high > low:
@@ -300,16 +302,9 @@ class TruncatedNormal(D.Independent):
         value = torch.min(torch.stack([value, b], -1), dim=-1)[0]
         value = torch.max(torch.stack([value, a], -1), dim=-1)[0]
         lp = super().log_prob(value, **kwargs)
-        if above_or_below.any():
-            if self.event_shape:
-                above_or_below = above_or_below.flatten(-len(self.event_shape), -1).any(
-                    -1
-                )
-            lp = torch.masked_fill(
-                lp,
-                above_or_below.expand_as(lp),
-                torch.tensor(-float("inf"), device=lp.device, dtype=lp.dtype),
-            )
+        if self.event_shape:
+            above_or_below = above_or_below.flatten(-len(self.event_shape), -1).any(-1)
+        lp = lp.masked_fill(above_or_below.expand_as(lp), -float("inf"))
         return lp
 
 

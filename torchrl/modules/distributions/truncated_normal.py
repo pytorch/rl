@@ -13,6 +13,8 @@ import torch
 from torch.distributions import constraints, Distribution
 from torch.distributions.utils import broadcast_all
 
+from torchrl._utils import is_compiling
+
 CONST_SQRT_2 = math.sqrt(2)
 CONST_INV_SQRT_2PI = 1 / math.sqrt(2 * math.pi)
 CONST_INV_SQRT_2 = 1 / math.sqrt(2)
@@ -45,13 +47,10 @@ class TruncatedStandardNormal(Distribution):
         super().__init__(batch_shape, validate_args=validate_args)
         if self.a.dtype != self.b.dtype:
             raise ValueError("Truncation bounds types are different")
-        if any(
-            (self.a >= self.b)
-            .view(
-                -1,
-            )
-            .tolist()
-        ):
+        invalid_range = (self.a >= self.b).any()
+        if is_compiling():
+            torch._assert_async(~invalid_range, "Incorrect truncation range")
+        elif invalid_range:
             raise ValueError("Incorrect truncation range")
         eps = self.eps
         self._dtype_min_gt_0 = eps

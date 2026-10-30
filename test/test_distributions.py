@@ -44,6 +44,7 @@ from torchrl.modules.distributions.discrete import (
     _generate_ordinal_logits,
     LLMMaskedCategorical,
 )
+from torchrl.modules.distributions.truncated_normal import TruncatedStandardNormal
 from torchrl.modules.distributions.utils import (
     composite_entropy,
     has_analytic_kl,
@@ -580,7 +581,9 @@ class TestIndependentNormal:
 class TestTruncatedNormal:
     def test_log_prob_fullgraph(self):
         dist = TruncatedNormal(torch.zeros(3, 2), torch.ones(3, 2))
-        value = torch.tensor([[0.25, -0.5], [-1.25, 0.1], [0.4, 1.25]])
+        value = torch.tensor(
+            [[0.25, -0.5], [-1.25, 0.1], [0.4, 1.25]], requires_grad=True
+        )
         eager = dist.log_prob(value)
         compiled = torch.compile(dist.log_prob, backend="aot_eager", fullgraph=True)(
             value
@@ -594,6 +597,45 @@ class TestTruncatedNormal:
         torch.testing.assert_close(compiled, eager)
         torch.testing.assert_close(compiled[0], expected)
         assert torch.isneginf(compiled[1:]).all()
+        grad = torch.autograd.grad(compiled[0], value)[0]
+        torch.testing.assert_close(
+            grad, torch.tensor([[-0.25, 0.5], [0.0, 0.0], [0.0, 0.0]])
+        )
+
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_tensor_bounds_validation(self, compiled):
+        def log_prob(low, high):
+            return TruncatedNormal(
+                torch.zeros(2), torch.ones(2), low=low, high=high
+            ).log_prob(torch.zeros(2))
+
+        call = (
+            torch.compile(log_prob, backend="aot_eager", fullgraph=True)
+            if compiled
+            else log_prob
+        )
+        low = torch.tensor([-1.0, -1.0])
+        torch.testing.assert_close(
+            call(low, torch.ones(2)), log_prob(low, torch.ones(2))
+        )
+        with pytest.raises(RuntimeError, match="strictly greater"):
+            call(low, torch.tensor([1.0, -1.0]))
+
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_standard_normal_bounds_validation(self, compiled):
+        def mean(low, high):
+            return TruncatedStandardNormal(low, high, validate_args=False).mean
+
+        call = (
+            torch.compile(mean, backend="aot_eager", fullgraph=True)
+            if compiled
+            else mean
+        )
+        low = torch.tensor([-1.0, -1.0])
+        torch.testing.assert_close(call(low, torch.ones(2)), torch.zeros(2))
+        error = RuntimeError if compiled else ValueError
+        with pytest.raises(error, match="Incorrect truncation range"):
+            call(low, torch.tensor([1.0, -1.0]))
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("dtype", [torch.float16, torch.float32, torch.float64])

@@ -53,7 +53,8 @@ from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv, NestedCountingEnv
 
 
-def test_truncated_normal_actor_fullgraph():
+@pytest.mark.parametrize("tensor_bounds", [False, True])
+def test_truncated_normal_actor_fullgraph(tensor_bounds):
     module = TensorDictModule(
         nn.Sequential(nn.Linear(2, 4), NormalParamExtractor()),
         in_keys=[("agent", "observation")],
@@ -64,6 +65,11 @@ def test_truncated_normal_actor_fullgraph():
         in_keys={"loc": ("agent", "loc"), "scale": ("agent", "scale")},
         out_keys=[("agent", "action")],
         distribution_class=TruncatedNormal,
+        distribution_kwargs=(
+            {"low": torch.tensor([-1.0, -1.0]), "high": torch.tensor([1.0, 1.0])}
+            if tensor_bounds
+            else {"low": -1.0, "high": 1.0}
+        ),
         return_log_prob=True,
         log_prob_key=("agent", "log_prob"),
     )
