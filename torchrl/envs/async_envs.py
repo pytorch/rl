@@ -443,6 +443,14 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         specs.set(self._env_idx_key, NonTensor(example_data=0, shape=specs.shape))
         return specs
 
+    @property
+    def _supports_set_state(self) -> bool:
+        """Whether all child environments support deterministic set_state resets."""
+        child_supports = getattr(self, "_child_supports_set_state", None)
+        if not child_supports:
+            return False
+        return all(child_supports)
+
     # TODO: _make_single_env_spec (used by *_unbatched properties) takes spec[0],
     # which assumes all child envs have identical specs. Should add validation
     # that child specs match, and error if they differ.
@@ -507,6 +515,8 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
     def reset(
         self,
         tensordict: TensorDictBase | None = None,
+        *,
+        set_state: bool = False,
         **kwargs,
     ) -> TensorDictBase:
         """Resets the asynchronous environment pool.
@@ -515,6 +525,9 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
 
         Keyword Args:
+            set_state (bool, optional): if ``True``, the environment is reset
+                deterministically to the state contained in ``tensordict``.
+                Defaults to ``False``.
             **kwargs: additional keyword arguments to be forwarded to the sub-environments' reset methods.
 
         Returns:
@@ -522,6 +535,17 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         """
         if self._current_step > 0:
             raise RuntimeError("Some envs are still processing a step.")
+        if tensordict is not None:
+            self._assert_tensordict_shape(tensordict)
+
+        select_reset_only = kwargs.pop("select_reset_only", False)
+        set_state = self._resolve_set_state(set_state, select_reset_only)
+        if set_state is not None:
+            kwargs["set_state"] = set_state
+
+        if select_reset_only and tensordict is not None:
+            tensordict = tensordict.select(*self.reset_keys, strict=False)
+
         if tensordict is None:
             if self._stack_func in ("lazy_stack", "maybe_dense"):
                 tensordict = LazyStackedTensorDict(
@@ -920,16 +944,23 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     ("get_specs", [(env_index, None) for env_index in env_indices])
                 )
             self._child_specs = [None] * self.num_envs
+            self._child_supports_set_state = [False] * self.num_envs
             for worker_index, env_indices in enumerate(self._worker_env_indices):
                 for _ in env_indices:
-                    env_index, spec = _receive_batch(
+                    res = _receive_batch(
                         self.output_queue[worker_index],
                         1,
                         1,
                         None,
                         check_worker_errors=self._check_worker_errors,
                     )[0]
+                    if len(res) == 3:
+                        env_index, spec, supports_set_state = res
+                    else:
+                        env_index, spec = res
+                        supports_set_state = False
                     self._child_specs[env_index] = spec
+                    self._child_supports_set_state[env_index] = supports_set_state
             # Batch sizes are already available from the worker specs. Caching them
             # here avoids a later round trip over the input queues used for steps,
             # which may block behind in-flight env work.
@@ -1569,7 +1600,9 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                         else:
                             _, data = req
                 if msg == "get_specs":
-                    output_queue.put((i, env.specs))
+                    output_queue.put(
+                        (i, env.specs, getattr(env, "_supports_set_state", False))
+                    )
                 elif msg == "get_fake_tensordict":
                     output_queue.put((i, env.fake_tensordict()))
                 elif msg == "init_shm":
@@ -1692,6 +1725,9 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
             for env_factory, create_env_kwargs in zip(
                 self.env_makers, self.create_env_kwargs
             )
+        ]
+        self._child_supports_set_state = [
+            getattr(env, "_supports_set_state", False) for env in self.envs
         ]
         self._reset_futures = []
         self._private_reset_futures = []

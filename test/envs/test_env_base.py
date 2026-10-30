@@ -989,6 +989,10 @@ class _NestedStatelessEnv(EnvBase):
         ...
 
 
+class _NestedUnsupportedEnv(_NestedStatelessEnv):
+    _supports_set_state = False
+
+
 class _KwargOnlySetStateEnv(EnvBase):
     _supports_set_state = True
 
@@ -1112,6 +1116,7 @@ class TestResetSetState:
             envs_per_worker=envs_per_worker,
         )
         try:
+            assert env._supports_set_state is True
             td = env.reset()
             td["nested", "x"] = torch.full((2, 1), 5.0)
             out = env.reset(td.clone(), set_state=True)
@@ -1121,6 +1126,19 @@ class TestResetSetState:
             assert (out_false["nested", "x"] == 0.0).all()
         finally:
             env.close()
+
+        env_unsupported = AsyncEnvPool(
+            [_NestedUnsupportedEnv, _NestedUnsupportedEnv],
+            backend=backend,
+            envs_per_worker=envs_per_worker,
+        )
+        try:
+            assert env_unsupported._supports_set_state is False
+            td = env_unsupported.reset()
+            with pytest.raises(NotImplementedError, match="set_state"):
+                env_unsupported.reset(td.clone(), set_state=True)
+        finally:
+            env_unsupported.close()
 
 
 _MOCK_ENV_KEY_CASES = [
