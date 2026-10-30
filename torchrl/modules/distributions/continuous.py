@@ -196,6 +196,12 @@ class TruncatedNormal(D.Independent):
         tanh_loc (bool, optional): if ``True``, the above formula is used for
             the location scaling, otherwise the raw value is kept.
             Default is ``False``;
+
+    .. note::
+        Bounds validation synchronizes accelerator tensors with the host,
+        including when used with :func:`torch.compile`. This preserves
+        recoverable errors for invalid bounds but is incompatible with CUDA
+        graph capture.
     """
 
     num_params: int = 2
@@ -219,7 +225,11 @@ class TruncatedNormal(D.Independent):
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if not (high > low).all():
+            if is_compiling():
+                torch.ops.aten._assert_scalar.default(
+                    (high > low).all().item(), err_msg
+                )
+            elif not (high > low).all():
                 raise RuntimeError(err_msg)
         elif isinstance(high, Number) and isinstance(low, Number):
             if not high > low:
