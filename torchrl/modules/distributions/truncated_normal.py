@@ -26,6 +26,12 @@ class TruncatedStandardNormal(Distribution):
     """Truncated Standard Normal distribution.
 
     Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+
+    .. note::
+        Compiled bounds validation synchronizes accelerator tensors with the
+        host and is incompatible with CUDA graph capture. For the Inductor
+        backend, setting ``torch._inductor.config.scalar_asserts = False``
+        disables the compiled bounds check.
     """
 
     arg_constraints = {

@@ -201,7 +201,9 @@ class TruncatedNormal(D.Independent):
         Bounds validation synchronizes accelerator tensors with the host,
         including when used with :func:`torch.compile`. This preserves
         recoverable errors for invalid bounds but is incompatible with CUDA
-        graph capture.
+        graph capture. For the Inductor backend, setting
+        ``torch._inductor.config.scalar_asserts = False`` disables the
+        compiled bounds checks.
     """
 
     num_params: int = 2
