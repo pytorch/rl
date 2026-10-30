@@ -65,6 +65,62 @@ from torchrl.testing.mocking_classes import (
 
 
 class TestEGreedy:
+    @pytest.mark.parametrize("eps", [0.0, 1.0])
+    def test_bounded_compile_fullgraph(self, eps):
+        action_key = ("agent", "action")
+        low = torch.tensor([-2.0, 0.5, 1.0])
+        high = torch.tensor([-1.0, 1.5, 1.0])
+        spec = Bounded(low=low, high=high, shape=(3,))
+        module = EGreedyModule(spec, eps_init=eps, eps_end=eps, action_key=action_key)
+        td = TensorDict({action_key: torch.full((8, 3), 5.0)}, batch_size=[8])
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            torch.manual_seed(0)
+            eager = module(td.clone())[action_key]
+            torch.manual_seed(0)
+            compiled = torch.compile(module, backend="aot_eager", fullgraph=True)(
+                td.clone()
+            )[action_key]
+
+        torch.testing.assert_close(compiled, eager)
+        if eps == 0.0:
+            torch.testing.assert_close(compiled, td[action_key])
+        else:
+            assert ((compiled >= low) & (compiled <= high)).all()
+            torch.testing.assert_close(compiled[..., 2], torch.ones(8))
+
+    def test_bounded_compile_annealing(self):
+        action_key = ("agent", "action")
+        spec = Bounded(-1.0, 1.0, shape=(2,))
+        module = EGreedyModule(
+            spec,
+            eps_init=1.0,
+            eps_end=0.0,
+            annealing_num_steps=2,
+            action_key=action_key,
+        )
+        compiled_module = torch.compile(module, backend="aot_eager", fullgraph=True)
+        td = TensorDict({action_key: torch.full((64, 2), 5.0)}, batch_size=[64])
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            for eps in (1.0, 0.5, 0.0):
+                torch.manual_seed(0)
+                eager = module(td.clone())[action_key]
+                torch.manual_seed(0)
+                action = compiled_module(td.clone())[action_key]
+                torch.testing.assert_close(action, eager)
+
+                explored = (action != td[action_key]).any(dim=-1)
+                if eps == 1.0:
+                    assert explored.all()
+                elif eps == 0.5:
+                    assert explored.any() and (~explored).any()
+                else:
+                    assert not explored.any()
+                assert ((action[explored] >= -1.0) & (action[explored] <= 1.0)).all()
+                torch.testing.assert_close(action[~explored], td[action_key][~explored])
+                module.step()
+
     @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1])
     @pytest.mark.parametrize("module", [True, False])
     @set_exploration_type(InteractionType.RANDOM)

@@ -2559,10 +2559,8 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
                 * (b - a)
                 + a
             )
-            if (out > b).any():
-                out[out > b] = b.expand_as(out)[out > b]
-            if (out < a).any():
-                out[out < a] = a.expand_as(out)[out < a]
+            out = torch.where(out > b, b, out)
+            out = torch.where(out < a, a, out)
             return out
         else:
             if self.space.high.dtype == torch.bool:
