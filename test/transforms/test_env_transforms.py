@@ -501,9 +501,27 @@ class TestStepCounter(TransformBase):
             : max_steps - 1
         ].any(), "Root done should be False before max_steps"
 
-    @pytest.mark.parametrize("truncating_group", ["left", "right"])
-    @pytest.mark.parametrize("update_done", [False, True])
-    def test_stepcounter_independent_nested_groups(self, truncating_group, update_done):
+    @pytest.mark.parametrize(
+        "group_prefix",
+        [(), ("team",)],
+        ids=["root_siblings", "shared_team_prefix"],
+    )
+    @pytest.mark.parametrize(
+        "target_group_name",
+        ["left", "right"],
+        ids=["left_reaches_limit", "right_reaches_limit"],
+    )
+    @pytest.mark.parametrize(
+        "update_done",
+        [False, True],
+        ids=["leave_done_unchanged", "update_done"],
+    )
+    def test_stepcounter_independent_nested_groups(
+        self, group_prefix, target_group_name, update_done
+    ):
+        right_group = (*group_prefix, "right")
+        target_group = (*group_prefix, target_group_name)
+
         class GroupedEnv(EnvBase):
             def __init__(self):
                 super().__init__()
@@ -518,15 +536,20 @@ class TestStepCounter(TransformBase):
                 )
                 group = flags.clone()
                 group["agents"] = flags.expand(3)
-                self.done_spec = Composite(left=group.clone(), right=group.clone())
+                groups = {"left": group.clone(), "right": group.clone()}
+                if group_prefix:
+                    self.done_spec = Composite(team=Composite(**groups))
+                else:
+                    self.done_spec = Composite(**groups)
+                self.right_group = right_group
 
             def _reset(self, tensordict=None, **kwargs):
                 return self.observation_spec.zero().update(self.full_done_spec.zero())
 
             def _step(self, tensordict):
                 result = self._reset().update(self.full_reward_spec.zero())
-                result["right", "agents", "truncated"][0] = True
-                result["right", "agents", "done"][0] = True
+                result[(*self.right_group, "agents", "truncated")][0] = True
+                result[(*self.right_group, "agents", "done")][0] = True
                 return result
 
             def _set_seed(self, seed):
@@ -535,23 +558,39 @@ class TestStepCounter(TransformBase):
         env = TransformedEnv(GroupedEnv(), StepCounter(3, update_done=update_done))
         try:
             td = env.reset()
-            td[truncating_group, "step_count"].fill_(2)
+            td[(*target_group, "step_count")].fill_(2)
             rollout = env.rollout(1, tensordict=td, auto_reset=False)
-            for group in ("left", "right"):
-                truncated = group == truncating_group
+            for group_name in ("left", "right"):
+                group = (*group_prefix, group_name)
+                group_reached_limit = group == target_group
+                step_counter_sets_done = group_reached_limit and update_done
                 torch.testing.assert_close(
-                    rollout["next", group, "truncated"], torch.tensor([[truncated]])
+                    rollout.get(("next", *group, "truncated")),
+                    torch.tensor([[group_reached_limit]]),
                 )
-                agent_done = torch.tensor([group == "right", False, False]).reshape(
-                    1, 3, 1
+                expected_agent_truncated = torch.tensor(
+                    [[
+                        group_name == "right" or group_reached_limit,
+                        group_reached_limit,
+                        group_reached_limit,
+                    ]],
+                    dtype=torch.bool,
+                ).reshape(1, 3, 1)
+                expected_agent_done = torch.tensor(
+                    [[
+                        group_name == "right" or step_counter_sets_done,
+                        step_counter_sets_done,
+                        step_counter_sets_done,
+                    ]],
+                    dtype=torch.bool,
+                ).reshape(1, 3, 1)
+                torch.testing.assert_close(
+                    rollout.get(("next", *group, "agents", "truncated")),
+                    expected_agent_truncated,
                 )
                 torch.testing.assert_close(
-                    rollout["next", group, "agents", "truncated"],
-                    agent_done | truncated,
-                )
-                torch.testing.assert_close(
-                    rollout["next", group, "agents", "done"],
-                    agent_done | (truncated and update_done),
+                    rollout.get(("next", *group, "agents", "done")),
+                    expected_agent_done,
                 )
         finally:
             env.close()

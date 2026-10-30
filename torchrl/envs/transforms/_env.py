@@ -862,8 +862,8 @@ class StepCounter(Transform):
     .. note:: To ensure compatibility with environments that have multiple
         done_key(s), this transform will write a step_count entry for
         every done entry within the tensordict.
-        Truncation is propagated to nested done entries only from their own
-        parent group, not from independent sibling groups.
+        Truncation is propagated to nested done entries from their own parent
+        group.
 
     Examples:
         >>> import gymnasium
