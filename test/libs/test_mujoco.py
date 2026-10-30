@@ -385,6 +385,7 @@ class TestMujoco:
         for name, fixture in (
             ("unnamed", {}),
             ("reordered", {"joint_names": swapped, "actuated_joints": robot_joints}),
+            ("actuators", {"joint_names": robot_joints, "actuated_joints": swapped}),
         ):
             (tmp_path / name).mkdir()
             with pytest.raises(ValueError, match="robot's joint order"):
