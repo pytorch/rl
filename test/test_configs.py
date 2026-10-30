@@ -3926,7 +3926,8 @@ trainer:
 )
 class TestHydraParsing:
     @pytest.fixture(autouse=True, scope="module")
-    def init_hydra(self):
+    @classmethod
+    def init_hydra(cls):
         from hydra.core.global_hydra import GlobalHydra
 
         GlobalHydra.instance().clear()
