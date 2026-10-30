@@ -9,6 +9,7 @@ root_dir="$(pwd)"
 trial_dir="$(mktemp -d "${RUNNER_TEMP}/lerobot-gallery-XXXXXX")"
 trial_repo="${trial_dir}/repo"
 trial_python="${trial_dir}/env/bin/python"
+gallery_source="${trial_dir}/gallery-source"
 mkdir -p "$trial_repo"
 tar -C "$root_dir" --exclude='./.git' --exclude='./.docs_mujoco_menagerie' \
     --exclude='./docs/source/tutorials' --exclude='./docs/_local_build' \
@@ -33,19 +34,49 @@ CONSTRAINTS
 "$trial_python" -m pip install setuptools wheel 'setuptools_scm>=8,<10' 'packaging>=24.2,<26' ninja 'pybind11[global]' cmake
 (
     cd "$trial_repo"
-    "$trial_python" -m pip install --no-build-isolation -c "${trial_dir}/constraints.txt" -r docs/requirements.txt "sphinx==${sphinx_version}" "sphinx-gallery==${gallery_version}" -e '.[lerobot]'
+    "$trial_python" -m pip install --no-build-isolation -c "${trial_dir}/constraints.txt" \
+        "sphinx==${sphinx_version}" "sphinx-gallery==${gallery_version}" \
+        matplotlib ipython 'mujoco>=3.8.1,<3.9.0' -e '.[lerobot]'
     "$trial_python" -m pip check
     "$trial_python" -c 'import torch, torchvision; assert torch.__version__ == "2.11.0+cpu", torch.__version__; assert torchvision.__version__ == "0.26.0+cpu", torchvision.__version__; assert torch.version.cuda is None'
-    cd docs
-    # A dummy build still runs Sphinx Gallery, but avoids writing a second HTML site.
-    PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_TUTORIALS_FAST=1 "$trial_python" -m sphinx -b dummy -j 4 \
-        -D 'sphinx_gallery_conf.filename_pattern=lerobot_export\.py$' \
-        ./source "${trial_dir}/dummy-build"
+    # Build only this gallery page, avoiding the unrelated docs extensions and
+    # autosummary work. Keep these paths and capture settings aligned with conf.py
+    # so the generated Sphinx Gallery labels and output match the main build.
+    mkdir -p "${gallery_source}/reference/generated/tutorials"
+    cp tutorials/sphinx-tutorials/lerobot_export.py "${gallery_source}/reference/generated/tutorials/"
+    cat > "${gallery_source}/reference/generated/tutorials/GALLERY_HEADER.rst" <<'GALLERY'
+Tutorials
+=========
+GALLERY
+    cat > "${gallery_source}/index.rst" <<'INDEX'
+Tutorials
+=========
+
+.. toctree::
+
+   tutorials/index
+INDEX
+    cat > "${gallery_source}/conf.py" <<'CONF'
+project = "torchrl"
+extensions = ["sphinx_gallery.gen_gallery"]
+sphinx_gallery_conf = {
+    "examples_dirs": "reference/generated/tutorials/",
+    "gallery_dirs": "tutorials",
+    "doc_module": ("torchrl",),
+    "reference_url": {"torchrl": None},
+    "filename_pattern": "lerobot_export\\.py$",
+    "abort_on_example_error": True,
+    "capture_repr": ("_repr_html_", "__repr__"),
+}
+CONF
+    PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_TUTORIALS_FAST=1 "$trial_python" -m sphinx -b dummy \
+        "$gallery_source" "${trial_dir}/dummy-build"
+
 )
 
 # Copy the gallery page, checksum, notebook, and matching images into the main
 # checkout. Sphinx Gallery will reuse the page during the nightly docs pass.
-python - "$trial_repo/docs/source/tutorials" "$root_dir/docs/source/tutorials" <<'PY'
+python - "$gallery_source/tutorials" "$root_dir/docs/source/tutorials" <<'PY'
 from pathlib import Path
 from shutil import copy2
 import sys
