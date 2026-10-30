@@ -48,6 +48,7 @@ class TruncatedStandardNormal(Distribution):
         if self.a.dtype != self.b.dtype:
             raise ValueError("Truncation bounds types are different")
         if is_compiling():
+            # A host-side check keeps invalid bounds recoverable on CUDA.
             torch.ops.aten._assert_scalar.default(
                 (~(self.a >= self.b)).all().item(), "Incorrect truncation range"
             )
