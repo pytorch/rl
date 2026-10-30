@@ -321,7 +321,7 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
 
         if memmap_path.exists():
             # Load the memmapped data
-            stacked_data = TensorDict.load_memmap(memmap_path)
+            stacked_data = TensorDict.load_memmap(memmap_path, allow_pickle=True)
             compressed_data = stacked_data.tolist()
             if len(compressed_data) != len(data_indices):
                 raise ValueError(
@@ -382,7 +382,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                 and _storage.saved_path
                 and Path(_storage.saved_path).absolute() == Path(path).absolute()
             ):
-                _storage.memmap_refresh_()
+                _storage.memmap_refresh_(allow_pickle=True)
             else:
                 # try to load the path and overwrite.
                 _storage.memmap(
@@ -448,7 +448,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                         "Cannot fill a non-initialized pytree-based TensorStorage."
                     )
         else:
-            _storage = TensorDict.load_memmap(path)
+            _storage = TensorDict.load_memmap(path, allow_pickle=True)
             if storage.initialized:
                 dest = storage._storage
             else:
@@ -464,7 +464,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                     and storage.scratch_dir
                     and Path(storage.scratch_dir).absolute() == Path(path).absolute()
                 ):
-                    storage._storage = TensorDict.load_memmap(path)
+                    storage._storage = TensorDict.load_memmap(path, allow_pickle=True)
                     storage.initialized = True
                 else:
                     # this should not be reached if is_pytree=True
@@ -477,7 +477,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                 == Path(path).absolute()
             ):
                 # If the storage is already where it should be, we don't need to load anything.
-                storage._storage.memmap_refresh_()
+                storage._storage.memmap_refresh_(allow_pickle=True)
 
             else:
                 storage._storage.copy_(_storage)

@@ -36,6 +36,7 @@ from tensordict import (
     is_tensor_collection,
     is_tensorclass,
     LazyStackedTensorDict,
+    NonTensorData,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -627,6 +628,34 @@ class TestStorages:
                 assert_allclose_td(storage[:], storage_recover[:])
         if data == "tc":
             assert storage._storage.text == storage_recover._storage.text
+
+    @pytest.mark.filterwarnings(
+        "error:TensorDict.load_memmap is loading a pickled:FutureWarning"
+    )
+    @pytest.mark.parametrize("in_place", [False, True])
+    def test_storage_dumps_loads_pickled_non_tensor(self, in_place, tmp_path):
+        # With in_place, the storage lives in the checkpoint directory, so
+        # dumps and loads refresh it there instead of copying it.
+        def make_storage():
+            if in_place:
+                return LazyMemmapStorage(10, scratch_dir=tmp_path, existsok=True)
+            return LazyTensorStorage(10)
+
+        # A dict with int keys is not JSON-serializable, so tensordict pickles it.
+        data = TensorDict(
+            obs=torch.arange(3),
+            info=NonTensorData({0: "a"}, batch_size=[3]),
+            batch_size=[3],
+        )
+        storage = make_storage()
+        storage.set(range(3), data)
+        storage.dumps(tmp_path)
+        storage_recover = make_storage()
+        storage_recover.loads(tmp_path)
+        storage.loads(tmp_path)
+        for loaded in (storage_recover[:3], storage[:3]):
+            assert loaded["info"] == [{0: "a"}] * 3
+            torch.testing.assert_close(loaded["obs"], torch.arange(3))
 
     def test_add_list_of_tds(self):
         rb = ReplayBuffer(storage=LazyTensorStorage(100))
