@@ -679,6 +679,13 @@ class TestCatTensors(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for CatTensors")
 
+    def test_nested_key_tuple_is_one_key(self):
+        transform = CatTensors(in_keys=("agent", "obs"))
+        assert transform.in_keys == [("agent", "obs")]
+
+        transform = CatTensors(in_keys=["key2", "key1"])
+        assert transform.in_keys == ["key1", "key2"]
+
 
 @pytest.mark.skipif(not _has_tv, reason="no torchvision")
 class TestUnsqueezeTransform(TransformBase):

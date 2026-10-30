@@ -303,6 +303,8 @@ class RenameTransform(Transform):
     ):
         if in_keys_inv is None:
             in_keys_inv = []
+        # Default out_keys_inv is a copy of in_keys_inv, not a second rename.
+        out_keys_inv_provided = out_keys_inv is not None
         if out_keys_inv is None:
             out_keys_inv = copy(in_keys_inv)
         self.create_copy = create_copy
@@ -315,11 +317,19 @@ class RenameTransform(Transform):
             raise ValueError(
                 f"The number of in_keys_inv ({len(self.in_keys_inv)}) should match the number of out_keys_inv ({len(self.out_keys)})."
             )
-        if len(set(out_keys).intersection(in_keys)):
+        if len(set(self.out_keys).intersection(self.in_keys)):
             raise ValueError(
                 f"Cannot have matching in and out_keys because order is unclear. "
                 f"Please use separated transforms. "
-                f"Got in_keys={in_keys} and out_keys={out_keys}."
+                f"Got in_keys={self.in_keys} and out_keys={self.out_keys}."
+            )
+        if out_keys_inv_provided and len(
+            set(self.out_keys_inv).intersection(self.in_keys_inv)
+        ):
+            raise ValueError(
+                f"Cannot have matching in_keys_inv and out_keys_inv because order is unclear. "
+                f"Please use separated transforms. "
+                f"Got in_keys_inv={self.in_keys_inv} and out_keys_inv={self.out_keys_inv}."
             )
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
