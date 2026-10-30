@@ -38,6 +38,7 @@ from torchrl.modules import (
     TanhDelta,
     TanhModule,
     TanhNormal,
+    TruncatedNormal,
     ValueOperator,
 )
 from torchrl.modules.distributions.utils import safeatanh, safetanh
@@ -50,6 +51,50 @@ from torchrl.modules.vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv, NestedCountingEnv
+
+
+@pytest.mark.parametrize("tensor_bounds", [False, True])
+def test_truncated_normal_actor_fullgraph(tensor_bounds):
+    module = TensorDictModule(
+        nn.Sequential(nn.Linear(2, 4), NormalParamExtractor()),
+        in_keys=[("agent", "observation")],
+        out_keys=[("agent", "loc"), ("agent", "scale")],
+    )
+    policy = ProbabilisticActor(
+        module,
+        in_keys={"loc": ("agent", "loc"), "scale": ("agent", "scale")},
+        out_keys=[("agent", "action")],
+        distribution_class=TruncatedNormal,
+        distribution_kwargs=(
+            {"low": torch.tensor([-1.0, -1.0]), "high": torch.tensor([1.0, 1.0])}
+            if tensor_bounds
+            else {"low": -1.0, "high": 1.0}
+        ),
+        return_log_prob=True,
+        log_prob_key=("agent", "log_prob"),
+    )
+    td = TensorDict(
+        {("agent", "observation"): torch.tensor([[0.5, -0.5], [0.2, 0.3]])},
+        batch_size=[2],
+    )
+    with set_exploration_type(ExplorationType.RANDOM):
+        torch.manual_seed(0)
+        eager = policy(td.clone())
+        torch.manual_seed(0)
+        compiled = torch.compile(policy, backend="aot_eager", fullgraph=True)(
+            td.clone()
+        )
+
+    torch.testing.assert_close(compiled, eager)
+    action = compiled["agent", "action"]
+    assert ((action >= -1) & (action <= 1)).all()
+    dist = TruncatedNormal(compiled["agent", "loc"], compiled["agent", "scale"])
+    torch.testing.assert_close(compiled["agent", "log_prob"], dist.log_prob(action))
+    params = tuple(policy.parameters())
+    eager_grads = torch.autograd.grad(eager["agent", "log_prob"].sum(), params)
+    compiled_grads = torch.autograd.grad(compiled["agent", "log_prob"].sum(), params)
+    for eager_grad, compiled_grad in zip(eager_grads, compiled_grads):
+        torch.testing.assert_close(compiled_grad, eager_grad)
 
 
 @pytest.mark.parametrize("device", get_default_devices())

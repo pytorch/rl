@@ -44,6 +44,7 @@ from torchrl.modules.distributions.discrete import (
     _generate_ordinal_logits,
     LLMMaskedCategorical,
 )
+from torchrl.modules.distributions.truncated_normal import TruncatedStandardNormal
 from torchrl.modules.distributions.utils import (
     composite_entropy,
     has_analytic_kl,
@@ -578,6 +579,62 @@ class TestIndependentNormal:
 
 
 class TestTruncatedNormal:
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_tensor_bounds_validation(self, compiled):
+        def log_prob(low, high):
+            return TruncatedNormal(
+                torch.zeros(2), torch.ones(2), low=low, high=high
+            ).log_prob(torch.zeros(2))
+
+        call = (
+            torch.compile(log_prob, backend="aot_eager", fullgraph=True)
+            if compiled
+            else log_prob
+        )
+        low, high = -torch.ones(2), torch.ones(2)
+        expected = log_prob(low, high)
+        torch.testing.assert_close(call(low, high), expected)
+        with pytest.raises(RuntimeError):
+            call(low, torch.tensor([1.0, -1.0]))
+        torch.testing.assert_close(call(low, high), expected)
+
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_standard_normal_bounds_validation(self, compiled):
+        def mean(low, high):
+            return TruncatedStandardNormal(low, high, validate_args=False).mean
+
+        call = (
+            torch.compile(mean, backend="aot_eager", fullgraph=True)
+            if compiled
+            else mean
+        )
+        low, high = -torch.ones(2), torch.ones(2)
+        torch.testing.assert_close(call(low, high), torch.zeros(2))
+        with pytest.raises(RuntimeError if compiled else ValueError):
+            call(low, torch.tensor([1.0, -1.0]))
+        torch.testing.assert_close(call(low, high), torch.zeros(2))
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.parametrize("backend", ["aot_eager", "inductor"])
+    @pytest.mark.parametrize("standard", [False, True])
+    def test_compiled_invalid_bounds_cuda_recovery(self, backend, standard):
+        def evaluate(low, high):
+            if standard:
+                return TruncatedStandardNormal(low, high, validate_args=False).mean
+            loc = torch.zeros(2, device=low.device)
+            scale = torch.ones(2, device=low.device)
+            return TruncatedNormal(loc, scale, low=low, high=high).log_prob(loc)
+
+        call = torch.compile(evaluate, backend=backend, fullgraph=True)
+        low = -torch.ones(2, device="cuda")
+        high = torch.ones(2, device="cuda")
+        expected = call(low, high)
+        with pytest.raises(RuntimeError):
+            call(low, torch.tensor([1.0, -1.0], device="cuda"))
+        torch.testing.assert_close(call(low, high), expected)
+        torch.cuda.synchronize()
+
     def test_log_prob_fullgraph(self):
         dist = TruncatedNormal(torch.zeros(3, 2), torch.ones(3, 2))
         value = torch.tensor(
