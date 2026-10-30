@@ -14,7 +14,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-from _rb_common import _has_gym, _has_tv
+from _rb_common import _has_gym, _has_h5py, _has_tv
 from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
@@ -1104,9 +1104,11 @@ class TestCheckpointers:
             assert_allclose_td(rb_test[:], rb[:])
             assert rb.writer._cursor == rb_test._writer._cursor
 
+
+class TestCheckpointAfterEmpty:
     @staticmethod
-    def _ted_batch(nsteps, done):
-        obs = torch.arange(3 * nsteps, dtype=torch.float32).view(3, nsteps)
+    def _ted_batch(nsteps, done, offset=0):
+        obs = torch.arange(3 * nsteps, dtype=torch.float32).view(3, nsteps) + offset
         done = torch.full((3, nsteps, 1), done)
         return TensorDict(
             {
@@ -1124,25 +1126,37 @@ class TestCheckpointers:
             batch_size=[3, nsteps],
         )
 
+    @pytest.mark.parametrize("refill_steps", [0, 7])
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     @pytest.mark.parametrize(
         "checkpointer",
-        [FlatStorageCheckpointer, NestedStorageCheckpointer, H5StorageCheckpointer],
+        [
+            FlatStorageCheckpointer,
+            NestedStorageCheckpointer,
+            pytest.param(
+                H5StorageCheckpointer,
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py required"),
+            ),
+        ],
     )
-    def test_partial_storage_ignores_unwritten_rows(
-        self, storage_type, checkpointer, tmpdir
+    def test_checkpoint_after_empty(
+        self, storage_type, checkpointer, refill_steps, tmpdir
     ):
-        """Done flags left in rows past the cursor do not end trajectories in a checkpoint."""
+        """Rows emptied from the buffer do not reach a checkpoint, refilled or not."""
         rb = ReplayBuffer(storage=storage_type(102, ndim=2))
         rb_test = ReplayBuffer(storage=storage_type(102, ndim=2))
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
         rb.extend(self._ted_batch(34, done=True))
         rb.empty()
-        rb.extend(self._ted_batch(7, done=False))
+        if refill_steps:
+            rb.extend(self._ted_batch(refill_steps, done=False))
         rb.dumps(tmpdir)
         rb_test.loads(tmpdir)
-        assert len(rb_test) == 21
+        assert len(rb_test) == len(rb) == 3 * refill_steps
+        batch = self._ted_batch(5, done=False, offset=100)
+        rb.extend(batch)
+        rb_test.extend(batch)
         assert_allclose_td(rb_test[:], rb[:])
 
 
