@@ -143,7 +143,7 @@ class GAILLoss(LossModule):
         To see what keys are expected in the input tensordict and what keys are expected as output, check the
         class's `"in_keys"` and `"out_keys"` attributes.
         """
-        device = self.discriminator_network.device
+        device = self._default_device
         tensordict = tensordict.clone(False)
         shape = tensordict.shape
         if len(shape) > 1:
