@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 import numpy as np
 import pytest
 import torch
-from _modules_common import _has_transformers
+from _modules_common import _has_lerobot, _has_transformers
 from pyvers import implement_for
 from tensordict import NonTensorData, NonTensorStack, TensorDict
 from tensordict.nn import CompositeDistribution, InteractionType, TensorDictModule
@@ -1641,11 +1642,146 @@ class TestLeRobotPolicyWrapper:
         with pytest.raises(ValueError, match="action chunk of shape"):
             policy(_make_obs_td())
 
-    def test_from_pretrained_requires_lerobot(self):
-        with pytest.raises(ImportError, match="lerobot"):
+    def test_wrist_camera(self):
+        no_wrist = LeRobotPolicyWrapper(
+            _DummyChunkPolicy(2, 3), action_dim=3, chunk_size=2
+        )
+        assert ("observation", "wrist_image") not in no_wrist.in_keys
+        dummy = _DummyChunkPolicy(2, 3)
+        policy = LeRobotPolicyWrapper(
+            dummy, action_dim=3, chunk_size=2, wrist_camera_name="image2"
+        )
+        assert ("observation", "wrist_image") in policy.in_keys
+        td = _make_obs_td()
+        td["observation", "wrist_image"] = torch.ones(2, 3, 16, 16, dtype=torch.uint8)
+        policy(td)
+        assert set(dummy.last_batch) >= {
+            "observation.images.image",
+            "observation.images.image2",
+        }
+        assert (dummy.last_batch["observation.images.image2"] == 1).all()
+
+    def test_pre_and_postprocessor(self):
+        dummy = _DummyChunkPolicy(2, 3, value=1.0)
+
+        def preprocessor(batch):
+            return {**batch, "observation.state": batch["observation.state"] * 0}
+
+        policy = LeRobotPolicyWrapper(
+            dummy,
+            action_dim=3,
+            chunk_size=2,
+            preprocessor=preprocessor,
+            postprocessor=lambda chunk: chunk * 2 + 10,
+        )
+        out = policy(_make_obs_td())
+        assert (dummy.last_batch["observation.state"] == 0).all()
+        assert (out["vla_action", "chunk"] == 12).all()
+
+    def test_from_pretrained_requires_lerobot(self, monkeypatch):
+        monkeypatch.setattr("torchrl.modules.vla.wrappers._has_lerobot", False)
+        with pytest.raises(ImportError, match="package is required"):
             LeRobotPolicyWrapper.from_pretrained(
                 "fake/repo", action_dim=7, chunk_size=4
             )
+
+    @pytest.mark.skipif(not _has_lerobot, reason="lerobot not installed")
+    def test_from_pretrained_rejects_processors(self):
+        with pytest.raises(TypeError, match="LeRobotPolicyWrapper\\(policy"):
+            LeRobotPolicyWrapper.from_pretrained(
+                "fake/repo", action_dim=7, chunk_size=4, preprocessor=lambda b: b
+            )
+
+    @pytest.mark.skipif(not _has_lerobot, reason="lerobot not installed")
+    def test_from_pretrained_loads_policy_and_processors(self, tmp_path):
+        from lerobot.configs.types import FeatureType, PolicyFeature
+        from lerobot.policies.act.configuration_act import ACTConfig
+        from lerobot.policies.act.modeling_act import ACTPolicy
+        from lerobot.policies.factory import make_pre_post_processors
+
+        torch.manual_seed(0)
+        state_dim, action_dim, chunk_size = 5, 3, 2
+        config = ACTConfig(
+            input_features={
+                "observation.state": PolicyFeature(FeatureType.STATE, (state_dim,)),
+                "observation.images.image": PolicyFeature(
+                    FeatureType.VISUAL, (3, 16, 16)
+                ),
+            },
+            output_features={
+                "action": PolicyFeature(FeatureType.ACTION, (action_dim,))
+            },
+            chunk_size=chunk_size,
+            n_action_steps=chunk_size,
+            dim_model=16,
+            n_heads=2,
+            dim_feedforward=32,
+            n_encoder_layers=1,
+            n_decoder_layers=1,
+            use_vae=False,
+            pretrained_backbone_weights=None,
+            device="cpu",
+        )
+        stats = {
+            "observation.state": {
+                "mean": torch.full((state_dim,), 1.0),
+                "std": torch.full((state_dim,), 3.0),
+            },
+            "observation.images.image": {
+                "mean": torch.full((3, 1, 1), 0.5),
+                "std": torch.full((3, 1, 1), 0.25),
+            },
+            "action": {
+                "mean": torch.full((action_dim,), 10.0),
+                "std": torch.full((action_dim,), 2.0),
+            },
+        }
+        lerobot_policy = ACTPolicy(config)
+        preprocessor, postprocessor = make_pre_post_processors(
+            config, dataset_stats=stats
+        )
+        lerobot_policy.save_pretrained(tmp_path)
+        preprocessor.save_pretrained(tmp_path)
+        postprocessor.save_pretrained(tmp_path)
+        # Hub checkpoints are often saved with a CUDA device processor; loading
+        # must still work on a CPU-only host.
+        preprocessor_file = tmp_path / "policy_preprocessor.json"
+        saved = json.loads(preprocessor_file.read_text())
+        for step in saved["steps"]:
+            if step.get("registry_name") == "device_processor":
+                step["config"]["device"] = "cuda"
+        preprocessor_file.write_text(json.dumps(saved))
+
+        policy = LeRobotPolicyWrapper.from_pretrained(
+            str(tmp_path), action_dim=action_dim, chunk_size=chunk_size
+        )
+        td = TensorDict(
+            {
+                "observation": {
+                    "image": torch.rand(2, 3, 16, 16),
+                    "state": torch.randn(2, state_dim),
+                },
+                "language_instruction": NonTensorStack("pick", "place"),
+            },
+            batch_size=[2],
+        )
+        chunk = policy(td.clone())["vla_action", "chunk"]
+
+        batch = {
+            "observation.images.image": td["observation", "image"],
+            "observation.state": td["observation", "state"],
+            "task": ["pick", "place"],
+        }
+        with torch.no_grad():
+            expected = postprocessor(
+                lerobot_policy.predict_action_chunk(preprocessor(dict(batch)))
+            )
+            raw = lerobot_policy.predict_action_chunk(dict(batch))
+        assert chunk.shape == (2, chunk_size, action_dim)
+        torch.testing.assert_close(chunk.detach(), expected)
+        # the processors changed the result: inputs were normalized and the
+        # actions unnormalized
+        assert not torch.allclose(chunk.detach(), raw)
 
 
 if __name__ == "__main__":
