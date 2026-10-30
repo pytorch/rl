@@ -2,14 +2,18 @@
 
 set -euo pipefail
 
-# Use a separate checkout: editable TorchRL builds write their compiled extension
-# into the source tree and must not replace the nightly docs build's extension.
-root_dir="$(git rev-parse --show-toplevel)"
+# Use a separate source tree: editable TorchRL builds write their compiled
+# extension into the tree and must not replace the nightly docs extension. The
+# CI checkout can be a GitHub archive without a .git directory.
+root_dir="$(pwd)"
 trial_dir="$(mktemp -d "${RUNNER_TEMP}/lerobot-gallery-XXXXXX")"
 trial_repo="${trial_dir}/repo"
 trial_python="${trial_dir}/env/bin/python"
-git clone --quiet --shared --no-checkout "$root_dir" "$trial_repo"
-git -C "$trial_repo" checkout --quiet --detach "$(git rev-parse HEAD)"
+mkdir -p "$trial_repo"
+tar -C "$root_dir" --exclude='./.git' --exclude='./.docs_mujoco_menagerie' \
+    --exclude='./docs/source/tutorials' --exclude='./docs/_local_build' \
+    --exclude='./build' --exclude='./_tmp' --exclude='__pycache__' \
+    --exclude='torchrl/_torchrl*.so' -cf - . | tar -C "$trial_repo" -xf -
 # The docs container may use an older Python than LeRobot supports.
 python -m pip install uv
 python -m uv venv --seed --python 3.12 "${trial_dir}/env"
