@@ -203,7 +203,9 @@ class TruncatedNormal(D.Independent):
         recoverable errors for invalid bounds but is incompatible with CUDA
         graph capture. For the Inductor backend, setting
         ``torch._inductor.config.scalar_asserts = False`` disables the
-        compiled bounds checks.
+        compiled bounds checks. Scalar extraction can cause graph breaks
+        with the default :func:`torch.compile` settings; use
+        ``fullgraph=True`` to capture it.
     """
 
     num_params: int = 2
