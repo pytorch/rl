@@ -1893,7 +1893,7 @@ class Compose(Transform):
                             f"{t} registers the state entry {key}, which the inverse "
                             f"pass of {other} removes before {t}._step reads it, so "
                             f"its state would be lost at every step. This will raise a "
-                            f"ValueError in v0.15. Build the keys of {t} from the keys of "
+                            f"ValueError in v0.17. Build the keys of {t} from the keys of "
                             f"the base environment and make sure {other} does not drop "
                             f"them.",
                             category=FutureWarning,
