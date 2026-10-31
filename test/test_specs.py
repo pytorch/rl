@@ -3808,6 +3808,46 @@ def test_dynamic_dim_indexing():
     assert indexed["action"].shape == torch.Size([-1, 2])
 
 
+@pytest.mark.parametrize("spec_class", [OneHot, MultiOneHot])
+@pytest.mark.parametrize(
+    "idx",
+    [
+        1,
+        slice(1, None),
+        (slice(None), 2),
+        (..., 2),
+        (1, ...),
+        (None, 1),
+        (..., None),
+        torch.tensor([2, 0]),
+    ],
+)
+def test_indexing_preserves_mask(spec_class, idx):
+    # every element of the (3, 4) batch allows a single outcome per group
+    batch = torch.arange(12).view(3, 4)
+    if spec_class is OneHot:
+        mask = torch.nn.functional.one_hot(batch % 5, 5).bool()
+        spec = OneHot(5, shape=(3, 4, 5), mask=mask)
+    else:
+        mask = torch.cat(
+            [
+                torch.nn.functional.one_hot(batch % 2, 2),
+                torch.nn.functional.one_hot(batch % 3, 3),
+            ],
+            -1,
+        ).bool()
+        spec = MultiOneHot([2, 3], shape=(3, 4, 5), mask=mask)
+    # index each outcome of the mask as a tensor of the batch shape
+    expected = torch.stack([mask[..., k][idx] for k in range(5)], -1)
+    indexed = spec[idx]
+    assert indexed.shape == expected.shape
+    torch.testing.assert_close(indexed.mask, expected)
+    sample = indexed.rand((4,))
+    torch.testing.assert_close(
+        sample, expected.to(sample.dtype).expand(4, *expected.shape)
+    )
+
+
 # Bounded, MultiCategorical: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
     "spec_class",
