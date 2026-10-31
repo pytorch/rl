@@ -1531,7 +1531,10 @@ def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
     bins = bins.to(device=logits.device, dtype=dtype)
     # Pair before normalizing: a compiler may fuse a per-bin normalizing multiply
     # into the difference, whose rounding error the large bins then amplify.
-    weights = (logits - logits.amax(-1, keepdim=True)).to(dtype).exp()
+    # The shift cancels in the ratio, so it is detached: its gradient is zero in
+    # exact arithmetic, and computing it would add rounding noise times the bins.
+    shift = logits.detach().amax(-1, keepdim=True)
+    weights = (logits - shift).to(dtype).exp()
     size = logits.shape[-1]
     midpoint = size // 2
     lower = weights[..., :midpoint].flip(-1)

@@ -538,6 +538,22 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             two_hot(logits).squeeze(-1).double(), reference, rtol=1e-4, atol=1e-3
         )
 
+    def test_dreamer_v3_two_hot_decode_gradient_matches_float64(self, device):
+        # d decode / d logit_j = p_j * (bin_j - decode); mirrored logits make
+        # decode 0, so each gradient is p_j * bin_j with bins up to 4.85e8.
+        two_hot = SymExpTwoHot(255).to(device)
+        torch.manual_seed(0)
+        half = torch.randn(32, 127, device=device) * 1e-3
+        center = torch.zeros(32, 1, device=device)
+        logits = torch.cat([half.flip(-1), center, half], dim=-1).requires_grad_()
+        (gradient,) = torch.autograd.grad(two_hot.decode(logits).sum(), logits)
+
+        probs = logits.detach().double().softmax(-1)
+        bins = two_hot.bins.double()
+        decoded = (probs * bins).sum(-1, keepdim=True)
+        reference = probs * (bins - decoded)
+        torch.testing.assert_close(gradient.double(), reference, rtol=1e-4, atol=1e-5)
+
     @pytest.mark.gpu
     def test_dreamer_v3_two_hot_decode_compiled_mirror_symmetric_cuda(self, device):
         # Inductor on CUDA used to fuse the softmax normalization into the paired
