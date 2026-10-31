@@ -12,9 +12,6 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 from tensordict.utils import NestedKey, unravel_key
 
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
-
 
 def _onnx_name(key: NestedKey) -> str:
     """Name a graph input or output after its key, as tensordict's ``dispatch`` does."""
@@ -32,13 +29,15 @@ def export_onnx_policy(
 ) -> Path:
     """Export a policy to ONNX by tracing it with :func:`torch.onnx.export`.
 
-    The graph runs the policy on one unbatched step under
-    ``ExplorationType.DETERMINISTIC``. Its inputs are ``policy.in_keys`` and
-    its outputs are ``out_keys``, in that order, each named after its key with
-    nested keys joined by ``"_"``. A recurrent policy takes its state and
-    ``is_init`` as inputs and returns the next state. Env transforms are not
-    exported, so observation normalization must be part of ``policy``.
-    Requires the ``onnx`` extra (``pip install torchrl[onnx]``).
+    The graph runs the policy on one unbatched step. Its inputs are
+    ``policy.in_keys`` and its outputs are ``out_keys``, in that order, each
+    named after its key with nested keys joined by ``"_"``. A recurrent policy
+    takes its state and ``is_init`` as inputs and returns the next state. Env
+    transforms are not exported, so observation normalization must be part of
+    ``policy``. Requires the ``onnx`` extra (``pip install torchrl[onnx]``).
+
+    The policy is traced as configured: put it in eval mode and choose the
+    exploration type and recurrent mode around the call, as in the example.
 
     Args:
         policy (TensorDictModuleBase): the policy to export.
@@ -57,7 +56,8 @@ def export_onnx_policy(
         The path written.
 
     Raises:
-        ValueError: if ``example`` has a batch dimension.
+        ValueError: if ``example`` has a batch dimension, or if two input or
+            output keys get the same name.
 
     Examples:
         >>> import torch
@@ -68,11 +68,13 @@ def export_onnx_policy(
         ... )
         >>> from torch import nn
         >>> from torchrl.envs import ObservationNorm
+        >>> from torchrl.envs.utils import ExplorationType, set_exploration_type
         >>> from torchrl.modules import (
         ...     export_onnx_policy,
         ...     LSTMModule,
         ...     MLP,
         ...     ProbabilisticActor,
+        ...     set_recurrent_mode,
         ...     TanhNormal,
         ... )
         >>> lstm = LSTMModule(input_size=61, hidden_size=64, in_key="observation", out_key="features")
@@ -87,11 +89,12 @@ def export_onnx_policy(
         ...     distribution_class=TanhNormal,
         ... )
         >>> norm = ObservationNorm(loc=torch.zeros(61), scale=torch.ones(61), in_keys=["observation"])
-        >>> policy = TensorDictSequential(norm, actor)
+        >>> policy = TensorDictSequential(norm, actor).eval()
         >>> example = lstm.make_tensordict_primer().primers.zero()
         >>> example["observation"] = torch.zeros(61)
         >>> example["is_init"] = torch.zeros(1, dtype=torch.bool)
-        >>> export_onnx_policy(policy, "walk.onnx", example)  # doctest: +SKIP
+        >>> with set_exploration_type(ExplorationType.DETERMINISTIC), set_recurrent_mode(False):  # doctest: +SKIP
+        ...     export_onnx_policy(policy, "walk.onnx", example)
         PosixPath('walk.onnx')
     """
     if example.batch_dims:
@@ -105,11 +108,18 @@ def export_onnx_policy(
             if unravel_key(("next", key)) in policy.out_keys
         ]
     graph = TensorDictSequential(policy, selected_out_keys=list(out_keys))
+    graph.training = policy.training
+    names = {}
+    for key in (*graph.in_keys, *graph.out_keys):
+        names.setdefault(_onnx_name(key), []).append(key)
+    clashes = {name: keys for name, keys in names.items() if len(keys) > 1}
+    if clashes:
+        raise ValueError(
+            f"Graph inputs and outputs need distinct names, but these keys share one: {clashes}."
+        )
     inputs = {_onnx_name(key): example.get(key) for key in graph.in_keys}
     path = Path(path)
-    with set_exploration_type(ExplorationType.DETERMINISTIC), set_recurrent_mode(
-        False
-    ), torch.no_grad():
+    with torch.no_grad():
         torch.onnx.export(
             graph,
             (),

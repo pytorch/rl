@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import warnings
 
 import numpy as np
 import pytest
@@ -1730,7 +1731,10 @@ class TestExportOnnxPolicy:
         example.update({name: torch.zeros(2, 8) for name in states})
         if states:
             example["is_init"] = torch.zeros(1, dtype=torch.bool)
-        path = export_onnx_policy(policy, tmp_path / "policy.onnx", example)
+        with set_exploration_type(ExplorationType.DETERMINISTIC), set_recurrent_mode(
+            False
+        ):
+            path = export_onnx_policy(policy.eval(), tmp_path / "policy.onnx", example)
         session = onnxruntime.InferenceSession(str(path))
         assert [(i.name, i.shape) for i in session.get_inputs()] == [
             ("robot_observation", [5])
@@ -1770,6 +1774,35 @@ class TestExportOnnxPolicy:
         torch.testing.assert_close(
             torch.stack(exported), expected, atol=1e-5, rtol=1e-5
         )
+
+    @pytest.mark.parametrize("training", [True, False])
+    def test_training_warning_follows_policy_mode(self, tmp_path, training):
+        policy = self._make_policy(None).train(training)
+        example = TensorDict({self.observation_key: torch.zeros(5)})
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            export_onnx_policy(policy, tmp_path / "policy.onnx", example)
+        assert any("training mode" in str(w.message) for w in caught) == training
+        assert all(module.training == training for module in policy.modules())
+
+    def test_name_clash_is_rejected(self, tmp_path):
+        example = TensorDict(
+            {self.observation_key: torch.zeros(5), "robot_observation": torch.zeros(5)}
+        )
+        two_inputs = TensorDictModule(
+            torch.add,
+            in_keys=["robot_observation", self.observation_key],
+            out_keys=["action"],
+        )
+        with pytest.raises(ValueError, match="robot_observation"):
+            export_onnx_policy(two_inputs, tmp_path / "policy.onnx", example)
+        with pytest.raises(ValueError, match="robot_observation"):
+            export_onnx_policy(
+                self._make_policy(None),
+                tmp_path / "policy.onnx",
+                example,
+                out_keys=[self.observation_key],
+            )
 
     def test_batched_example_is_rejected(self, tmp_path):
         example = TensorDict({self.observation_key: torch.zeros(1, 5)}, [1])
