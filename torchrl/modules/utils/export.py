@@ -70,38 +70,26 @@ def export_onnx_policy(
     action_key: NestedKey = "action",
     opset_version: int = 18,
 ) -> Path:
-    """Write a feed-forward or LSTM policy as a self-contained ONNX graph with explicit recurrent state.
+    """Export a feed-forward or LSTM policy to ONNX in the ``rsl_rl`` / ``mjlab`` layout.
 
-    The graph maps one observation (batch size 1) to the action the policy
-    takes under ``ExplorationType.DETERMINISTIC``: ``obs -> actions`` for a
-    feed-forward policy, and ``(obs, h_in, c_in) -> (actions, h_out, c_out)``
-    with states of shape ``(num_layers, 1, hidden_size)`` for a policy holding
-    one :class:`~torchrl.modules.LSTMModule`. That is the explicit-state layout
-    of ``rsl_rl`` and ``mjlab`` exports, which robot runtimes such as
-    MicroDuck's load. The caller owns the state and starts an episode by
-    feeding zeros, so ``is_init`` is not a graph input.
-
-    Observation normalization must be part of ``policy`` so the graph reads raw
-    observations: put the training env's :class:`~torchrl.envs.ObservationNorm`
-    (or :meth:`~torchrl.envs.VecNorm.to_observation_norm`) in front of the
-    actor. A CPU copy of ``policy`` is exported; ``policy`` is not modified.
+    The graph computes the deterministic action for one observation:
+    ``obs -> actions``, or ``(obs, h_in, c_in) -> (actions, h_out, c_out)``
+    for a policy with one :class:`~torchrl.modules.LSTMModule`. Env transforms
+    are not exported, so observation normalization must be part of ``policy``.
+    Requires the ``onnx`` extra (``pip install torchrl[onnx]``).
 
     Args:
-        policy (TensorDictModuleBase): the policy to export. It reads one
-            observation entry, writes ``action_key`` and may contain at most
-            one :class:`~torchrl.modules.LSTMModule`, run step by step.
+        policy (TensorDictModuleBase): the policy to export.
         path (str or Path): file to write.
-        observation_shape (Sequence[int]): shape of one observation, without
+        observation_shape (Sequence[int]): shape of one observation without
             the batch dimension, e.g. ``(61,)``.
 
     Keyword Args:
-        observation_key (NestedKey, optional): entry the policy reads the
-            observation from. Defaults to the only input of ``policy`` that is
-            not a recurrent state or ``is_init``.
-        action_key (NestedKey, optional): entry holding the action. Defaults
-            to ``"action"``.
-        opset_version (int, optional): ONNX opset of the graph. Defaults to
-            ``18``.
+        observation_key (NestedKey, optional): key the policy reads the
+            observation from. Defaults to the policy's only non-recurrent input.
+        action_key (NestedKey, optional): key the policy writes the action to.
+            Defaults to ``"action"``.
+        opset_version (int, optional): ONNX opset version. Defaults to ``18``.
 
     Returns:
         The path written.
@@ -110,8 +98,6 @@ def export_onnx_policy(
         NotImplementedError: if ``policy`` contains a
             :class:`~torchrl.modules.GRUModule` or more than one
             :class:`~torchrl.modules.LSTMModule`.
-
-    .. note:: Exporting requires the ``onnx`` and ``onnxscript`` packages.
 
     Examples:
         >>> import torch
