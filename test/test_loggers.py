@@ -404,6 +404,26 @@ class TestCSVLogger:
                 step = steps[i] if steps else i
                 assert row == f"{step},{values[i].item()}\n"
 
+    def test_log_scalar_slash_in_name_writes_flat_csv(self, tmpdir):
+        logger = CSVLogger(log_dir=tmpdir, exp_name="slash")
+        logger.log_scalar("train/reward", 1.5, step=0)
+        logger.log_scalar("train/reward", 2.5, step=1)
+        logger.log_scalar(r"eval\return", 3.0, step=2)
+        logger.close()
+
+        scalars_dir = os.path.join(tmpdir, "slash", "scalars")
+        nested_dir = os.path.join(scalars_dir, "train")
+        csv_path = os.path.join(scalars_dir, "train_reward.csv")
+        assert not os.path.isdir(nested_dir)
+        assert not os.path.isfile(os.path.join(nested_dir, "reward.csv"))
+        assert os.path.isfile(csv_path)
+        with open(csv_path) as file:
+            assert file.read().splitlines() == ["0,1.5", "1,2.5"]
+        with open(os.path.join(scalars_dir, "eval_return.csv")) as file:
+            assert file.read().splitlines() == ["2,3.0"]
+        assert logger.experiment.scalars["train/reward"] == [(0, 1.5), (1, 2.5)]
+        assert logger.experiment.scalars[r"eval\return"] == [(2, 3.0)]
+
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     @pytest.mark.parametrize(
         "video_format", ["pt", "memmap"] + (["mp4"] if _has_mp4 else [])
