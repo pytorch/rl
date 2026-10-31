@@ -1047,21 +1047,32 @@ class GSPOLoss(GRPOLoss):
     ``aggregation="prompt_mean"`` and an advantage that is constant over each
     sequence, this gives the sequence-level GSPO objective of the paper.
 
-    Takes the same arguments as :class:`GRPOLoss`, except ``kl_mask_threshold``.
-    The paper uses ``clip_epsilon=(3e-4, 4e-4)``, much tighter than token-level
-    GRPO, and a per-sequence mean (``aggregation="prompt_mean"``).
+    Takes the same arguments as :class:`GRPOLoss`, except ``kl_mask_threshold``,
+    with the paper's defaults for ``clip_epsilon`` and ``aggregation``.
 
     ``ESS`` counts each sequence ratio once per valid token, and ``clip_fraction``
     averages over all token slots, padding included.
 
     See the `GSPO <https://arxiv.org/abs/2507.18071>`_ paper.
 
+    Args:
+        actor_network (LLMWrapperBase, optional): the LLM actor network.
+            Defaults to ``None``.
+
+    Keyword Args:
+        clip_epsilon (float | tuple[float, float], optional): clipping threshold(s)
+            for the sequence ratio: ``[1 - x, 1 + x]`` for a float ``x``, and
+            ``[1 - eps_low, 1 + eps_high]`` for a tuple ``(eps_low, eps_high)``. Defaults to ``(3e-4, 4e-4)``, as in the paper:
+            the sequence ratio is a geometric mean over tokens and stays much
+            closer to 1 than token ratios, so GRPO's 0.2 would rarely clip.
+        aggregation (str, optional): loss aggregation strategy, as in
+            :class:`GRPOLoss`. Defaults to ``"prompt_mean"``, the per-sequence mean
+            that gives each sequence equal weight, as in the paper; ``None`` also
+            selects ``"prompt_mean"``.
+        **kwargs: the other keyword arguments of :class:`GRPOLoss`.
+
     Examples:
-        >>> loss_fn = GSPOLoss(
-        ...     actor_network,
-        ...     clip_epsilon=(3e-4, 4e-4),
-        ...     aggregation="prompt_mean",
-        ... )  # doctest: +SKIP
+        >>> loss_fn = GSPOLoss(actor_network)  # doctest: +SKIP
         >>> loss = loss_fn(data)  # doctest: +SKIP
     """
 
@@ -1071,6 +1082,9 @@ class GSPOLoss(GRPOLoss):
         self,
         actor_network: LLMWrapperBase | None = None,
         *,
+        clip_epsilon: float | tuple[float, float] = (3e-4, 4e-4),
+        aggregation: Literal["token_mean", "prompt_mean", "none"]
+        | None = "prompt_mean",
         kl_mask_threshold: float | None = None,
         **kwargs,
     ) -> None:
@@ -1080,7 +1094,12 @@ class GSPOLoss(GRPOLoss):
                 "GSPOLoss does not support kl_mask_threshold, got "
                 f"{kl_mask_threshold=}."
             )
-        super().__init__(actor_network, **kwargs)
+        super().__init__(
+            actor_network,
+            clip_epsilon=clip_epsilon,
+            aggregation=aggregation or "prompt_mean",
+            **kwargs,
+        )
 
     def _log_weight(
         self, tensordict: TensorDictBase, adv_shape: torch.Size
