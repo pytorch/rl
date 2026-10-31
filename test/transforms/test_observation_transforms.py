@@ -2288,6 +2288,27 @@ class TestObservationNorm(TransformBase):
         with pytest.raises(RuntimeError, match=err_msg):
             transform._apply_transform(torch.Tensor([1]))
 
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_compile_fullgraph(self, standard_normal):
+        t = ObservationNorm(
+            loc=torch.full((3,), 2.0),
+            scale=torch.full((3,), 0.5),
+            in_keys=["observation"],
+            in_keys_inv=["action"],
+            standard_normal=standard_normal,
+        )
+        obs = torch.randn(4, 3)
+        action = torch.randn(4, 3)
+        td = TensorDict({"observation": obs, "action": action}, [4])
+        forward = torch.compile(t.forward, backend="eager", fullgraph=True)
+        inverse = torch.compile(t.inv, backend="eager", fullgraph=True)
+        if standard_normal:
+            expected_obs, expected_action = (obs - 2.0) / 0.5, action * 0.5 + 2.0
+        else:
+            expected_obs, expected_action = obs * 0.5 + 2.0, (action - 2.0) / 0.5
+        torch.testing.assert_close(forward(td.clone())["observation"], expected_obs)
+        torch.testing.assert_close(inverse(td.clone())["action"], expected_action)
+
 
 @pytest.mark.skipif(not _has_tv, reason="no torchvision")
 class TestResize(TransformBase):
