@@ -185,15 +185,25 @@ def main(cfg: DictConfig):
 
         return q_loss.detach(), actor_loss.detach()
 
+    # One function (and one CUDA graph) per branch: a captured graph replays
+    # the Python flag it was captured with.
+    def update_all(sampled_tensordict):
+        return update(sampled_tensordict, True)
+
+    def update_qloss(sampled_tensordict):
+        return update(sampled_tensordict, False)
+
     if cfg.compile.compile:
-        update = compile_with_warmup(update, mode=compile_mode, warmup=1)
+        update_all = compile_with_warmup(update_all, mode=compile_mode, warmup=1)
+        update_qloss = compile_with_warmup(update_qloss, mode=compile_mode, warmup=1)
 
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
         )
-        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
+        update_all = CudaGraphModule(update_all, warmup=5)
+        update_qloss = CudaGraphModule(update_qloss, warmup=5)
 
     # Main loop
     collected_frames = run_state["collected_frames"]
@@ -251,9 +261,9 @@ def main(cfg: DictConfig):
                                 sampled_tensordict = replay_buffer.sample()
                             with timeit("update"):
                                 torch.compiler.cudagraph_mark_step_begin()
-                                q_loss, actor_loss = update(
-                                    sampled_tensordict, update_actor
-                                )
+                                q_loss, actor_loss = (
+                                    update_all if update_actor else update_qloss
+                                )(sampled_tensordict)
 
                             # Update priority
                             if prb:
