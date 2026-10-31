@@ -36,7 +36,9 @@ def export_onnx_policy(
     transforms are not exported, so observation normalization must be part of
     ``policy``. Requires the ``onnx`` extra (``pip install torchrl[onnx]``).
 
-    The policy is traced as configured: put it in eval mode and choose the
+    The policy is traced as configured and nothing is overridden. Call
+    ``policy.eval()`` first: a policy in training mode is exported with its
+    training behavior, such as dropout, and PyTorch warns about it. Set the
     exploration type and recurrent mode around the call, as in the example.
 
     Args:
