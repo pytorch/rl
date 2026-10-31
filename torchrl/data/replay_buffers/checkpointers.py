@@ -419,7 +419,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             metadata = json.load(file)
         is_pytree = metadata["is_pytree"]
         _len = metadata["len"]
-        if self._load_hooks and not _len:
+        if not _len:
             storage._len = 0
             return
         if is_pytree:

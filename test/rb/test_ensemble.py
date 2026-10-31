@@ -1117,7 +1117,7 @@ class TestCheckpointers:
         ),
     ],
 )
-class TestCheckpointAfterEmpty:
+class TestCheckpointRoundTrip:
     @staticmethod
     def _ted_batch(nsteps, done, offset=0):
         obs = torch.arange(3 * nsteps, dtype=torch.float32).view(3, nsteps) + offset
@@ -1193,6 +1193,22 @@ class TestCheckpointAfterEmpty:
         rb_test.loads(tmpdir / "second")
         assert rb_test[:]["next", "done"].all()
         assert_allclose_td(rb_test[:], rb[:])
+
+
+@pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+def test_checkpoint_empty_with_save_hook_only(storage_type, tmpdir):
+    """An emptied buffer with a save hook and no load hook loads back empty."""
+    rb = ReplayBuffer(storage=storage_type(102, ndim=2))
+    rb.register_save_hook(lambda data, path=None: data)
+    rb.extend(TestCheckpointRoundTrip._ted_batch(34, done=True))
+    rb.empty()
+    rb.dumps(tmpdir)
+    rb_test = ReplayBuffer(storage=storage_type(102, ndim=2))
+    rb_test.loads(tmpdir)
+    assert len(rb_test) == 0
+    batch = TestCheckpointRoundTrip._ted_batch(5, done=False, offset=100)
+    rb_test.extend(batch)
+    assert_allclose_td(rb_test[:], batch)
 
 
 if __name__ == "__main__":
