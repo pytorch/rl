@@ -2717,6 +2717,150 @@ class TestStalenessAwareSampler:
         batch = rb.sample()
         assert batch.shape[0] == 8
 
+    @pytest.mark.parametrize(
+        "storage_type",
+        ["tensor", "lazy_stack_uniform", "lazy_stack_ragged"],
+        ids=["tensor_storage", "lazy_stack_uniform", "lazy_stack_ragged"],
+    )
+    @pytest.mark.parametrize("gate", [False, True], ids=["no_gate", "hard_gate"])
+    def test_multidimensional_policy_version_sampling(self, storage_type, gate):
+        torch.manual_seed(42)
+        max_staleness = 3 if gate else -1
+        sampler = StalenessAwareSampler(max_staleness=max_staleness)
+
+        if storage_type == "tensor":
+            rb = TensorDictReplayBuffer(
+                storage=LazyTensorStorage(10),
+                sampler=sampler,
+                batch_size=4,
+            )
+            stale_td = TensorDict(
+                {
+                    "observation": torch.zeros(5, 4),
+                    "policy_version": torch.tensor(
+                        [[0, 1, 2, 2]] * 5, dtype=torch.int64
+                    ),
+                },
+                batch_size=[5, 4],
+            )
+            fresh_td = TensorDict(
+                {
+                    "observation": torch.ones(5, 4),
+                    "policy_version": torch.tensor(
+                        [[9, 10, 8, 9]] * 5, dtype=torch.int64
+                    ),
+                },
+                batch_size=[5, 4],
+            )
+            rb.extend(stale_td)
+            rb.extend(fresh_td)
+        elif storage_type == "lazy_stack_uniform":
+            rb = ReplayBuffer(
+                storage=LazyStackStorage(10),
+                sampler=sampler,
+                batch_size=2,
+            )
+            stale_td = TensorDict(
+                {
+                    "observation": torch.zeros(5, 4),
+                    "policy_version": torch.tensor(
+                        [[0, 1, 2, 2]] * 5, dtype=torch.int64
+                    ),
+                },
+                batch_size=[5, 4],
+            )
+            fresh_td = TensorDict(
+                {
+                    "observation": torch.ones(5, 4),
+                    "policy_version": torch.tensor(
+                        [[9, 10, 8, 9]] * 5, dtype=torch.int64
+                    ),
+                },
+                batch_size=[5, 4],
+            )
+            rb.extend(stale_td)
+            rb.extend(fresh_td)
+        else:
+            rb = ReplayBuffer(
+                storage=LazyStackStorage(10),
+                sampler=sampler,
+                batch_size=2,
+            )
+            rb.add(
+                TensorDict(
+                    {
+                        "observation": torch.zeros(3),
+                        "policy_version": torch.tensor([1, 2, 2]),
+                    },
+                    batch_size=[],
+                )
+            )
+            rb.add(
+                TensorDict(
+                    {
+                        "observation": torch.zeros(5),
+                        "policy_version": torch.tensor([0, 1, 1, 2, 2]),
+                    },
+                    batch_size=[],
+                )
+            )
+            rb.add(
+                TensorDict(
+                    {
+                        "observation": torch.ones(4),
+                        "policy_version": torch.tensor([8, 8, 9, 9]),
+                    },
+                    batch_size=[],
+                )
+            )
+            rb.add(
+                TensorDict(
+                    {
+                        "observation": torch.ones(2),
+                        "policy_version": torch.tensor([9, 10]),
+                    },
+                    batch_size=[],
+                )
+            )
+
+        sampler.consumer_version = 10
+        for _ in range(10):
+            sample, info = rb.sample(return_info=True)
+            assert "staleness" in info
+            if gate:
+                if isinstance(sample, TensorDict):
+                    assert (sample["observation"] > 0.5).all()
+                else:
+                    for item in sample:
+                        assert (item["observation"] > 0.5).all()
+                if storage_type in ("tensor", "lazy_stack_uniform"):
+                    assert (info["staleness"] == 2).all()
+                else:
+                    assert ((info["staleness"] == 1) | (info["staleness"] == 2)).all()
+            else:
+                assert (info["staleness"] >= 0).all()
+
+    def test_multidimensional_negative_padding(self):
+        sampler = StalenessAwareSampler(max_staleness=5)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            sampler=sampler,
+            batch_size=2,
+        )
+        padded_td = TensorDict(
+            {
+                "observation": torch.ones(4, 5),
+                "policy_version": torch.tensor(
+                    [[9, 10, 8, -1, -1]] * 4, dtype=torch.int64
+                ),
+            },
+            batch_size=[4, 5],
+        )
+        rb.extend(padded_td)
+        sampler.consumer_version = 10
+        sample, info = rb.sample(return_info=True)
+        assert (info["staleness"] == 2).all()
+
 
 class TestPromptGroupSampler:
     @staticmethod
