@@ -2793,7 +2793,7 @@ class GRUModule(ModuleBase):
         batch, steps = value.shape[:2]
         device = value.device
         dtype = value.dtype
-        if not self.recurrent_mode and is_init.any() and hidden is not None:
+        if not self.recurrent_mode and hidden is not None:
             is_init_expand = expand_as_right(is_init, hidden)
             hidden = torch.where(is_init_expand, 0, hidden)
         val, hidden = self._gru(

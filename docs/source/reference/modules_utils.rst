@@ -20,6 +20,7 @@ Utility modules and helper functions for building RL networks.
     :toctree: generated/
     :template: rl_template_fun.rst
 
+    export_onnx_policy
     get_recurrent_matmul_precision
     set_recurrent_matmul_precision
 
