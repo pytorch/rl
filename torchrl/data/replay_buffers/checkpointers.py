@@ -127,7 +127,10 @@ class StorageCheckpointerBase:
         for hook in self._save_hooks:
             if hasattr(hook, "is_full"):
                 hook.is_full = is_full
-        if last_cursor is None:
+        len_along_dim0 = getattr(storage, "_len_along_dim0", None)
+        if not is_full and len_along_dim0 is not None:
+            shift = len_along_dim0
+        elif last_cursor is None:
             warnings.warn(
                 "last_cursor is None. The replay buffer "
                 "may not be saved properly in this setting. To solve this issue, make "
@@ -367,9 +370,12 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
         path = Path(path)
         path.mkdir(exist_ok=True)
 
+        metadata = {}
+        if self._save_hooks and not storage._len:
+            self._write_metadata(path, metadata, is_pytree=False, length=0)
+            return
         if not storage.initialized:
             raise RuntimeError("Cannot save a non-initialized storage.")
-        metadata = {}
         _storage = storage._storage
 
         self._set_hooks_shift_is_full(storage)
@@ -394,12 +400,16 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             _save_pytree(_storage, metadata, path)
             is_pytree = True
 
+        self._write_metadata(path, metadata, is_pytree=is_pytree, length=storage._len)
+
+    @staticmethod
+    def _write_metadata(path, metadata, *, is_pytree, length):
         with open(path / "storage_metadata.json", "w") as file:
             json.dump(
                 {
                     "metadata": metadata,
                     "is_pytree": is_pytree,
-                    "len": storage._len,
+                    "len": length,
                 },
                 file,
             )
@@ -409,6 +419,9 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             metadata = json.load(file)
         is_pytree = metadata["is_pytree"]
         _len = metadata["len"]
+        if self._load_hooks and not _len:
+            storage._len = 0
+            return
         if is_pytree:
             if self._load_hooks:
                 raise RuntimeError(
@@ -582,15 +595,17 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
     def dumps(self, storage, path):
         path = self._get_path(path)
 
-        self._set_hooks_shift_is_full(storage)
-
-        if not storage.initialized:
-            raise RuntimeError("Cannot save a non-initialized storage.")
-        _storage = storage._storage
         length = storage._len
-        for hook in self._save_hooks:
-            # we don't pass a path here since we're not reusing the tensordict
-            _storage = hook(_storage)
+        if length:
+            self._set_hooks_shift_is_full(storage)
+            if not storage.initialized:
+                raise RuntimeError("Cannot save a non-initialized storage.")
+            _storage = storage._storage
+            for hook in self._save_hooks:
+                # we don't pass a path here since we're not reusing the tensordict
+                _storage = hook(_storage)
+        else:
+            _storage = TensorDict()
         if is_tensor_collection(_storage):
             # try to load the path and overwrite.
             data = PersistentTensorDict.from_dict(_storage, path, **self.kwargs)
@@ -601,12 +616,15 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
     def loads(self, storage, path):
         path = self._get_path(path)
         data = PersistentTensorDict.from_h5(path)
+        _len = data["_len"]
+        if not _len:
+            storage._len = 0
+            return
         if storage.initialized:
             dest = storage._storage
         else:
             # TODO: This could load the RAM a lot, maybe try to catch this within the hook and use memmap instead
             dest = None
-        _len = data["_len"]
         for hook in self._load_hooks:
             data = hook(data, out=dest)
         if not storage.initialized:

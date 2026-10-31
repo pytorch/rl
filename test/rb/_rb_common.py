@@ -41,6 +41,7 @@ _os_is_windows = sys.platform == "win32"
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_zstandard = importlib.util.find_spec("zstandard") is not None
+_has_h5py = importlib.util.find_spec("h5py") is not None
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
