@@ -28,7 +28,7 @@ first use.
 On a headless Linux machine, set ``MUJOCO_GL=egl`` before starting Python if your
 MuJoCo installation uses EGL. macOS uses its native offscreen renderer.
 
-By default we collect 600 frames with a 60-step limit per episode. Early falls
+By default we collect 1,500 frames with a 500-step limit per episode. Early falls
 trigger a reset and can add episodes. Nothing is uploaded by default.
 """
 
@@ -67,8 +67,8 @@ from heuristic_gait import MicroDuckGaitActor  # noqa: E402
 # Pick a new run directory each time.
 
 FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
-EPISODE_STEPS = 60
-TOTAL_FRAMES = 120 if FAST else 600
+EPISODE_STEPS = 120 if FAST else 500
+TOTAL_FRAMES = 240 if FAST else 1500
 WIDTH, HEIGHT = 240, 160
 REPO_ID = os.environ.get("TORCHRL_LEROBOT_REPO_ID", "local/microduck-walk")
 PRIVATE_DATASET = True
@@ -85,6 +85,7 @@ OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 #
 # ``from_pixels=True`` adds uint8 HWC camera frames to the observation. The gait
 # is already a TensorDict module, so the collector can use it as its policy.
+# Its gait is tuned for the environment's default action scale of 0.35.
 #
 # ``StepCounter`` limits each episode and marks the last transition as truncated.
 # ``TrajCounter`` gives resets distinct episode IDs. These are stored observations,
@@ -97,7 +98,7 @@ base_env = MicroDuckEnv(
     download=True,
     backend="mujoco",
     tasks=MicroDuckEnv.tracking_task(0.03, **policy.config.task_kwargs()),
-    action_scale=1.0,
+    action_scale=0.35,
     from_pixels=True,
     render_width=WIDTH,
     render_height=HEIGHT,
@@ -232,7 +233,7 @@ recording_configuration = {
     "backend": "mujoco",
     "task": "tracking_task",
     "forward_command_m_s": 0.03,
-    "action_scale": 1.0,
+    "action_scale": base_env.action_scale,
     "gait_controller": asdict(policy.config),
     "fps": fps,
     "seed": 0,
