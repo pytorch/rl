@@ -289,9 +289,7 @@ class ObservationNorm(ObservationTransform):
                 "Loc/Scale have not been initialized. Either pass in values in the constructor "
                 "or call the init_stats method"
             )
-        gain = torch.where(self.standard_normal, self.scale.reciprocal(), self.scale)
-        bias = torch.where(self.standard_normal, -self.loc * gain, self.loc)
-        return torch.addcmul(bias, obs, gain)
+        return self._affine(obs, self.standard_normal)
 
     def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
         if self.loc is None or self.scale is None:
@@ -299,9 +297,23 @@ class ObservationNorm(ObservationTransform):
                 "Loc/Scale have not been initialized. Either pass in values in the constructor "
                 "or call the init_stats method"
             )
-        gain = torch.where(self.standard_normal, self.scale, self.scale.reciprocal())
-        bias = torch.where(self.standard_normal, self.loc, -self.loc * gain)
-        return torch.addcmul(bias, state, gain)
+        return self._affine(state, ~self.standard_normal)
+
+    def _affine(self, value: torch.Tensor, normalize: torch.Tensor) -> torch.Tensor:
+        """Compute ``(value - loc) / scale`` where ``normalize`` is set and ``value * scale + loc`` elsewhere.
+
+        Both maps are written as ``(value * mul - sub) / div + add`` and only
+        the coefficients are selected, so each mode performs the same float
+        operations as its plain formula and no unused branch divides by
+        ``scale``.
+        """
+        one = torch.ones_like(self.scale)
+        zero = torch.zeros_like(self.loc)
+        mul = torch.where(normalize, one, self.scale)
+        sub = torch.where(normalize, self.loc, zero)
+        div = torch.where(normalize, self.scale, one)
+        add = torch.where(normalize, zero, self.loc)
+        return torch.addcdiv(add, torch.addcmul(-sub, value, mul), div)
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
