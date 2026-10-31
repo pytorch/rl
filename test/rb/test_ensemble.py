@@ -1194,6 +1194,18 @@ class TestCheckpointRoundTrip:
         assert rb_test[:]["next", "done"].all()
         assert_allclose_td(rb_test[:], rb[:])
 
+    def test_full_storage_slice_cursor(self, storage_type, checkpointer, tmpdir):
+        """A full buffer last written through a slice round-trips its transitions."""
+        rb = ReplayBuffer(storage=storage_type(10))
+        rb.storage.checkpointer = checkpointer()
+        rb.extend(self._ted_batch(10, done=False)[0])
+        rb.storage.set(slice(0, 4), self._ted_batch(4, done=False, offset=10)[0])
+        rb.dumps(tmpdir)
+        rb_test = ReplayBuffer(storage=storage_type(10))
+        rb_test.storage.checkpointer = checkpointer()
+        rb_test.loads(tmpdir)
+        assert_allclose_td(rb_test[:], rb[:])
+
 
 @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
 def test_checkpoint_empty_with_save_hook_only(storage_type, tmpdir):

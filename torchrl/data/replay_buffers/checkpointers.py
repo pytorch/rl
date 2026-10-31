@@ -13,7 +13,6 @@ import tempfile
 import warnings
 from pathlib import Path
 
-import numpy as np
 import torch
 from tensordict import (
     is_tensor_collection,
@@ -106,24 +105,10 @@ class StorageCheckpointerBase:
     def _detach_from_load_path(self, storage):
         del storage
 
-    def _get_shift_from_last_cursor(self, last_cursor):
-        """Computes shift from the last cursor position."""
-        if isinstance(last_cursor, slice):
-            return last_cursor.stop + 1
-        if isinstance(last_cursor, int):
-            return last_cursor + 1
-        if isinstance(last_cursor, range):
-            return last_cursor[-1] + 1
-        if isinstance(last_cursor, torch.Tensor):
-            return last_cursor.reshape(-1)[-1].item() + 1
-        if isinstance(last_cursor, np.ndarray):
-            return last_cursor.reshape(-1)[-1].item() + 1
-        raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
-
     def _set_hooks_shift_is_full(self, storage):
         """Sets shift and is_full attributes on save hooks that have them."""
         is_full = storage._is_full
-        last_cursor = storage._last_cursor
+        last_cursor = getattr(storage, "_last_cursor_index", None)
         for hook in self._save_hooks:
             if hasattr(hook, "is_full"):
                 hook.is_full = is_full
@@ -138,7 +123,7 @@ class StorageCheckpointerBase:
             )
             shift = 0
         else:
-            shift = self._get_shift_from_last_cursor(last_cursor)
+            shift = last_cursor + 1
         for hook in self._save_hooks:
             if hasattr(hook, "shift"):
                 hook.shift = shift
