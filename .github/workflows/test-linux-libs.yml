@@ -47,6 +47,8 @@ jobs:
           python -m pip check
       - name: Run LeRobot adapter tests
         run: python -m pytest test/libs/test_datasets.py -q -k "LeRobotDatasetAdapter or lerobot_adapter" --error-for-skips
+      - name: Run LeRobot policy wrapper tests
+        run: python -m pytest test/modules/test_actor.py -q -k "LeRobotPolicyWrapper" --error-for-skips
 
   # unittests-atari-dqn:
   #   strategy:

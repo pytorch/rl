@@ -14,6 +14,7 @@ from torchrl._utils import _triton_version_at_least
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
+_has_lerobot = importlib.util.find_spec("lerobot") is not None
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 IS_WINDOWS = sys.platform == "win32"
