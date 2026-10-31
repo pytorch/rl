@@ -1178,6 +1178,22 @@ class TestCheckpointAfterEmpty:
         rb_test.extend(batch)
         assert_allclose_td(rb_test[:], batch)
 
+    def test_resave_loaded_partial_checkpoint(self, storage_type, checkpointer, tmpdir):
+        """Saving a buffer loaded from a partial checkpoint keeps its done flags."""
+        rb = ReplayBuffer(storage=storage_type(102, ndim=2))
+        rb.storage.checkpointer = checkpointer()
+        rb.extend(self._ted_batch(7, done=True))
+        rb.dumps(tmpdir / "first")
+        rb_loaded = ReplayBuffer(storage=storage_type(102, ndim=2))
+        rb_loaded.storage.checkpointer = checkpointer()
+        rb_loaded.loads(tmpdir / "first")
+        rb_loaded.dumps(tmpdir / "second")
+        rb_test = ReplayBuffer(storage=storage_type(102, ndim=2))
+        rb_test.storage.checkpointer = checkpointer()
+        rb_test.loads(tmpdir / "second")
+        assert rb_test[:]["next", "done"].all()
+        assert_allclose_td(rb_test[:], rb[:])
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

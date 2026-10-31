@@ -127,7 +127,10 @@ class StorageCheckpointerBase:
         for hook in self._save_hooks:
             if hasattr(hook, "is_full"):
                 hook.is_full = is_full
-        if last_cursor is None:
+        len_along_dim0 = getattr(storage, "_len_along_dim0", None)
+        if not is_full and len_along_dim0 is not None:
+            shift = len_along_dim0
+        elif last_cursor is None:
             warnings.warn(
                 "last_cursor is None. The replay buffer "
                 "may not be saved properly in this setting. To solve this issue, make "
