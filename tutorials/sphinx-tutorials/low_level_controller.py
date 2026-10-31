@@ -79,19 +79,23 @@ low_level_policy = TensorDictModule(
 # Deployment is two objects
 # -------------------------
 #
-# The decision spec describes one controller. CatTensors adapts the task's
-# TensorDict without overwriting the high-level actor's observation: it runs in
-# the controller's private workspace.
+# The decision spec, given to ClosedLoopMultiAction, describes one controller's
+# high-level decisions. CatTensors adapts the task's TensorDict without
+# overwriting the high-level actor's observation: it runs in the controller's
+# private workspace.
 
 controller = LowLevelController(
     low_level_policy,
-    decision_spec=Composite(target_velocity=Bounded(-4.0, 4.0, shape=(1,))),
     adapter=CatTensors(
         in_keys=["velocity", "target_velocity"], out_key="observation", sort=False
     ),
 )
 training_env = ClosedLoopMultiAction.from_env(
-    task_env, controller, steps=5, reward_aggregation="sum"
+    task_env,
+    controller,
+    steps=5,
+    decision_spec=Composite(target_velocity=Bounded(-4.0, 4.0, shape=(1,))),
+    reward_aggregation="sum",
 )
 check_env_specs(training_env)
 
@@ -178,7 +182,6 @@ for before, after in zip(low_level_weights, low_level_policy.parameters()):
 #
 #    controller = LowLevelController(
 #        pretrained_policy,
-#        Composite(target_velocity=Bounded(-1, 1, shape=(2,))),
 #        adapter=CatTensors(
 #            in_keys=["proprioception", "target_velocity"],
 #            out_key="observation", sort=False,
@@ -186,7 +189,12 @@ for before, after in zip(low_level_weights, low_level_policy.parameters()):
 #        group_key="agents",
 #        reset_key="fallen",  # Optional additional per-agent reset signal.
 #    )
-#    training_env = ClosedLoopMultiAction.from_env(task_env, controller, steps=5)
+#    training_env = ClosedLoopMultiAction.from_env(
+#        task_env,
+#        controller,
+#        steps=5,
+#        decision_spec=Composite(target_velocity=Bounded(-1, 1, shape=(2,))),
+#    )
 #
 # State declared by policy or adapter primers lives under
 # ("agents", "controller"). The pretrained policy still reads its original
@@ -224,13 +232,6 @@ for before, after in zip(low_level_weights, low_level_policy.parameters()):
 #
 #    controller:
 #      _target_: torchrl.modules.LowLevelController
-#      decision_spec:
-#        _target_: torchrl.data.Composite
-#        target_velocity:
-#          _target_: torchrl.data.Bounded
-#          low: -4.0
-#          high: 4.0
-#          shape: [1]
 #      adapter:
 #        _target_: torchrl.envs.transforms.CatTensors
 #        in_keys: [velocity, target_velocity]
@@ -239,6 +240,13 @@ for before, after in zip(low_level_weights, low_level_policy.parameters()):
 #    deployment:
 #      _target_: torchrl.envs.transforms.ClosedLoopMultiAction.from_env
 #      steps: 5
+#      decision_spec:
+#        _target_: torchrl.data.Composite
+#        target_velocity:
+#          _target_: torchrl.data.Bounded
+#          low: -4.0
+#          high: 4.0
+#          shape: [1]
 #      reward_aggregation: sum
 #
 # .. code-block:: python

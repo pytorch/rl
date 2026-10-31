@@ -157,8 +157,7 @@ class TestActionMask(TransformBase):
                 td.set("done", ~(mask.any().view(1)))
                 return td
 
-            def _set_seed(self, seed: int | None) -> None:
-                ...
+            def _set_seed(self, seed: int | None) -> None: ...
 
         return MaskedEnv
 
@@ -1813,8 +1812,9 @@ class TestClosedLoopMultiAction:
         policy = _FeedbackController()
         env = ClosedLoopMultiAction.from_env(
             _ControllerTestEnv(),
-            LowLevelController(policy, Composite(command=Bounded(-1, 1, shape=(1,)))),
+            LowLevelController(policy),
             steps=3,
+            decision_spec=Composite(command=Bounded(-1, 1, shape=(1,))),
             no_grad=False,
         )
         td = env.reset().set("command", torch.ones(1))
@@ -1843,13 +1843,9 @@ class TestClosedLoopMultiAction:
 
         env = ClosedLoopMultiAction.from_env(
             _ControllerTestEnv("agents", batch_size=(2,)),
-            LowLevelController(
-                Policy(),
-                Composite(command=Bounded(-1, 1, shape=(1,))),
-                group_key="agents",
-                reset_key="fallen",
-            ),
+            LowLevelController(Policy(), group_key="agents", reset_key="fallen"),
             steps=2,
+            decision_spec=Composite(command=Bounded(-1, 1, shape=(1,))),
         )
         td = env.reset()
         assert (td["agents", "controller", "memory"] == 7).all()
@@ -1861,43 +1857,51 @@ class TestClosedLoopMultiAction:
         assert not next_td["agents", "controller", "is_init"][:, 1:].any()
         env.close()
 
-    def test_plain_controller_preserves_unrelated_actions(self):
+    def test_decision_spec_preserves_unrelated_actions(self):
         base = _ControllerTestEnv()
         actions = base.full_action_spec.clone()
         actions["unrelated"] = Bounded(0, 1, shape=(1,))
         base.action_spec = actions
-        policy = TensorDictModule(
-            nn.Identity(), in_keys=["command"], out_keys=["action"]
-        )
         env = ClosedLoopMultiAction.from_env(
             base,
-            policy,
+            LowLevelController(_FeedbackController()),
             steps=2,
-            decision_spec=Composite(
-                command=Bounded(0, 1, shape=(1,)), unrelated=Bounded(0, 1, shape=(1,))
-            ),
+            decision_spec=Composite(command=Bounded(-1, 1, shape=(1,))),
         )
+        assert set(env.full_action_spec.keys(True, True)) == {"command", "unrelated"}
         td = (
             env.reset()
             .set("command", torch.ones(1))
             .set("unrelated", torch.full((1,), 0.2))
         )
         transition = env.step(td)
-        torch.testing.assert_close(
-            transition["next", "observation"], torch.tensor([2.0])
-        )
         torch.testing.assert_close(transition["unrelated"], torch.tensor([0.2]))
         env.close()
 
+    @pytest.mark.parametrize(
+        "decision_spec",
+        [
+            Composite(),
+            Composite(command=Bounded(-1, 1, shape=(2, 1)), shape=(2,)),
+        ],
+    )
+    def test_invalid_decision_spec(self, decision_spec):
+        with pytest.raises(ValueError, match="decision_spec"):
+            ClosedLoopMultiAction(
+                LowLevelController(_FeedbackController()),
+                steps=2,
+                decision_spec=decision_spec,
+            )
+
     @pytest.mark.parametrize("group_key", [None, "agents"])
     def test_stacked_observations_keep_live_state(self, group_key):
-        controller = LowLevelController(
-            _FeedbackController(),
-            Composite(command=Bounded(-1, 1, shape=(1,))),
-            group_key=group_key,
-        )
+        controller = LowLevelController(_FeedbackController(), group_key=group_key)
         env = ClosedLoopMultiAction.from_env(
-            _ControllerTestEnv(group_key), controller, steps=3, stack_observations=True
+            _ControllerTestEnv(group_key),
+            controller,
+            steps=3,
+            decision_spec=Composite(command=Bounded(-1, 1, shape=(1,))),
+            stack_observations=True,
         )
         check_env_specs(env)
         td = env.reset()
@@ -1960,7 +1964,6 @@ class TestClosedLoopMultiAction:
         )
         controller = LowLevelController(
             policy,
-            Composite({("decision", "target"): Bounded(-1, 1, shape=(1,))}),
             adapter=adapter,
             group_key=("team", "players"),
             state_key=("low", "state"),
@@ -1973,6 +1976,9 @@ class TestClosedLoopMultiAction:
             ),
             controller,
             steps=3,
+            decision_spec=Composite(
+                {("decision", "target"): Bounded(-1, 1, shape=(1,))}
+            ),
         )
         check_env_specs(env)
         # Discovery through an enclosing sequence must not install raw RNN keys.
@@ -2030,10 +2036,9 @@ class TestClosedLoopMultiAction:
         low = _FeedbackController()
         env = ClosedLoopMultiAction.from_env(
             _ControllerTestEnv("agents", batch_size=(2,)),
-            LowLevelController(
-                low, Composite(command=Bounded(-1, 1, shape=(1,))), group_key="agents"
-            ),
+            LowLevelController(low, group_key="agents"),
             steps=3,
+            decision_spec=Composite(command=Bounded(-1, 1, shape=(1,))),
         )
         actor = ProbabilisticActor(
             TensorDictModule(
@@ -2104,7 +2109,6 @@ class TestClosedLoopMultiAction:
         policy = _FeedbackController()
         controller = LowLevelController(
             policy,
-            Composite(command=Bounded(-1, 1, shape=(1,))),
             group_key=group_key,
             reset_key="fallen" if group_key else None,
         )
@@ -2112,7 +2116,10 @@ class TestClosedLoopMultiAction:
             torch._dynamo.reset()
             controller.compile(backend="eager", fullgraph=True)
         env = ClosedLoopMultiAction.from_env(
-            _ControllerTestEnv(group_key), controller, steps=steps
+            _ControllerTestEnv(group_key),
+            controller,
+            steps=steps,
+            decision_spec=Composite(command=Bounded(-1, 1, shape=(1,))),
         )
         check_env_specs(env)
         td = env.reset()
@@ -2155,12 +2162,14 @@ class TestClosedLoopMultiAction:
     @pytest.mark.parametrize("mode", ["sum", "mean", "last", "stack"])
     @pytest.mark.parametrize("locked", [True, False])
     def test_partial_termination_rewards(self, mode, locked):
-        controller = LowLevelController(
-            _FeedbackController(), Composite(command=Bounded(-1, 1, shape=(1,)))
-        )
+        controller = LowLevelController(_FeedbackController())
         base = _ControllerTestEnv(batch_size=(3,) if locked else (), locked=locked)
         env = ClosedLoopMultiAction.from_env(
-            base, controller, steps=3, reward_aggregation=mode
+            base,
+            controller,
+            steps=3,
+            decision_spec=Composite(command=Bounded(-1, 1, shape=(1,))),
+            reward_aggregation=mode,
         )
         td = env.reset()
         if not locked:
@@ -2346,11 +2355,9 @@ class TestMultiAction(TransformBase):
             within=False,
         )
 
-    def test_transform_no_env(self):
-        ...
+    def test_transform_no_env(self): ...
 
-    def test_transform_compose(self):
-        ...
+    def test_transform_compose(self): ...
 
     @pytest.mark.parametrize("bwad", [True, False])
     def test_transform_env(self, bwad):
@@ -2386,8 +2393,7 @@ class TestMultiAction(TransformBase):
             break_when_any_done=bwad,
         )
 
-    def test_transform_model(self):
-        ...
+    def test_transform_model(self): ...
 
     def test_transform_rb(self):
         return
