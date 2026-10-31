@@ -1039,6 +1039,13 @@ class TestLosses:
         )(data)
         assert torch.isfinite(loss.loss_objective).all()
 
+    def test_gspo_paper_defaults(self):
+        loss_fn = GSPOLoss(_FixedLogProbPolicy())
+        assert loss_fn.aggregation == "prompt_mean"
+        torch.testing.assert_close(loss_fn.clip_epsilon_low, torch.tensor(3e-4))
+        torch.testing.assert_close(loss_fn.clip_epsilon_high, torch.tensor(4e-4))
+        assert GSPOLoss(aggregation=None).aggregation == "prompt_mean"
+
     def test_gspo_rejects_kl_mask(self):
         with pytest.raises(ValueError, match="kl_mask_threshold"):
             GSPOLoss(_FixedLogProbPolicy(), kl_mask_threshold=0.1)
