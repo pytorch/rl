@@ -1718,18 +1718,26 @@ class TestExportOnnxPolicy:
         )
         return TensorDictSequential(norm, actor)
 
-    @pytest.mark.parametrize("rnn", [None, LSTMModule])
+    @pytest.mark.parametrize("rnn", [None, LSTMModule, GRUModule])
     def test_graph_matches_policy_over_an_episode(self, tmp_path, rnn):
         policy = self._make_policy(rnn)
-        path = export_onnx_policy(policy, tmp_path / "policy.onnx", (5,))
+        states = {
+            None: [],
+            LSTMModule: ["recurrent_state_h", "recurrent_state_c"],
+            GRUModule: ["recurrent_state"],
+        }[rnn]
+        example = TensorDict({self.observation_key: torch.zeros(5)})
+        example.update({name: torch.zeros(2, 8) for name in states})
+        if states:
+            example["is_init"] = torch.zeros(1, dtype=torch.bool)
+        path = export_onnx_policy(policy, tmp_path / "policy.onnx", example)
         session = onnxruntime.InferenceSession(str(path))
-        states = [] if rnn is None else ["h", "c"]
         assert [(i.name, i.shape) for i in session.get_inputs()] == [
-            ("obs", [1, 5])
-        ] + [(f"{name}_in", [2, 1, 8]) for name in states]
+            ("robot_observation", [5])
+        ] + [(name, [2, 8]) for name in states] + ([("is_init", [1])] if states else [])
         assert [(o.name, o.shape) for o in session.get_outputs()] == [
-            ("actions", [1, 3])
-        ] + [(f"{name}_out", [2, 1, 8]) for name in states]
+            ("action", [3])
+        ] + [(f"next_{name}", [2, 8]) for name in states]
 
         observations = torch.randn(1, 6, 5)
         episode = TensorDict(
@@ -1744,22 +1752,30 @@ class TestExportOnnxPolicy:
         ), torch.no_grad():
             expected = policy(episode)["action"][0]
 
-        state = [np.zeros((2, 1, 8), dtype=np.float32)] * 2
+        feed = {
+            name: value.numpy() for name, value in example.flatten_keys("_").items()
+        }
         exported = []
         for observation in observations[0]:
-            feed = {"obs": observation[None].numpy()}
-            if rnn is not None:
-                feed.update(h_in=state[0], c_in=state[1])
-            action, *state = session.run(None, feed)
-            exported.append(torch.as_tensor(action[0]))
+            feed["robot_observation"] = observation.numpy()
+            outputs = dict(
+                zip(
+                    [o.name for o in session.get_outputs()],
+                    session.run(None, feed),
+                )
+            )
+            exported.append(torch.as_tensor(outputs["action"]))
+            for name in states:
+                feed[name] = outputs[f"next_{name}"]
         torch.testing.assert_close(
             torch.stack(exported), expected, atol=1e-5, rtol=1e-5
         )
 
-    def test_gru_policy_is_rejected(self, tmp_path):
-        with pytest.raises(NotImplementedError, match="GRUModule"):
+    def test_batched_example_is_rejected(self, tmp_path):
+        example = TensorDict({self.observation_key: torch.zeros(1, 5)}, [1])
+        with pytest.raises(ValueError, match="unbatched"):
             export_onnx_policy(
-                self._make_policy(GRUModule), tmp_path / "policy.onnx", (5,)
+                self._make_policy(None), tmp_path / "policy.onnx", example
             )
 
 
