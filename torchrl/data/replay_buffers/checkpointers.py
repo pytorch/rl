@@ -367,12 +367,12 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
         path = Path(path)
         path.mkdir(exist_ok=True)
 
-        if not storage.initialized:
-            raise RuntimeError("Cannot save a non-initialized storage.")
         metadata = {}
         if self._save_hooks and not storage._len:
             self._write_metadata(path, metadata, is_pytree=False, length=0)
             return
+        if not storage.initialized:
+            raise RuntimeError("Cannot save a non-initialized storage.")
         _storage = storage._storage
 
         self._set_hooks_shift_is_full(storage)
@@ -592,13 +592,12 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
     def dumps(self, storage, path):
         path = self._get_path(path)
 
-        self._set_hooks_shift_is_full(storage)
-
-        if not storage.initialized:
-            raise RuntimeError("Cannot save a non-initialized storage.")
-        _storage = storage._storage
         length = storage._len
         if length:
+            self._set_hooks_shift_is_full(storage)
+            if not storage.initialized:
+                raise RuntimeError("Cannot save a non-initialized storage.")
+            _storage = storage._storage
             for hook in self._save_hooks:
                 # we don't pass a path here since we're not reusing the tensordict
                 _storage = hook(_storage)

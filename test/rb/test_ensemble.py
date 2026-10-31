@@ -1105,6 +1105,18 @@ class TestCheckpointers:
             assert rb.writer._cursor == rb_test._writer._cursor
 
 
+@pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        FlatStorageCheckpointer,
+        NestedStorageCheckpointer,
+        pytest.param(
+            H5StorageCheckpointer,
+            marks=pytest.mark.skipif(not _has_h5py, reason="h5py required"),
+        ),
+    ],
+)
 class TestCheckpointAfterEmpty:
     @staticmethod
     def _ted_batch(nsteps, done, offset=0):
@@ -1127,18 +1139,6 @@ class TestCheckpointAfterEmpty:
         )
 
     @pytest.mark.parametrize("refill_steps", [0, 7])
-    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
-    @pytest.mark.parametrize(
-        "checkpointer",
-        [
-            FlatStorageCheckpointer,
-            NestedStorageCheckpointer,
-            pytest.param(
-                H5StorageCheckpointer,
-                marks=pytest.mark.skipif(not _has_h5py, reason="h5py required"),
-            ),
-        ],
-    )
     def test_checkpoint_after_empty(
         self, storage_type, checkpointer, refill_steps, tmpdir
     ):
@@ -1158,6 +1158,25 @@ class TestCheckpointAfterEmpty:
         rb.extend(batch)
         rb_test.extend(batch)
         assert_allclose_td(rb_test[:], rb[:])
+
+    def test_resave_loaded_empty_checkpoint(self, storage_type, checkpointer, tmpdir):
+        """A buffer loaded from an empty checkpoint can be saved and reloaded."""
+        rb = ReplayBuffer(storage=storage_type(102, ndim=2))
+        rb.storage.checkpointer = checkpointer()
+        rb.extend(self._ted_batch(34, done=True))
+        rb.empty()
+        rb.dumps(tmpdir / "first")
+        rb_loaded = ReplayBuffer(storage=storage_type(102, ndim=2))
+        rb_loaded.storage.checkpointer = checkpointer()
+        rb_loaded.loads(tmpdir / "first")
+        rb_loaded.dumps(tmpdir / "second")
+        rb_test = ReplayBuffer(storage=storage_type(102, ndim=2))
+        rb_test.storage.checkpointer = checkpointer()
+        rb_test.loads(tmpdir / "second")
+        assert len(rb_test) == 0
+        batch = self._ted_batch(5, done=False, offset=100)
+        rb_test.extend(batch)
+        assert_allclose_td(rb_test[:], batch)
 
 
 if __name__ == "__main__":
