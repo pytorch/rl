@@ -761,6 +761,29 @@ class TestDQN(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    def test_distributional_dqn_multistep_discount(self):
+        # MultiStep writes steps_to_next_obs with shape [B] while the reward has
+        # shape [B, 1]: the loss must match the one obtained with aligned shapes.
+        torch.manual_seed(self.seed)
+        batch, atoms = 4, 5
+        actor = self._create_mock_distributional_actor(
+            action_spec_type="categorical", atoms=atoms
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type="categorical", batch=batch, atoms=atoms
+        )
+        loss_fn = DistributionalDQNLoss(
+            actor, gamma=0.9, delay_value=False, reduction="none"
+        )
+        steps_to_next_obs = torch.tensor([1, 2, 3, 3])
+
+        loss = loss_fn(td.clone().set("steps_to_next_obs", steps_to_next_obs))
+        loss_aligned = loss_fn(
+            td.clone().set("steps_to_next_obs", steps_to_next_obs.unsqueeze(-1))
+        )
+
+        torch.testing.assert_close(loss["loss"], loss_aligned["loss"])
+
     def test_dqn_prioritized_weights(self):
         """Test DQN with prioritized replay buffer weighted loss reduction."""
         n_obs = 4
