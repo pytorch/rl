@@ -4010,6 +4010,177 @@ def get_all_keys(spec: TensorSpec, include_exclusive: bool):
     return keys
 
 
+@pytest.mark.parametrize(
+    "index",
+    [
+        0,
+        slice(1, None),
+        (1, 2),
+        (..., 1),
+        (None, ..., 1),
+        torch.tensor([1, 0], device="cpu"),
+    ],
+)
+def test_categorical_indexing_preserves_mask(index):
+    allowed = torch.tensor([[0, 1, 2], [2, 0, 1]], device="cpu")
+    mask = torch.nn.functional.one_hot(allowed, 3).bool()
+    spec = Categorical(3, shape=allowed.shape, device="cpu", mask=mask)
+
+    indexed = spec[index]
+    expected = allowed[index]
+    assert indexed.is_in(expected)
+    assert not indexed.is_in((expected + 1) % 3)
+    torch.testing.assert_close(indexed.rand((4,)), expected.expand(4, *expected.shape))
+    torch.testing.assert_close(
+        indexed.mask, torch.nn.functional.one_hot(expected, 3).bool()
+    )
+
+
+def test_composite_indexing_preserves_categorical_mask():
+    spec = Composite(
+        {
+            ("agent", "action"): Categorical(
+                3,
+                shape=(2,),
+                device="cpu",
+                mask=torch.tensor(
+                    [[False, True, False], [False, False, True]], device="cpu"
+                ),
+            )
+        },
+        shape=(2,),
+        device="cpu",
+    )
+
+    indexed = spec[0]
+    sample = indexed.rand((4,))
+    torch.testing.assert_close(
+        sample["agent", "action"], torch.ones(4, dtype=torch.long, device="cpu")
+    )
+    assert indexed.is_in(sample)
+    sample["agent", "action"].zero_()
+    assert not indexed.is_in(sample)
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize(
+    "index",
+    [
+        slice(4, 1, -1),
+        slice(10, 1, -2),
+        slice(-1, -4, -1),
+        slice(1, 4, -1),
+        (slice(None), slice(3, 0, -1)),
+        (..., slice(1, 0, -1)),
+        (None, slice(4, 0, -2), slice(3, 0, -1), 1),
+        ([3, 1], slice(3, 0, -1), [1, 0]),
+    ],
+)
+def test_categorical_indexing_negative_step(index, nested):
+    allowed = torch.arange(40, device="cpu").reshape(5, 4, 2) % 5
+    mask = torch.nn.functional.one_hot(allowed, 5).bool()
+    leaf = Categorical(5, shape=allowed.shape, device="cpu", mask=mask)
+    if nested:
+        spec = Composite({("agent", "action"): leaf}, shape=leaf.shape, device="cpu")
+        indexed = spec[index]["agent", "action"]
+    else:
+        indexed = leaf[index]
+    # NumPy supplies an independent value oracle for negative-step slices.
+    expected = torch.tensor(allowed.numpy()[index].copy(), device="cpu")
+    assert indexed.shape == expected.shape
+    torch.testing.assert_close(
+        indexed.mask, torch.nn.functional.one_hot(expected, 5).bool()
+    )
+    assert indexed.is_in(expected)
+    if expected.numel():
+        assert not indexed.is_in((expected + 1) % 5)
+        torch.testing.assert_close(
+            indexed.rand((4,)), expected.expand(4, *expected.shape)
+        )
+
+
+@pytest.mark.parametrize("index", [slice(None), slice(None, None, 1), ..., ()])
+def test_categorical_indexing_scalar_slice(index):
+    mask = torch.tensor([False, True, False], device="cpu")
+    spec = Categorical(3, shape=(), device="cpu", mask=mask)
+    indexed = spec[index]
+    assert indexed.shape == torch.Size([])
+    torch.testing.assert_close(indexed.mask, mask)
+    assert not indexed.is_in(torch.tensor(0, device="cpu"))
+    torch.testing.assert_close(
+        indexed.rand((4,)), torch.ones(4, dtype=torch.long, device="cpu")
+    )
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize(
+    "index",
+    [
+        (slice(None), 2),
+        (..., -2, slice(None)),
+        (None, slice(None), 2, ..., None),
+        (slice(None), torch.tensor(2, device="cpu")),
+        (slice(None), [2, 0]),
+    ],
+)
+def test_categorical_indexing_dynamic_integer(index, nested):
+    allowed = torch.arange(8, device="cpu").reshape(4, 1, 2) % 5
+    mask = torch.nn.functional.one_hot(allowed, 5).bool()
+    leaf = Categorical(5, shape=(4, -1, 2), device="cpu", mask=mask)
+    actions = allowed.expand(4, 3, 2)
+    assert leaf.is_in(actions)
+    if nested:
+        spec = Composite({("agent", "action"): leaf}, shape=leaf.shape, device="cpu")
+        indexed = spec[index]["agent", "action"]
+    else:
+        indexed = leaf[index]
+    expected = actions[index]
+    assert indexed.shape == expected.shape
+    assert indexed.is_in(expected)
+    assert not indexed.is_in((expected + 1) % 5)
+    torch.testing.assert_close(
+        indexed.mask, torch.nn.functional.one_hot(expected, 5).bool()
+    )
+    torch.testing.assert_close(indexed.rand((4,)), expected.expand(4, *expected.shape))
+
+
+@pytest.mark.parametrize("index", [slice(1, 2), slice(None, None, 2), slice(3, 0, -1)])
+def test_categorical_indexing_rejects_dynamic_partial_slice(index):
+    spec = Categorical(
+        3,
+        shape=(4, -1, 2),
+        device="cpu",
+        mask=torch.tensor([False, True, False], device="cpu"),
+    )
+    with pytest.raises(IndexError, match="dynamic"):
+        spec[:, index]
+
+
+@pytest.mark.parametrize(
+    "index, legacy_shape",
+    [
+        (slice(None, None, -1), (0, 3, 2)),
+        (
+            (torch.tensor([0, 2], device="cpu"), torch.tensor([1, 2], device="cpu")),
+            (2, 2, 2),
+        ),
+    ],
+)
+def test_categorical_indexing_rejects_inconsistent_mask_shape(index, legacy_shape):
+    # These indices have pre-existing shape semantics that differ from tensor indexing.
+    unmasked = Categorical(5, shape=(4, 3, 2), device="cpu")
+    assert unmasked[index].shape == legacy_shape
+    allowed = torch.arange(24, device="cpu").reshape(4, 3, 2) % 5
+    masked = Categorical(
+        5,
+        shape=allowed.shape,
+        device="cpu",
+        mask=torch.nn.functional.one_hot(allowed, 5).bool(),
+    )
+    with pytest.raises(IndexError, match="inconsistent"):
+        masked[index]
+
+
 @pytest.mark.parametrize("shape", ((), (1,), (2, 3), (2, 3, 4)))
 @pytest.mark.parametrize(
     "spectype", ["one_hot", "categorical", "mult_one_hot", "mult_discrete"]
