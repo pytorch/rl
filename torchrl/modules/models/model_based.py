@@ -1508,11 +1508,11 @@ def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
     Returns:
         The softmax-weighted expectation with the trailing category dimension
         removed, preserving the dtype and device of ``logits``. Mirrored bins are
-        paired through their probability difference before the products are
-        summed, so an antisymmetric support such as the default symexp grid
-        decodes uniform probabilities to exactly zero under any reduction
-        order or fused multiply-add contraction, including the kernels that
-        :func:`torch.compile` emits.
+        paired through the difference of their unnormalized probabilities, and
+        the sum is divided by the normalizer once, so an antisymmetric support
+        such as the default symexp grid decodes mirror-symmetric logits to
+        exactly zero under any reduction order or fused multiply-add
+        contraction, including the kernels that :func:`torch.compile` emits.
 
     Examples:
         >>> import torch
@@ -1526,25 +1526,29 @@ def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
         raise ValueError(
             "The trailing logits dimension must match the one-dimensional support."
         )
-    bins = bins.to(device=logits.device, dtype=logits.dtype)
-    probs = torch.softmax(logits, dim=-1)
+    # At least float32, so the unnormalized sum cannot overflow a half dtype.
+    dtype = torch.promote_types(logits.dtype, torch.float32)
+    bins = bins.to(device=logits.device, dtype=dtype)
+    # Pair before normalizing: a compiler may fuse a per-bin normalizing multiply
+    # into the difference, whose rounding error the large bins then amplify.
+    weights = (logits - logits.amax(-1, keepdim=True)).to(dtype).exp()
     size = logits.shape[-1]
     midpoint = size // 2
-    lower = probs[..., :midpoint].flip(-1)
+    lower = weights[..., :midpoint].flip(-1)
     lower_bins = bins[:midpoint].flip(-1)
     if size % 2:
-        upper = probs[..., midpoint + 1 :]
+        upper = weights[..., midpoint + 1 :]
         upper_bins = bins[midpoint + 1 :]
-        center = probs[..., midpoint] * bins[midpoint]
+        center = weights[..., midpoint] * bins[midpoint]
     else:
-        upper = probs[..., midpoint:]
+        upper = weights[..., midpoint:]
         upper_bins = bins[midpoint:]
         center = None
     paired = (upper - lower) * upper_bins + lower * (upper_bins + lower_bins)
     expectation = paired.sum(-1)
     if center is not None:
         expectation = expectation + center
-    return expectation
+    return (expectation / weights.sum(-1)).to(logits.dtype)
 
 
 def two_hot_cross_entropy(
