@@ -29,6 +29,11 @@ SKIP_TUTORIALS = {
     "export.py",  # Requires PyTorch 2.6+ for aoti_compile_and_package
 }
 
+# Keep this separate from SKIP_TUTORIALS so the LeRobot integration job can
+# opt in and run it with a compatible PyTorch version.
+# TODO: Re-evaluate a general way to run tutorials with different PyTorch versions.
+LEROBOT_TUTORIAL = "lerobot_export.py"
+
 # Tutorials that require GPU
 GPU_TUTORIALS = {
     "coding_ddpg.py",
@@ -50,6 +55,11 @@ def get_tutorial_files():
         if name.startswith("_"):
             continue
         if name in SKIP_TUTORIALS:
+            continue
+        if (
+            name == LEROBOT_TUTORIAL
+            and os.environ.get("TORCHRL_TEST_LEROBOT_TUTORIAL") != "1"
+        ):
             continue
         tutorials.append(path)
     return tutorials

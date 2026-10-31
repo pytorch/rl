@@ -107,7 +107,11 @@
 
 "Data/lerobot":
   - changed-files:
-    - any-glob-to-any-file: ['torchrl/data/datasets/lerobot*.py']
+    - any-glob-to-any-file:
+      - 'torchrl/data/datasets/lerobot*.py'
+      - 'tutorials/sphinx-tutorials/lerobot_export.py'
+      - '.github/unittest/linux_libs/scripts_lerobot/**'
+      - '.github/unittest/tutorials/scripts/test_tutorials.py'
 
 "Data/minari":
   - changed-files:
