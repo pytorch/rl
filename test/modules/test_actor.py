@@ -1804,6 +1804,32 @@ class TestExportOnnxPolicy:
                 out_keys=[self.observation_key],
             )
 
+    def test_graph_names_follow_keys(self, tmp_path):
+        torch.manual_seed(0)
+        policy = TensorDictSequential(
+            TensorDictModule(
+                nn.Sequential(nn.Linear(5, 5), nn.Linear(5, 3)),
+                in_keys=[self.observation_key],
+                out_keys=["linear"],
+            ),
+            TensorDictModule(
+                nn.Identity(), in_keys=[self.observation_key], out_keys=["copy"]
+            ),
+        ).eval()
+        observation = torch.randn(5)
+        example = TensorDict({self.observation_key: observation})
+        path = export_onnx_policy(
+            policy, tmp_path / "policy.onnx", example, out_keys=["linear", "copy"]
+        )
+        session = onnxruntime.InferenceSession(str(path))
+        assert [i.name for i in session.get_inputs()] == ["robot_observation"]
+        assert [o.name for o in session.get_outputs()] == ["linear", "copy"]
+        linear, copy = session.run(None, {"robot_observation": observation.numpy()})
+        with torch.no_grad():
+            expected = policy(example.clone())
+        torch.testing.assert_close(torch.as_tensor(linear), expected["linear"])
+        torch.testing.assert_close(torch.as_tensor(copy), observation)
+
     def test_batched_example_is_rejected(self, tmp_path):
         example = TensorDict({self.observation_key: torch.zeros(1, 5)}, [1])
         with pytest.raises(ValueError, match="unbatched"):

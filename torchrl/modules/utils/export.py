@@ -111,26 +111,59 @@ def export_onnx_policy(
         ]
     graph = TensorDictSequential(policy, selected_out_keys=list(out_keys))
     graph.training = policy.training
-    names = {}
-    for key in (*graph.in_keys, *graph.out_keys):
-        names.setdefault(_onnx_name(key), []).append(key)
-    clashes = {name: keys for name, keys in names.items() if len(keys) > 1}
-    if clashes:
+    input_names = [_onnx_name(key) for key in graph.in_keys]
+    output_names = [_onnx_name(key) for key in graph.out_keys]
+    names = input_names + output_names
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
         raise ValueError(
-            f"Graph inputs and outputs need distinct names, but these keys share one: {clashes}."
+            f"Graph inputs and outputs need distinct names, but {duplicates} is used "
+            f"more than once (in_keys={graph.in_keys}, out_keys={graph.out_keys}). "
+            "Rename one of the keys, or write a transformed entry to its own key "
+            "instead of in place."
         )
-    inputs = {_onnx_name(key): example.get(key) for key in graph.in_keys}
-    path = Path(path)
     with torch.no_grad():
-        torch.onnx.export(
+        program = torch.onnx.export(
             graph,
             (),
-            path,
-            kwargs=inputs,
-            output_names=[_onnx_name(key) for key in graph.out_keys],
+            kwargs={
+                name: example.get(key) for name, key in zip(input_names, graph.in_keys)
+            },
             opset_version=opset_version,
             dynamo=True,
-            external_data=False,
             verbose=False,
         )
+    _name_graph(program.model.graph, input_names, output_names)
+    path = Path(path)
+    program.save(path, external_data=False)
     return path
+
+
+def _name_graph(graph, input_names: list[str], output_names: list[str]) -> None:
+    """Name graph inputs and outputs after their keys, renaming generated values in the way."""
+    ends = dict(zip(graph.inputs, input_names)) | dict(zip(graph.outputs, output_names))
+    if (len(graph.inputs), len(graph.outputs), len(ends)) != (
+        len(input_names),
+        len(output_names),
+        len(input_names) + len(output_names),
+    ):
+        raise RuntimeError(
+            f"The exported graph does not hold one distinct value per key: it has "
+            f"{len(graph.inputs)} inputs and {len(graph.outputs)} outputs for the "
+            f"names {input_names} and {output_names}."
+        )
+    reserved = set(ends.values())
+    values = [
+        *graph.initializers.values(),
+        *(value for node in graph for value in node.outputs),
+    ]
+    taken = reserved | {value.name for value in values}
+    for value in values:
+        if value not in ends and value.name in reserved:
+            index = 0
+            while f"{value.name}_{index}" in taken:
+                index += 1
+            value.name = f"{value.name}_{index}"
+            taken.add(value.name)
+    for value, name in ends.items():
+        value.name = name
