@@ -463,6 +463,47 @@ class TestTanhNormal:
 
 
 class TestIndependentNormal:
+    @pytest.mark.parametrize("tanh_loc", [False, True])
+    @pytest.mark.parametrize("scale_type", ["tensor", "float", "callable"])
+    def test_location_scaling(self, tanh_loc, scale_type):
+        loc_values = [[10.0, -10.0], [2.0, -3.0]]
+        loc = torch.tensor(loc_values, dtype=torch.double, requires_grad=True)
+        if scale_type == "tensor":
+            scale = torch.ones_like(loc)
+        elif scale_type == "float":
+            scale = 1.0
+        else:
+            scale = torch.ones_like
+        upscale = 5.0
+        expected_mean = torch.tensor(
+            [
+                [upscale * math.tanh(x / upscale) if tanh_loc else x for x in row]
+                for row in loc_values
+            ],
+            dtype=torch.double,
+        )
+        value = torch.tensor([[0.0, 1.0], [1.0, -1.0]], dtype=torch.double)
+        expected_log_prob = (
+            -0.5 * (value - expected_mean).square() - 0.5 * math.log(2 * math.pi)
+        ).sum(-1)
+        expected_grad = torch.tensor(
+            [
+                [1 - math.tanh(x / upscale) ** 2 if tanh_loc else 1 for x in row]
+                for row in loc_values
+            ],
+            dtype=torch.double,
+        )
+
+        dist = IndependentNormal(loc, scale, tanh_loc=tanh_loc, upscale=upscale)
+        torch.testing.assert_close(dist.mean, expected_mean)
+        torch.testing.assert_close(dist.log_prob(value), expected_log_prob)
+        dist.mean.sum().backward()
+        torch.testing.assert_close(loc.grad, expected_grad)
+
+        dist.update(loc, scale)
+        torch.testing.assert_close(dist.mean, expected_mean)
+        torch.testing.assert_close(dist.log_prob(value), expected_log_prob)
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "callable_scale",
