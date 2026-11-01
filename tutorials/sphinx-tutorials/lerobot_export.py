@@ -37,8 +37,8 @@ What you will learn
 - Describe the data to export and save it as a LeRobot dataset.
 - Inspect the recording and load it back into TorchRL for further use.
 
-This tutorial requires Python 3.12 or newer, MuJoCo, IPython, and TorchRL
-installed with the ``lerobot`` extra. The MicroDuck assets download on first use.
+Install TorchRL with the ``lerobot`` extra, plus ``mujoco`` and ``ipython`` to run
+this tutorial. The ``lerobot`` extra requires Python 3.12 or newer.
 """
 
 from __future__ import annotations
@@ -70,15 +70,13 @@ from heuristic_gait import MicroDuckGaitActor  # noqa: E402
 # Setting up the collection
 # -------------------------
 #
-# We will collect 1,500 frames, with at most 500 steps per episode. The shorter
-# settings are used when building the documentation. Each run writes a new
-# dataset: the LeRobot writer expects a destination that does not exist yet.
+# We will collect 1,500 frames, with at most 500 steps per episode. Each run
+# writes a new dataset because the LeRobot writer expects a new destination.
 # To keep the result at a known location, set ``TORCHRL_LEROBOT_OUTPUT`` to a
 # new directory before running the tutorial.
 
-FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
-EPISODE_STEPS = 120 if FAST else 500
-TOTAL_FRAMES = 240 if FAST else 1500
+EPISODE_STEPS = 500
+TOTAL_FRAMES = 1500
 WIDTH, HEIGHT = 320, 240
 REPO_ID = os.environ.get("TORCHRL_LEROBOT_REPO_ID", "local/microduck-walk")
 PRIVATE_DATASET = True
@@ -99,7 +97,7 @@ OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 #
 # The walking controller comes from the MicroDuck example. It is a TensorDict
 # module, so a collector can use it as a policy in the same way it would use a
-# learned policy. Its gait is tuned for the default action scale of 0.35.
+# learned policy.
 
 policy = MicroDuckGaitActor()
 base_env = MicroDuckEnv(
@@ -157,37 +155,66 @@ assert abs(fps * base_env.dt - 1) < 1e-6
 # to update the policy. Here we will use the same collection-and-storage pattern
 # and export the collected experience once the loop finishes.
 #
-# Each MicroDuck batch has an environment dimension and a time dimension. We
-# flatten them so that each replay entry is one transition. We keep the current
-# observation, action and camera frame, the two counters, and the reward and
-# episode-end signals. Keeping only the fields we need also avoids storing a
-# second copy of each image under ``"next"``.
+# A collector batch has one dimension for environments and one for time. Let's
+# inspect the first batch before putting it in replay. This run has one
+# environment, so its batch contains one 500-step sequence.
 #
 # This example holds the whole recording in memory. For a larger collection,
 # :class:`~torchrl.data.LazyMemmapStorage` can store replay data on disk instead.
 
-replay = ReplayBuffer(storage=LazyTensorStorage(TOTAL_FRAMES), batch_size=8)
 collector = Collector(
     env,
     policy,
     frames_per_batch=EPISODE_STEPS,
     total_frames=TOTAL_FRAMES,
 )
+collector_iterator = iter(collector)
+first_batch = next(collector_iterator)
+
+# %%
+# The first batch has an environment dimension followed by time. The image
+# shape also shows that the simulator returns each frame in height, width,
+# channel order.
+
+(
+    first_batch.batch_size,
+    first_batch.keys(include_nested=True, leaves_only=True),
+    first_batch["pixels"].shape,
+)
+
+# %%
+# The replay buffer will store one row per transition. We select the fields we
+# need for export, dropping the other fields, including the next camera frame,
+# and flatten the environment and time dimensions into one transition dimension.
+
+transition_keys = (
+    "pixels",
+    "observation",
+    "action",
+    "episode",
+    "frame",
+    ("next", "reward"),
+    ("next", "done"),
+    ("next", "terminated"),
+    ("next", "truncated"),
+)
+transitions = first_batch.select(*transition_keys).reshape(-1)
+(
+    transitions.batch_size,
+    transitions.keys(include_nested=True, leaves_only=True),
+    transitions["pixels"].shape,
+)
+
+# %%
+# Add the prepared first batch, then prepare each later batch in the same way.
+# This is the collection-and-storage pattern used in off-policy training. Here
+# we export the complete buffer instead of sampling it to update a policy.
+
+replay = ReplayBuffer(storage=LazyTensorStorage(TOTAL_FRAMES), batch_size=8)
+replay.extend(transitions)
 try:
-    for batch in collector:
-        replay.extend(
-            batch.select(
-                "pixels",
-                "observation",
-                "action",
-                "episode",
-                "frame",
-                ("next", "reward"),
-                ("next", "done"),
-                ("next", "terminated"),
-                ("next", "truncated"),
-            ).reshape(-1)
-        )
+    for batch in collector_iterator:
+        replay.extend(batch.select(*transition_keys).reshape(-1))
 finally:
     collector.shutdown()
 
@@ -233,30 +260,21 @@ recording_summary
 # Describing the dataset
 # ----------------------
 #
-# Before exporting, we need to tell LeRobot what data each entry contains. Its
-# feature schema describes the names, shapes and dtypes of the data to save.
-# We will save the policy observation as ``"observation.state"``, the camera
-# as ``"observation.images.front"``, and the action, reward and end signals.
-#
-# The names in our replay buffer do not all match the LeRobot names. For
-# example, the camera is called ``"pixels"`` in TorchRL. ``key_map`` connects
-# the LeRobot feature names to the corresponding TensorDict keys. The simulator
-# returns images in height, width, channels order, while our schema declares
-# channels, height, width. The adapter converts the images when it writes them.
-#
-# The saved action is the policy's normalized action vector, not a measured
-# joint position. The environment scales it by ``action_scale`` and adds it to
-# the standing actuator targets. The observation includes the robot's
-# state, its command and gait-clock features. Knowing what these values mean
-# matters when someone later uses the dataset, so we will also save information
-# about the task and controller alongside it.
+# The replay buffer now has one row per transition. Let's check the shapes of
+# the numerical fields before describing them in the dataset schema.
+
+frames.batch_size, frames["observation"].shape, frames["action"].shape
+
+# %%
+# LeRobot's feature schema gives each saved field a name, shape and dtype. We
+# map the policy observation to ``"observation.state"`` and describe the action
+# and transition signals as numeric features.
 
 features = {
     "observation.state": {
         "dtype": "float32",
         "shape": (frames["observation"].shape[-1],),
     },
-    "observation.images.front": {"dtype": "video", "shape": (3, HEIGHT, WIDTH)},
     "action": {
         "dtype": "float32",
         "shape": (MicroDuckEnv.NUM_JOINTS,),
@@ -267,38 +285,35 @@ features = {
     "next.terminated": {"dtype": "bool", "shape": (1,)},
     "next.truncated": {"dtype": "bool", "shape": (1,)},
 }
-adapter = LeRobotDatasetAdapter(
-    repo_id=REPO_ID,
-    root=OUTPUT_ROOT / "dataset",
-    fps=fps,
-    features=features,
-    key_map={"observation.state": "observation", "observation.images.front": "pixels"},
-    task="Walk forward slowly while keeping balance.",
-    robot_type="microduck",
-    batch_size=32,
-)
 
 # %%
-# Exporting the episodes
-# ----------------------
-#
-# We can now export the buffer. ``trajectory_key`` tells the exporter which
-# transitions belong together, and ``step_key`` tells it their order within an
-# episode. The exporter groups by ID and sorts by step before passing the data
-# to LeRobot; the entries do not need to be arranged by episode in replay.
-#
-# This example uses one environment. When several workers contribute data, make
-# sure episode IDs are unique across all of them. :class:`~torchrl.envs.TrajCounter`
-# can be shared between workers, as shown in its documentation. Each retained
-# episode must also have consecutive steps. If the buffer retains only part of
-# an episode, that fragment is exported; missing transitions are not recreated.
-#
-# Once export finishes, the returned LeRobot dataset is saved locally, including
-# its metadata and encoded camera video. We also write the collection settings so
-# that someone using the data can interpret the observations and actions.
+# We use ``key_map`` to connect a LeRobot feature name to the TensorDict key
+# that holds its data. The camera frames are stored in TorchRL as ``"pixels"``.
+# Their final three dimensions are height, width, channels, while the LeRobot
+# camera feature is declared in channels, height, width order. The adapter
+# converts the layout when it writes the video.
 
-native = replay.export(adapter, trajectory_key="episode", step_key="frame")
-# Keep the task and controller settings with the exported data.
+frames["pixels"].shape[-3:]
+
+# %%
+
+features["observation.images.front"] = {
+    "dtype": "video",
+    "shape": (3, HEIGHT, WIDTH),
+}
+key_map = {
+    "observation.state": "observation",
+    "observation.images.front": "pixels",
+}
+(features["observation.images.front"], key_map)
+
+# %%
+# The action field stores the controller's normalized action vector, not a
+# measured joint position. MicroDuck scales it by ``action_scale`` and adds it
+# to its standing actuator targets. The observation combines robot state with
+# the tracking command and gait clock. We save the task and controller settings
+# so these numbers can be interpreted later.
+
 recording_configuration = {
     "environment": "MicroDuckEnv",
     "backend": "mujoco",
@@ -309,6 +324,43 @@ recording_configuration = {
     "fps": fps,
     "seed": 0,
 }
+recording_configuration
+
+# %%
+
+adapter = LeRobotDatasetAdapter(
+    repo_id=REPO_ID,
+    root=OUTPUT_ROOT / "dataset",
+    fps=fps,
+    features=features,
+    key_map=key_map,
+    task="Walk forward slowly while keeping balance.",
+    robot_type="microduck",
+    batch_size=32,
+)
+
+# %%
+# Exporting the episodes
+# ----------------------
+#
+# The ``episode`` values identify trajectories, and ``frame`` gives each
+# transition's position within its episode. We can inspect the episode lengths
+# before exporting.
+
+frames["episode"].unique(return_counts=True)
+
+# %%
+# ``trajectory_key`` tells the exporter which transitions belong together, and
+# ``step_key`` tells it their order within each episode. The exporter groups by
+# episode ID and sorts by step, so replay entries do not need to be arranged by
+# episode. IDs must be unique if multiple workers contribute data. The
+# :class:`~torchrl.envs.TrajCounter` documentation shows how to share a counter
+# across worker environments. Each retained episode must have consecutive
+# steps. A partially retained episode is exported as a fragment; the missing
+# transitions are not recreated.
+
+native = replay.export(adapter, trajectory_key="episode", step_key="frame")
+# Keep the task and controller settings with the exported data.
 (native.root / "recording_config.json").write_text(
     json.dumps(recording_configuration, indent=2) + "\n"
 )

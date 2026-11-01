@@ -69,7 +69,7 @@ sphinx_gallery_conf = {
     "capture_repr": ("_repr_html_", "__repr__"),
 }
 CONF
-    PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_TUTORIALS_FAST=1 "$trial_python" -m sphinx -b dummy \
+    PYOPENGL_PLATFORM=egl MUJOCO_GL=egl "$trial_python" -m sphinx -b dummy \
         "$gallery_source" "${trial_dir}/dummy-build"
 
 )
