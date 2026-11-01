@@ -371,7 +371,7 @@ In this way, we can train an algorithm offline on a dataset made of images:
         r3m_vec: f32[2048],
         terminated: bool[1],
         truncated: bool[1]})
-    Directory '/tmp/tmppheqkq2q' deleted successfully.
+    Directory '/tmp/tmpe_l9751q' deleted successfully.
 
 
 
@@ -379,7 +379,7 @@ In this way, we can train an algorithm offline on a dataset made of images:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.145 seconds)
+   **Total running time of the script:** (0 minutes 9.541 seconds)
 
 
 .. _sphx_glr_download_tutorials_pretrained_models.py:

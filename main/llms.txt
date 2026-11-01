@@ -511,6 +511,7 @@
 - [has_analytic_kl](reference/generated/torchrl.modules.distributions.utils.has_analytic_kl.md)
 - [rsample_and_log_prob](reference/generated/torchrl.modules.distributions.utils.rsample_and_log_prob.md)
 - [sample_and_log_prob](reference/generated/torchrl.modules.distributions.utils.sample_and_log_prob.md)
+- [export_onnx_policy](reference/generated/torchrl.modules.export_onnx_policy.md)
 - [signed_hyperbolic](reference/generated/torchrl.modules.functional.signed_hyperbolic.md)
 - [signed_parabolic](reference/generated/torchrl.modules.functional.signed_parabolic.md)
 - [symexp](reference/generated/torchrl.modules.functional.symexp.md)

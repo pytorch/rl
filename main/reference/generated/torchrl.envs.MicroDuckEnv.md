@@ -68,6 +68,17 @@ a unit normalized action. Defaults to `0.35`.
 term and pose diagnostics to the observation spec under
 `diagnostic_*` keys. Off by default because it roughly doubles
 the per-step task cost.
+- **policy_observation** (*bool**,**optional*) - if `True`, also expose the
+`policy_observation` entry: the 61-D vector the MicroDuck robot
+runtime feeds its policies at 50 Hz. It holds base angular
+velocity (3), projected gravity (3), joint-position error (14),
+joint velocity (14), the previous action (14) and the robot
+command (13): `(vx, vy, wz)`, four head-pose and six body-pose
+entries, of which the env fills `(vx, vy)` from `command` and
+leaves the rest at zero. Linear velocity and the gait clock, which
+the robot cannot measure, are left out, so `observation` remains
+available as a privileged critic input. The MJCF actuators must
+drive `JOINT_NAMES` in order. Defaults to `False`.
 - **root** (*str**or**Path**,**optional*) - directory holding downloaded
 `microduck_rl` checkouts. Defaults to
 `~/.cache/torchrl/microduck`.
@@ -194,6 +205,17 @@ torch.Size([1, 10, 1])
 >>> env = MicroDuckEnv(download=True, tasks=task)
 ```
 
+Train a policy the robot can run: the actor reads the robot's
+`policy_observation` while the critic keeps the privileged
+`observation` with linear velocity and the gait clock.
+
+```
+>>> env = MicroDuckEnv(download=True, policy_observation=True, num_envs=4) 
+>>> td = env.reset() 
+>>> td["policy_observation"].shape, td["observation"].shape 
+(torch.Size([4, 61]), torch.Size([4, 56]))
+```
+
 See also
 
 [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) represents one locomotion objective;
@@ -238,6 +260,14 @@ Reward terms that shape stepping; the standing and jump presets turn them off.
 HEAD_SITES*: ClassVar[tuple[str, str]]**= ('head_imu', 'mouth_tip')*
 
 Head landmarks. The IMU's local -z axis is the forward gaze direction.
+
+JOINT_NAMES*: ClassVar[tuple[str, ...]]**= ('left_hip_yaw', 'left_hip_roll', 'left_hip_pitch', 'left_knee', 'left_ankle', 'neck_pitch', 'head_pitch', 'head_yaw', 'head_roll', 'right_hip_yaw', 'right_hip_roll', 'right_hip_pitch', 'right_knee', 'right_ankle')*
+
+Actuated joints in the order the robot runtime reads and writes them.
+
+POLICY_COMMAND_START*: ClassVar[int]**= 48*
+
+Index of the robot command `(vx, vy, wz, head (4), body (6))` in `policy_observation`.
 
 RENDER_BACKGROUND*: ClassVar[tuple[float, float, float] | None]**= None*
 

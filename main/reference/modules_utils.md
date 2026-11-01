@@ -10,8 +10,9 @@ Utility modules and helper functions for building RL networks.
 | [`get_primers_from_module`](generated/torchrl.modules.get_primers_from_module.html#torchrl.modules.get_primers_from_module)(module[, warn, strict]) | Get all tensordict primers from all submodules of a module. |
 | [`get_env_transforms_from_module`](generated/torchrl.modules.get_env_transforms_from_module.html#torchrl.modules.get_env_transforms_from_module)(module[, ...]) | Return all [`TransformedEnv`](generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv) transforms needed for a recurrent module. |
 
-| [`get_recurrent_matmul_precision`](generated/torchrl.modules.get_recurrent_matmul_precision.html#torchrl.modules.get_recurrent_matmul_precision)() | Resolve the currently effective precision to a concrete mode. |
+| [`export_onnx_policy`](generated/torchrl.modules.export_onnx_policy.html#torchrl.modules.export_onnx_policy)(policy, path, example, *) | Export a policy to ONNX by tracing it with [`torch.onnx.export()`](https://docs.pytorch.org/docs/stable/onnx_export.html#torch.onnx.export). |
 | --- | --- |
+| [`get_recurrent_matmul_precision`](generated/torchrl.modules.get_recurrent_matmul_precision.html#torchrl.modules.get_recurrent_matmul_precision)() | Resolve the currently effective precision to a concrete mode. |
 | [`set_recurrent_matmul_precision`](generated/torchrl.modules.set_recurrent_matmul_precision.html#torchrl.modules.set_recurrent_matmul_precision)(mode) | Set the process-global precision for the triton RNN backend. |
 
 torchrl.modules.RecurrentMatmulPrecision

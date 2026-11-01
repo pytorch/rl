@@ -158,6 +158,7 @@ actor = ProbabilisticActor(
 - [ActorCriticWrapper](generated/torchrl.modules.ActorCriticWrapper.html)
 - [get_primers_from_module](generated/torchrl.modules.get_primers_from_module.html)
 - [get_env_transforms_from_module](generated/torchrl.modules.get_env_transforms_from_module.html)
+- [export_onnx_policy](generated/torchrl.modules.export_onnx_policy.html)
 - [get_recurrent_matmul_precision](generated/torchrl.modules.get_recurrent_matmul_precision.html)
 - [set_recurrent_matmul_precision](generated/torchrl.modules.set_recurrent_matmul_precision.html)
 - [`RecurrentMatmulPrecision`](modules_utils.html#torchrl.modules.RecurrentMatmulPrecision)
