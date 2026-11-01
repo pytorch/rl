@@ -60,6 +60,8 @@ def export_onnx_policy(
     Raises:
         ValueError: if ``example`` has a batch dimension, or if two input or
             output keys get the same name.
+        RuntimeError: if the exported graph does not hold one distinct input
+            or output per key, so it cannot be named after them.
 
     Examples:
         >>> import torch
@@ -79,7 +81,7 @@ def export_onnx_policy(
         ...     set_recurrent_mode,
         ...     TanhNormal,
         ... )
-        >>> lstm = LSTMModule(input_size=61, hidden_size=64, in_key="observation", out_key="features")
+        >>> lstm = LSTMModule(input_size=61, hidden_size=64, in_key="observation_norm", out_key="features")
         >>> head = TensorDictModule(
         ...     nn.Sequential(MLP(in_features=64, out_features=14, num_cells=[64]), AddStateIndependentNormalScale(14)),
         ...     in_keys=["features"],
@@ -90,7 +92,9 @@ def export_onnx_policy(
         ...     in_keys=["loc", "scale"],
         ...     distribution_class=TanhNormal,
         ... )
-        >>> norm = ObservationNorm(loc=torch.zeros(61), scale=torch.ones(61), in_keys=["observation"])
+        >>> norm = ObservationNorm(
+        ...     loc=torch.zeros(61), scale=torch.ones(61), in_keys=["observation"], out_keys=["observation_norm"]
+        ... )
         >>> policy = TensorDictSequential(norm, actor).eval()
         >>> example = lstm.make_tensordict_primer().primers.zero()
         >>> example["observation"] = torch.zeros(61)

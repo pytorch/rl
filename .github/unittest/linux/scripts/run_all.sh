@@ -154,7 +154,7 @@ uv_pip_install \
   ninja \
   timm \
   onnx \
-  onnxscript \
+  "onnxscript>=0.7.1" \
   onnxruntime
 
 # Dataset adapter tests are collected by the CPU bulk shard.
