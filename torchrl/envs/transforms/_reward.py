@@ -625,6 +625,22 @@ class RewardSum(Transform):
         for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             reward = tensordict[in_key]
             cumsum = reward.cumsum(time_dim)
+            done = tensordict.get(_replace_last(in_key, "done"), None)
+            if done is not None:
+                # restart the sum after each done by subtracting the sum reached
+                # at the last done strictly before each step
+                if done.ndim < reward.ndim:
+                    done = expand_as_right(done, reward)
+                cumsum = cumsum.movedim(time_dim, 0)
+                done = done.expand_as(reward).movedim(time_dim, 0)
+                steps = torch.arange(cumsum.shape[0], device=cumsum.device)
+                steps = steps.view(-1, *[1] * (cumsum.ndim - 1)).expand_as(cumsum)
+                last_done = torch.full_like(steps, -1)
+                last_done[1:] = torch.where(done[:-1], steps[:-1], -1)
+                last_done = last_done.cummax(0).values
+                offset = cumsum.gather(0, last_done.clamp_min(0))
+                cumsum = cumsum - torch.where(last_done >= 0, offset, 0)
+                cumsum = cumsum.movedim(0, time_dim)
             tensordict.set(out_key, cumsum)
         return tensordict
 

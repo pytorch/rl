@@ -643,6 +643,45 @@ class TestRewardSum(TransformBase):
         result = RewardSum(in_keys=[in_key], out_keys=[out_key])(td)
         torch.testing.assert_close(result[out_key], expected)
 
+    @pytest.mark.parametrize("in_key", ["reward", ("next", "reward")])
+    @pytest.mark.parametrize("layout", ["batch_time", "time_batch"])
+    def test_offline_done(self, in_key, layout):
+        # the sum restarts on the step after each done, taken from the entry
+        # next to the reward
+        reward = torch.tensor(
+            [
+                [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]],
+                [[10.0], [20.0], [30.0], [40.0], [50.0], [60.0]],
+            ]
+        )
+        done = torch.tensor(
+            [
+                [[False], [False], [True], [False], [False], [True]],
+                [[True], [False], [False], [True], [False], [False]],
+            ]
+        )
+        expected = torch.tensor(
+            [
+                [[1.0], [3.0], [6.0], [4.0], [9.0], [15.0]],
+                [[10.0], [20.0], [50.0], [90.0], [50.0], [110.0]],
+            ]
+        )
+        if layout == "batch_time":
+            names = [None, "time"]
+        else:
+            reward, done, expected = (
+                reward.transpose(0, 1),
+                done.transpose(0, 1),
+                expected.transpose(0, 1),
+            )
+            names = ["time", None]
+        done_key = _replace_last(in_key, "done")
+        td = TensorDict(
+            {in_key: reward, done_key: done}, batch_size=reward.shape[:-1], names=names
+        )
+        result = RewardSum(in_keys=[in_key], out_keys=["episode_reward"])(td)
+        torch.testing.assert_close(result["episode_reward"], expected)
+
     def test_transform_compose(
         self,
     ):
