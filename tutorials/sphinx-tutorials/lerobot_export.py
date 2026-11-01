@@ -6,24 +6,28 @@ Exporting Rollout data to LeRobot
 
 .. _lerobot_export_tuto:
 
-An RL policy learns from interactions with an environment. At each step, the
-policy receives an observation and chooses an action; the environment then
-returns a new observation, a reward and a signal indicating whether the episode
-has ended. During training, a replay buffer can hold these transitions so that
-an algorithm can sample from them and update the policy.
+An RL policy learns from the data it collects while interacting with an
+environment. During online training, a replay buffer stores those transitions
+so the policy can sample them again. We may also want to keep that experience
+after collection. It can help us inspect a policy's behavior, share recordings,
+or use the data for offline RL or imitation learning.
 
-Sometimes we want to keep a record of those interactions. A recording can help
-us inspect a robot's behavior, share data with a teammate, or reuse trajectories
-later for offline or imitation learning. For that, we need to save observations
-and actions together with their episode order and camera frames in a format
-that other tools can read.
+TorchRL replay buffers provide an export API for moving stored experience into
+a dataset. A dataset adapter maps TensorDict fields to the destination format
+and writes the data. This separates the way we collect and store experience
+from the details of each dataset format.
 
-`LeRobot <https://github.com/huggingface/lerobot>`_ provides a dataset format
-for this kind of robot data, along with tools for inspecting and sharing it.
-TorchRL collects transitions in TensorDicts; exporting them to LeRobot gives us
-an episode-based dataset with camera video that we can share and later read
-back into TorchRL. We will use a fixed walking controller in the MicroDuck
-simulator to produce the data, and a replay buffer to store it before export.
+TorchRL provides built-in adapters for several common dataset formats,
+including LeRobot. LeRobot provides a common format for robotics datasets. It
+is designed to store large collections from real-world robot runs efficiently,
+and its integration with the Hugging Face Hub makes those datasets easy to
+share and use with LeRobot tools.
+
+In this tutorial, we'll collect interactions with a MicroDuck simulation
+environment into a replay buffer, as in online RL. We'll export the buffer's
+contents to LeRobot, then load a batch back into TorchRL as a TensorDict. An
+upcoming tutorial will show how a LeRobot dataset can seed a replay buffer, so
+an RL run can start learning from already-collected data.
 
 What you will learn
 -------------------
