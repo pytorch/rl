@@ -4177,15 +4177,20 @@ class Categorical(TensorSpec):
         )
 
     def _reshape(self, shape):
+        mask = self.mask
+        if mask is not None:
+            mask = mask.reshape(*shape, mask.shape[-1])
         return self.__class__(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+            n=self.space.n,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask,
         )
 
     def _unflatten(self, dim, sizes):
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
-        return self.__class__(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
-        )
+        return self._reshape(shape)
 
     def squeeze(self, dim=None):
         shape = _squeezed_shape(self.shape, dim)
@@ -4253,7 +4258,11 @@ class Categorical(TensorSpec):
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
         return self.__class__(
-            n=self.space.n, shape=self.shape, device=dest_device, dtype=dest_dtype
+            n=self.space.n,
+            shape=self.shape,
+            device=dest_device,
+            dtype=dest_dtype,
+            mask=self.mask.to(dest_device) if self.mask is not None else None,
         )
 
     def clone(self) -> Categorical:
@@ -4997,13 +5006,12 @@ class MultiCategorical(Categorical):
         )
 
     def _reshape(self, shape):
-        mask = (
-            self.mask.reshape(*shape, self.mask.shape[-1])
-            if self.mask is not None
-            else None
-        )
+        mask = self.mask
+        if mask is not None:
+            # the last dim of the mask holds the outcomes of all the sub-actions
+            mask = mask.reshape(*shape[:-1], mask.shape[-1])
         return self.__class__(
-            nvec=self.nvec,
+            nvec=self.nvec.reshape(shape),
             shape=shape,
             device=self.device,
             dtype=self.dtype,
