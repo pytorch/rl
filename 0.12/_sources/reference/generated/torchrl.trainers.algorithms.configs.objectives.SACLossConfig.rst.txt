@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.SACLossConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: SACLossConfig

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.value.functional
+
+
+td1_return_estimate
+===================
+
+.. autoclass:: td1_return_estimate
+    :members:

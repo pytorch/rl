@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.datasets
+
+
+HuggingFaceDatasetAdapter
+=========================
+
+.. autoclass:: HuggingFaceDatasetAdapter
+    :members:
+    :inherited-members:

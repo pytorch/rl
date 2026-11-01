@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms
+
+
+ReinforceTrainer
+================
+
+.. autoclass:: ReinforceTrainer
+    :members:
+    :inherited-members:

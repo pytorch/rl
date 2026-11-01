@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms.configs
+
+
+instantiate_trainer
+===================
+
+.. autofunction:: instantiate_trainer

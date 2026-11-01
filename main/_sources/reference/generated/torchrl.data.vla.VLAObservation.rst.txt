@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.data.vla
+
+
+VLAObservation
+==============
+
+.. autoclass:: VLAObservation
+    :members:

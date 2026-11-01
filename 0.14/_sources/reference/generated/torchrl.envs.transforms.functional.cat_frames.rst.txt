@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms.functional
+
+
+cat_frames
+==========
+
+.. autoclass:: cat_frames
+    :members:

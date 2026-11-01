@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.multiagent
+
+
+QMixerLoss
+==========
+
+.. autoclass:: QMixerLoss
+    :members:

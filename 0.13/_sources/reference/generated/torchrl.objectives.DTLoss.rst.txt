@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+DTLoss
+======
+
+.. autoclass:: DTLoss
+    :members:

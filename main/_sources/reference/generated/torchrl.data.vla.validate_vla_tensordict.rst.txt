@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.data.vla
+
+
+validate_vla_tensordict
+=======================
+
+.. autoclass:: validate_vla_tensordict
+    :members:

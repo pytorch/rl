@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.CQLLossConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: CQLLossConfig

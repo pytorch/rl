@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+RewardScaling
+=============
+
+.. autoclass:: RewardScaling
+    :members:

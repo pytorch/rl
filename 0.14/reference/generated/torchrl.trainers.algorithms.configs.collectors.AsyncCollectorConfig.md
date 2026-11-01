@@ -1,0 +1,9 @@
+# torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig
+
+*class*torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig(*create_env_fn: ~torchrl.trainers.algorithms.configs.common.ConfigBase = <factory>*, *policy: ~typing.Any = None*, *policy_factory: ~typing.Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = 0*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *split_trajs: bool = False*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *set_truncated: bool = False*, *use_buffers: bool = False*, *replay_buffer: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *extend_buffer: bool = False*, *trust_policy: bool = True*, *compile_policy: ~typing.Any = None*, *cudagraph_policy: ~typing.Any = None*, *no_cuda_sync: bool = False*, *weight_updater: ~typing.Any = None*, *weight_sync_schemes: ~typing.Any = None*, *track_policy_version: bool = False*, *_target_: str = 'torchrl.collectors.AsyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#AsyncCollectorConfig)
+
+Hydra configuration for [`AsyncCollector`](torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector).
+
+Every kwarg accepted by `AsyncCollector.__init__` is exposed as a field here.
+Fields that AsyncCollector forwards to its inner `Collector` via `**kwargs`
+(replay buffer, weight sync, ...) are also exposed for convenience.

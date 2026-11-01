@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+TerminateTransform
+==================
+
+.. autoclass:: TerminateTransform
+    :members:

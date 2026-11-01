@@ -1,0 +1,2395 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.modules.models.gp &#8212; torchrl 0.13 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=9bec1924"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/modules/models/gp';</script>
+    <script src="../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.modules.models.gp - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="0.13">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '0.13');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../index.html" class="version">0.13</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../index.html" class="version">0.13</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.modu...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.modules.models.gp">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/modules/models/gp</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.modules.models.gp</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="c1">#</span>
+<span class="c1"># Variable naming follows Deisenroth &amp; Rasmussen (2011), &quot;PILCO: A Model-Based</span>
+<span class="c1"># and Data-Efficient Approach to Policy Search&quot; (cited inline as &quot;Eq. N&quot;).</span>
+<span class="c1">#</span>
+<span class="c1"># Key symbols</span>
+<span class="c1"># -----------</span>
+<span class="c1">#   x̃  := [x, u]              concatenated state-action input  (Eq. 1 / Sec. 2.1)</span>
+<span class="c1">#   Δ  := x_t - x_{t-1}       transition residual              (Sec. 2.1)</span>
+<span class="c1">#   K_a                        Gram matrix  K_{a,ij}=k_a(x̃_i,x̃_j)  (Eq. 6)</span>
+<span class="c1">#   β_a := (K_a + σ²_ε I)^{-1}y_a  GP weight vector           (Eq. 7)</span>
+<span class="c1">#   q_a                        kernel-mean vector               (Eq. 15)</span>
+<span class="c1">#   Q_{ab}                     cross-kernel matrix              (Eqs. 21-22)</span>
+<span class="c1">#   μ̃  / Σ̃                    joint state-action mean/cov      (Sec. 2.2)</span>
+<span class="c1">#   μ_Δ / Σ_Δ                  predictive mean/cov of Δ        (Eqs. 14, 17-23)</span>
+<span class="c1">#   μ_t / Σ_t                  next-state mean/cov             (Eqs. 10-11)</span>
+
+<span class="kn">import</span> <span class="nn">importlib.util</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
+
+<span class="n">_has_gpytorch</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;gpytorch&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="n">_has_botorch</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;botorch&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="GPWorldModel">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel">[docs]</a>
+<span class="k">class</span> <span class="nc">GPWorldModel</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Gaussian Process world model with moment-matching uncertainty propagation.</span>
+
+<span class="sd">    Implements the probabilistic dynamics model from PILCO</span>
+<span class="sd">    (Deisenroth &amp; Rasmussen, 2011). One independent GP is fit per state</span>
+<span class="sd">    dimension, each predicting the transition residual</span>
+<span class="sd">    ``Δ = x_t - x_{t-1}`` from the concatenated state-action input</span>
+<span class="sd">    ``x̃ = [x, u]`` (Sec. 2.1).</span>
+
+<span class="sd">    :meth:`forward` supports two modes depending on whether the input</span>
+<span class="sd">    observation carries non-zero variance:</span>
+
+<span class="sd">    - **Deterministic**: uses the GP posterior mean and variance directly</span>
+<span class="sd">      (Eqs. 7-8).</span>
+<span class="sd">    - **Uncertain** (moment-matching): propagates a Gaussian belief</span>
+<span class="sd">      ``N(μ, Σ)`` through the GP analytically (Eqs. 10-23).</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        Requires ``botorch`` and ``gpytorch`` as optional dependencies.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        obs_dim (int): Dimension D of the observation (state) space.</span>
+<span class="sd">        action_dim (int): Dimension F of the action (control) space.</span>
+<span class="sd">        in_keys (list of NestedKey, optional): Keys to read from the input</span>
+<span class="sd">            :class:`~tensordict.TensorDictBase`. Must contain five entries in</span>
+<span class="sd">            order: action mean, action covariance, state-action</span>
+<span class="sd">            cross-covariance, observation mean, observation covariance.</span>
+<span class="sd">            Defaults to ``[(&quot;action&quot;, &quot;mean&quot;), (&quot;action&quot;, &quot;var&quot;),</span>
+<span class="sd">            (&quot;action&quot;, &quot;cross_covariance&quot;), (&quot;observation&quot;, &quot;mean&quot;),</span>
+<span class="sd">            (&quot;observation&quot;, &quot;var&quot;)]``.</span>
+<span class="sd">        out_keys (list of NestedKey, optional): Keys to write the predicted</span>
+<span class="sd">            next-state mean and covariance to. Defaults to</span>
+<span class="sd">            ``[(&quot;next&quot;, &quot;observation&quot;, &quot;mean&quot;),</span>
+<span class="sd">            (&quot;next&quot;, &quot;observation&quot;, &quot;var&quot;)]``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; model = GPWorldModel(obs_dim=4, action_dim=1)</span>
+<span class="sd">        &gt;&gt;&gt; dataset = TensorDict(</span>
+<span class="sd">        ...     {</span>
+<span class="sd">        ...         &quot;observation&quot;: torch.randn(50, 4),</span>
+<span class="sd">        ...         &quot;action&quot;: torch.randn(50, 1),</span>
+<span class="sd">        ...         (&quot;next&quot;, &quot;observation&quot;): torch.randn(50, 4),</span>
+<span class="sd">        ...     },</span>
+<span class="sd">        ...     batch_size=[50],</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; model.fit(dataset)</span>
+
+<span class="sd">    Reference:</span>
+<span class="sd">        Deisenroth, M. P. &amp; Rasmussen, C. E. (2011). PILCO: A model-based</span>
+<span class="sd">        and data-efficient approach to policy search. *ICML*.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">obs_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">action_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_botorch</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">_has_gpytorch</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;botorch and gpytorch are required to use GPWorldModel. &quot;</span>
+                <span class="s2">&quot;Please install them to proceed.&quot;</span>
+            <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span> <span class="o">=</span> <span class="n">obs_dim</span>  <span class="c1"># D in the paper</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_dim</span> <span class="o">=</span> <span class="n">action_dim</span>  <span class="c1"># F in the paper</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_action_dim</span> <span class="o">=</span> <span class="n">obs_dim</span> <span class="o">+</span> <span class="n">action_dim</span>  <span class="c1"># D+F, dimension of x̃ (Sec. 2.1)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">in_keys</span>
+            <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="p">[</span>
+                <span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="s2">&quot;mean&quot;</span><span class="p">),</span>
+                <span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="s2">&quot;var&quot;</span><span class="p">),</span>
+                <span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="s2">&quot;cross_covariance&quot;</span><span class="p">),</span>
+                <span class="p">(</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;mean&quot;</span><span class="p">),</span>
+                <span class="p">(</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;var&quot;</span><span class="p">),</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">out_keys</span>
+            <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="p">[</span>
+                <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;mean&quot;</span><span class="p">),</span>
+                <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;var&quot;</span><span class="p">),</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_list</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># X̃ = [x̃_1, ..., x̃_n] ∈ R^{n×(D+F)}  – training inputs (Sec. 2.1)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;X_tilde_train&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+
+        <span class="c1"># ℓ_a ∈ R^{D+F}  – ARD length-scales for each output dimension a (Eq. 6).</span>
+        <span class="c1"># Stored as [D, D+F]; the full matrix Λ_a = diag(ℓ_a²) is never</span>
+        <span class="c1"># materialised — ℓ_a is squared on the fly wherever needed.</span>
+        <span class="c1"># Note: GPyTorch&#39;s .lengthscale returns ℓ directly (not ℓ²).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;ell&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_action_dim</span><span class="p">))</span>
+
+        <span class="c1"># α²_a  – signal variance for each output dimension a (Eq. 6); shape [D, 1]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;alpha_sq&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+        <span class="c1"># σ²_{ε_a}  – noise variance for each output dimension a (Sec. 2.1); shape [D]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;sigma_sq_eps&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span><span class="p">))</span>
+
+        <span class="c1"># (K_a + σ²_{ε_a} I)^{-1}  – cached inverse Gram matrices (Eq. 7); shape [D, n, n].</span>
+        <span class="c1"># Registered as buffers so they survive .to(device) and state_dict round-trips.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;_cached_inv_K_noisy&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="c1"># β_a = (K_a + σ²_{ε_a} I)^{-1} y_a  – GP weight vectors (Eq. 7); shape [D, n].</span>
+        <span class="c1"># Registered as a buffer so it survives .to(device) and state_dict round-trips.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;_cached_beta&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ell</span><span class="o">.</span><span class="n">device</span>
+
+<div class="viewcode-block" id="GPWorldModel.fit">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel.fit">[docs]</a>
+    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit one GP per state dimension to a dataset of transitions.</span>
+
+<span class="sd">        Constructs training inputs ``X̃ = [x, u]`` and targets</span>
+<span class="sd">        ``Δ_a = x_{t,a} - x_{t-1,a}``, then maximises the marginal</span>
+<span class="sd">        log-likelihood to learn SE kernel hyper-parameters</span>
+<span class="sd">        (ℓ_a, α²_a, σ²_{ε_a}) for each output dimension (Sec. 2.1, Eq. 6).</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">            The dataset is expected to be flat with shape ``[n, *]``. If your</span>
+<span class="sd">            replay buffer returns multi-dimensional batches (e.g. ``[B, T, *]``),</span>
+<span class="sd">            call ``dataset.reshape(-1)`` before passing it here.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataset (TensorDictBase): Transition dataset with keys</span>
+<span class="sd">                ``&quot;observation&quot;`` of shape ``(n, D)``,</span>
+<span class="sd">                ``&quot;action&quot;`` of shape ``(n, F)``, and</span>
+<span class="sd">                ``(&quot;next&quot;, &quot;observation&quot;)`` of shape ``(n, D)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">botorch.fit</span> <span class="kn">import</span> <span class="n">fit_gpytorch_mll</span>
+        <span class="kn">from</span> <span class="nn">botorch.models</span> <span class="kn">import</span> <span class="n">ModelListGP</span><span class="p">,</span> <span class="n">SingleTaskGP</span>
+        <span class="kn">from</span> <span class="nn">gpytorch.kernels</span> <span class="kn">import</span> <span class="n">RBFKernel</span><span class="p">,</span> <span class="n">ScaleKernel</span>
+        <span class="kn">from</span> <span class="nn">gpytorch.mlls</span> <span class="kn">import</span> <span class="n">SumMarginalLogLikelihood</span>
+        <span class="kn">from</span> <span class="nn">gpytorch.priors</span> <span class="kn">import</span> <span class="n">GammaPrior</span>
+
+        <span class="n">x_t_minus_1</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span>  <span class="c1"># x_{t-1} ∈ R^{n×D}</span>
+        <span class="n">u_t_minus_1</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span>  <span class="c1"># u_{t-1} ∈ R^{n×F}</span>
+        <span class="n">x_t</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">)]</span>  <span class="c1"># x_t     ∈ R^{n×D}</span>
+
+        <span class="c1"># x̃ = [x_{t-1}, u_{t-1}] ∈ R^{n×(D+F)}  – training inputs (Sec. 2.1)</span>
+        <span class="n">X_tilde_train</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">x_t_minus_1</span><span class="p">,</span> <span class="n">u_t_minus_1</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Δ ∈ R^{n×D},  Δ_{i,a} = x_{t,a} - x_{t-1,a}  – training targets (Sec. 2.1)</span>
+        <span class="n">Delta_train</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_t</span> <span class="o">-</span> <span class="n">x_t_minus_1</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">X_tilde_train</span> <span class="o">=</span> <span class="n">X_tilde_train</span>
+
+        <span class="n">models</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span><span class="p">):</span>
+            <span class="c1"># Each GP_a models p(Δ_a | x̃) independently (Sec. 2.1)</span>
+            <span class="n">Delta_a</span> <span class="o">=</span> <span class="n">Delta_train</span><span class="p">[:,</span> <span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># y_a ∈ R^{n×1}</span>
+
+            <span class="n">covar_module</span> <span class="o">=</span> <span class="n">ScaleKernel</span><span class="p">(</span>
+                <span class="c1"># SE kernel k_a(x̃, x̃&#39;) with ARD length-scales (one ℓ_{a,i}</span>
+                <span class="c1"># per input dimension, Eq. 6)</span>
+                <span class="n">RBFKernel</span><span class="p">(</span>
+                    <span class="n">ard_num_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">state_action_dim</span><span class="p">,</span>
+                    <span class="n">lengthscale_prior</span><span class="o">=</span><span class="n">GammaPrior</span><span class="p">(</span><span class="mf">1.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>
+                <span class="p">),</span>
+                <span class="n">outputscale_prior</span><span class="o">=</span><span class="n">GammaPrior</span><span class="p">(</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>  <span class="c1"># prior on α²_a (Eq. 6)</span>
+            <span class="p">)</span>
+
+            <span class="n">gp_a</span> <span class="o">=</span> <span class="n">SingleTaskGP</span><span class="p">(</span>
+                <span class="n">train_X</span><span class="o">=</span><span class="n">X_tilde_train</span><span class="p">,</span>
+                <span class="n">train_Y</span><span class="o">=</span><span class="n">Delta_a</span><span class="p">,</span>
+                <span class="n">covar_module</span><span class="o">=</span><span class="n">covar_module</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">gp_a</span><span class="o">.</span><span class="n">likelihood</span><span class="o">.</span><span class="n">noise_covar</span><span class="o">.</span><span class="n">register_prior</span><span class="p">(</span>
+                <span class="s2">&quot;noise_prior&quot;</span><span class="p">,</span>
+                <span class="n">GammaPrior</span><span class="p">(</span><span class="mf">1.2</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">),</span>
+                <span class="s2">&quot;noise&quot;</span><span class="p">,</span>  <span class="c1"># prior on σ²_{ε_a} (Sec. 2.1)</span>
+            <span class="p">)</span>
+
+            <span class="n">models</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">gp_a</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_list</span> <span class="o">=</span> <span class="n">ModelListGP</span><span class="p">(</span><span class="o">*</span><span class="n">models</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">mll</span> <span class="o">=</span> <span class="n">SumMarginalLogLikelihood</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_list</span><span class="o">.</span><span class="n">likelihood</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_list</span><span class="p">)</span>
+
+        <span class="n">fit_gpytorch_mll</span><span class="p">(</span><span class="n">mll</span><span class="p">)</span>  <span class="c1"># evidence maximisation (Sec. 2.1)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_extract_and_cache_parameters</span><span class="p">(</span><span class="n">Delta_train</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_extract_and_cache_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Delta_train</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Extract learned hyper-parameters from each GP_a and pre-compute the</span>
+        <span class="c1"># quantities that are fixed after fitting:</span>
+        <span class="c1">#   ℓ_a,  α²_a,  σ²_{ε_a}               (Eq. 6 / Sec. 2.1)</span>
+        <span class="c1">#   (K_a + σ²_{ε_a} I)^{-1}              (Eq. 7)</span>
+        <span class="c1">#   β_a = (K_a + σ²_{ε_a} I)^{-1} y_a   (Eq. 7)</span>
+        <span class="n">ell_list</span><span class="p">,</span> <span class="n">alpha_sq_list</span><span class="p">,</span> <span class="n">sigma_sq_eps_list</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="n">inv_K_noisy_list</span><span class="p">,</span> <span class="n">beta_list</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X_tilde_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># number of training points</span>
+
+        <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">gp_a</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_list</span><span class="o">.</span><span class="n">models</span><span class="p">):</span>
+            <span class="n">gp_a</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+            <span class="n">gp_a</span><span class="o">.</span><span class="n">likelihood</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+
+            <span class="c1"># ℓ_a ∈ R^{D+F}  – ARD length-scales for GP_a (Eq. 6).</span>
+            <span class="c1"># GPyTorch&#39;s .lengthscale returns ℓ directly (not ℓ²).</span>
+            <span class="n">ell_a</span> <span class="o">=</span> <span class="n">gp_a</span><span class="o">.</span><span class="n">covar_module</span><span class="o">.</span><span class="n">base_kernel</span><span class="o">.</span><span class="n">lengthscale</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+            <span class="c1"># α²_a  – signal variance for GP_a (Eq. 6)</span>
+            <span class="n">alpha_sq_a</span> <span class="o">=</span> <span class="n">gp_a</span><span class="o">.</span><span class="n">covar_module</span><span class="o">.</span><span class="n">outputscale</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+            <span class="c1"># σ²_{ε_a}  – noise variance for GP_a (Sec. 2.1)</span>
+            <span class="n">sigma_sq_eps_a</span> <span class="o">=</span> <span class="n">gp_a</span><span class="o">.</span><span class="n">likelihood</span><span class="o">.</span><span class="n">noise</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+            <span class="n">ell_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ell_a</span><span class="p">)</span>
+            <span class="n">alpha_sq_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">alpha_sq_a</span><span class="p">)</span>
+            <span class="n">sigma_sq_eps_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sigma_sq_eps_a</span><span class="p">)</span>
+
+            <span class="c1"># K_{a,ij} = α²_a exp(-½ (x̃_i-x̃_j)^T Λ_a^{-1} (x̃_i-x̃_j))  (Eq. 6)</span>
+            <span class="c1"># Dividing X̃ by ℓ_a gives Λ_a^{-1/2}-scaled inputs for cdist.</span>
+            <span class="n">X_tilde_scaled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X_tilde_train</span> <span class="o">/</span> <span class="n">ell_a</span>
+            <span class="n">sq_dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cdist</span><span class="p">(</span><span class="n">X_tilde_scaled</span><span class="p">,</span> <span class="n">X_tilde_scaled</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+            <span class="n">K_a</span> <span class="o">=</span> <span class="n">alpha_sq_a</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">sq_dist</span><span class="p">)</span>
+
+            <span class="c1"># K_{a,noisy} = K_a + σ²_{ε_a} I  (denominator in Eq. 7)</span>
+            <span class="n">K_a_noisy</span> <span class="o">=</span> <span class="n">K_a</span> <span class="o">+</span> <span class="p">(</span><span class="n">sigma_sq_eps_a</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+            <span class="n">L_a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cholesky</span><span class="p">(</span><span class="n">K_a_noisy</span><span class="p">)</span>
+            <span class="n">eye_n</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">L_a</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">L_a</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+            <span class="c1"># (K_a + σ²_{ε_a} I)^{-1}  (Eq. 7)</span>
+            <span class="n">inv_K_a_noisy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cholesky_solve</span><span class="p">(</span><span class="n">eye_n</span><span class="p">,</span> <span class="n">L_a</span><span class="p">)</span>
+
+            <span class="c1"># y_a = [Δ_{1,a}, ..., Δ_{n,a}]^T  – targets for GP_a (Sec. 2.1)</span>
+            <span class="n">y_a</span> <span class="o">=</span> <span class="n">Delta_train</span><span class="p">[:,</span> <span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># β_a = (K_a + σ²_{ε_a} I)^{-1} y_a  (Eq. 7)</span>
+            <span class="n">beta_a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cholesky_solve</span><span class="p">(</span><span class="n">y_a</span><span class="p">,</span> <span class="n">L_a</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="n">inv_K_noisy_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">inv_K_a_noisy</span><span class="p">)</span>
+            <span class="n">beta_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_a</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ell</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">ell_list</span><span class="p">)</span>  <span class="c1"># [D, D+F]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha_sq</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">alpha_sq_list</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [D, 1]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sigma_sq_eps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">sigma_sq_eps_list</span><span class="p">)</span>  <span class="c1"># [D]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cached_inv_K_noisy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">inv_K_noisy_list</span><span class="p">)</span>  <span class="c1"># [D, n, n]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cached_beta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">beta_list</span><span class="p">)</span>  <span class="c1"># [D, n]</span>
+
+<div class="viewcode-block" id="GPWorldModel.compute_factorizations">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel.compute_factorizations">[docs]</a>
+    <span class="k">def</span> <span class="nf">compute_factorizations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the cached kernel inverses and GP weight vectors.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[Tensor, Tensor]: A pair ``(inv_K_noisy, beta)`` where</span>
+<span class="sd">            ``inv_K_noisy`` has shape ``(D, n, n)`` and contains</span>
+<span class="sd">            ``(K_a + σ²_{ε_a} I)^{-1}`` for each output dimension (Eq. 7),</span>
+<span class="sd">            and ``beta`` has shape ``(D, n)`` and contains</span>
+<span class="sd">            ``β_a = (K_a + σ²_{ε_a} I)^{-1} y_a`` (Eq. 7).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_inv_K_noisy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_beta</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_gather_gp_hyperparams</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="c1"># Returns (ell, alpha_sq, sigma_sq_eps) — the SE kernel hyper-parameters</span>
+        <span class="c1"># for each GP_a (Eq. 6 / Sec. 2.1):</span>
+        <span class="c1">#   ell:          ℓ_{a,i},    shape [D, D+F]  (ℓ, not ℓ²)</span>
+        <span class="c1">#   alpha_sq:     α²_a,       shape [D, 1]</span>
+        <span class="c1">#   sigma_sq_eps: σ²_{ε_a},   shape [D]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ell</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha_sq</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma_sq_eps</span>
+
+<div class="viewcode-block" id="GPWorldModel.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Predict the next-state distribution given the current state and action.</span>
+
+<span class="sd">        Routes to :meth:`uncertain_forward` (moment-matching, Eqs. 10-23) when</span>
+<span class="sd">        any input covariance is non-zero, and to</span>
+<span class="sd">        :meth:`deterministic_forward` (Eqs. 7-8) otherwise.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): Input tensordict containing keys</span>
+<span class="sd">                defined by ``in_keys``. Observation and action tensors may be</span>
+<span class="sd">                unbatched ``(D,)`` / ``(F,)`` or batched ``(B, D)`` /</span>
+<span class="sd">                ``(B, F)``; a leading batch dimension will be added and removed</span>
+<span class="sd">                automatically for unbatched inputs. The observation covariance,</span>
+<span class="sd">                when present, must be a full matrix of shape ``(..., D, D)``</span>
+<span class="sd">                — per-dimension variance vectors are not accepted; use</span>
+<span class="sd">                :func:`torch.diag_embed` to convert them first.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TensorDictBase: The same tensordict, updated in-place with the</span>
+<span class="sd">            predicted next-state mean and covariance written to ``out_keys``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">u_mean_key</span><span class="p">,</span> <span class="n">u_var_key</span><span class="p">,</span> <span class="n">u_cc_key</span><span class="p">,</span> <span class="n">x_mean_key</span><span class="p">,</span> <span class="n">x_var_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span>
+
+        <span class="n">Sigma_x</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">x_var_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">Sigma_x</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">Sigma_x</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Expected observation covariance to have at least 2 dimensions &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(..., D, D), got shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">Sigma_x</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Convert per-dimension variances with torch.diag_embed() first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">Sigma_u</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">u_var_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">Sigma_xu</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">u_cc_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="nf">_has_nonzero_covariance</span><span class="p">(</span><span class="n">covariance</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">all</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">covariance</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">covariance</span><span class="p">))</span>
+            <span class="p">)</span>
+
+        <span class="n">observation_uncertain</span> <span class="o">=</span> <span class="n">_has_nonzero_covariance</span><span class="p">(</span><span class="n">Sigma_x</span><span class="p">)</span>
+        <span class="n">action_uncertain</span> <span class="o">=</span> <span class="n">_has_nonzero_covariance</span><span class="p">(</span><span class="n">Sigma_u</span><span class="p">)</span>
+        <span class="n">cross_uncertain</span> <span class="o">=</span> <span class="n">_has_nonzero_covariance</span><span class="p">(</span><span class="n">Sigma_xu</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">observation_uncertain</span> <span class="ow">or</span> <span class="n">action_uncertain</span> <span class="ow">or</span> <span class="n">cross_uncertain</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">uncertain_forward</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">deterministic_forward</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GPWorldModel.uncertain_forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel.uncertain_forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">uncertain_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Moment-matching forward pass for a Gaussian input belief (Eqs. 10-23).</span>
+
+<span class="sd">        Propagates the joint Gaussian belief</span>
+<span class="sd">        ``p(x̃_{t-1}) = N(μ̃_{t-1}, Σ̃_{t-1})`` (Sec. 2.2) through the GP</span>
+<span class="sd">        dynamics model and returns a Gaussian approximation to ``p(x_t)``</span>
+<span class="sd">        via exact moment matching.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): Input tensordict with keys defined by</span>
+<span class="sd">                ``in_keys``. Supports unbatched ``(D,)`` inputs or batched</span>
+<span class="sd">                inputs with a single leading batch dimension ``(B, D)``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TensorDictBase: The same tensordict updated with next-state mean</span>
+<span class="sd">            ``μ_t`` (Eq. 10) and covariance ``Σ_t`` (Eq. 11) at ``out_keys``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">inv_K_noisy</span><span class="p">,</span> <span class="n">beta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_factorizations</span><span class="p">()</span>
+        <span class="n">ell</span><span class="p">,</span> <span class="n">alpha_sq</span><span class="p">,</span> <span class="n">sigma_sq_eps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gather_gp_hyperparams</span><span class="p">()</span>
+        <span class="n">u_mean_key</span><span class="p">,</span> <span class="n">u_var_key</span><span class="p">,</span> <span class="n">u_cc_key</span><span class="p">,</span> <span class="n">x_mean_key</span><span class="p">,</span> <span class="n">x_var_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span>
+
+        <span class="n">mu_x</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">x_mean_key</span><span class="p">)</span>  <span class="c1"># μ_x,  shape (B×)D</span>
+        <span class="n">Sigma_x</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">x_var_key</span><span class="p">)</span>  <span class="c1"># Σ_x,  shape (B×)D×D</span>
+        <span class="n">mu_u</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">u_mean_key</span><span class="p">)</span>  <span class="c1"># μ_u,  shape (B×)F</span>
+        <span class="n">Sigma_u</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">u_var_key</span><span class="p">)</span>  <span class="c1"># Σ_u,  shape (B×)F×F</span>
+        <span class="n">C_xu</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="n">u_cc_key</span>
+        <span class="p">)</span>  <span class="c1"># ∂μ_u/∂μ_x (policy Jacobian),  (B×)D×F  (Eq. 12)</span>
+
+        <span class="c1"># Support unbatched inputs by temporarily adding a leading batch dimension.</span>
+        <span class="n">unbatched</span> <span class="o">=</span> <span class="n">mu_x</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">unbatched</span><span class="p">:</span>
+            <span class="n">mu_x</span><span class="p">,</span> <span class="n">Sigma_x</span><span class="p">,</span> <span class="n">mu_u</span><span class="p">,</span> <span class="n">Sigma_u</span><span class="p">,</span> <span class="n">C_xu</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">mu_x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                <span class="n">Sigma_x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                <span class="n">mu_u</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                <span class="n">Sigma_u</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                <span class="n">C_xu</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">mu_x</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">mu_x</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="n">B</span> <span class="o">=</span> <span class="n">mu_x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># batch size</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X_tilde_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># number of training points</span>
+        <span class="n">D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span>  <span class="c1"># state dimension</span>
+        <span class="n">DF</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_action_dim</span>  <span class="c1"># D+F, dimension of x̃</span>
+
+        <span class="c1"># ---- Build joint state-action distribution p(x̃_{t-1}) (Sec. 2.2) ----</span>
+        <span class="c1"># μ̃_{t-1} = [μ_x; μ_u] ∈ R^{B×(D+F)}</span>
+        <span class="n">mu_tilde</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">mu_x</span><span class="p">,</span> <span class="n">mu_u</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Σ̃_{t-1} = [[Σ_x,           Σ_x ∂π/∂μ_x   ],</span>
+        <span class="c1">#             [(∂π/∂μ_x)^T Σ_x, Σ_u          ]]  ∈ R^{B×(D+F)×(D+F)}</span>
+        <span class="c1"># C_xu is the policy Jacobian ∂μ_u/∂μ_x, so cov(x,u) = Σ_x @ C_xu  (Eq. 12)</span>
+        <span class="n">Sigma_x_C_xu</span> <span class="o">=</span> <span class="n">Sigma_x</span> <span class="o">@</span> <span class="n">C_xu</span>  <span class="c1"># upper-right block [B, D, F]</span>
+        <span class="n">Sigma_tilde</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">Sigma_x</span><span class="p">,</span> <span class="n">Sigma_x_C_xu</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">Sigma_x_C_xu</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">Sigma_u</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="p">],</span>
+            <span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>  <span class="c1"># [B, D+F, D+F]</span>
+
+        <span class="c1"># ---- Compute q_a (mean-prediction kernel vector, Eq. 15) ----</span>
+        <span class="c1"># ν_i = x̃_i - μ̃_{t-1}  (Eq. 16); shape [B, n, D+F]</span>
+        <span class="n">nu</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X_tilde_train</span> <span class="o">-</span> <span class="n">mu_tilde</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Λ_a^{-1} as diagonal matrices; shape [D, D+F, D+F].</span>
+        <span class="c1"># ell stores ℓ_a (not ℓ²_a), so 1/ℓ_a gives the diagonal of Λ_a^{-1/2};</span>
+        <span class="c1"># used here to form the full Λ_a^{-1} = diag(1/ℓ²_a) = diag(1/ℓ_a)².</span>
+        <span class="n">inv_Lambda_diag_mats</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">diag_embed</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">ell</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Λ_a^{-1} ν_i; shape [B, D, n, D+F]</span>
+        <span class="n">inv_Lambda_nu</span> <span class="o">=</span> <span class="n">nu</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">inv_Lambda_diag_mats</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># R_a = Λ_a^{-1} Σ̃_{t-1} Λ_a^{-1} + I  – normalising matrix in Eq. 15;</span>
+        <span class="c1"># shape [B, D, D+F, D+F]</span>
+        <span class="n">R_a</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">inv_Lambda_diag_mats</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<div class="viewcode-block" id="GPWorldModel.deterministic_forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel.deterministic_forward">[docs]</a>
+            <span class="o">@</span> <span class="n">Sigma_tilde</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="o">@</span> <span class="n">inv_Lambda_diag_mats</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">R_a</span> <span class="o">=</span> <span class="n">R_a</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">DF</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">DF</span><span class="p">,</span> <span class="n">DF</span><span class="p">)</span>
+
+        <span class="c1"># Solve R_a t = (Λ_a^{-1} ν_i)^T  →  t = R_a^{-1} Λ_a^{-1} ν_i^T</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">R_a</span><span class="p">,</span> <span class="n">inv_Lambda_nu</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># exp(-½ ν_i^T (Σ̃ + Λ_a)^{-1} ν_i)  – exponent in Eq. 15; shape [B, D, n]</span>
+        <span class="n">scaled_exp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">inv_Lambda_nu</span> <span class="o">*</span> <span class="n">t</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span>
+
+        <span class="c1"># Scalar prefactor α²_a / sqrt(|Σ̃_{t-1} Λ_a^{-1} + I|) from Eq. 15; shape [B, D]</span>
+        <span class="n">det_R_a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">R_a</span><span class="p">)</span>
+        <span class="n">c_a</span> <span class="o">=</span> <span class="n">alpha_sq</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">det_R_a</span><span class="p">)</span>
+
+        <span class="c1"># β_a ⊙ q_a (pointwise); shape [B, D, n]</span>
+        <span class="n">beta_q_a</span> <span class="o">=</span> <span class="n">scaled_exp</span> <span class="o">*</span> <span class="n">beta</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># μ^a_Δ = β_a^T q_a  (Eq. 14); shape [B, D]</span>
+        <span class="n">mu_Delta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">beta_q_a</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">c_a</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># ---- Cross-covariance cov[x̃_{t-1}, Δ_t]  (used in Eq. 12) ----</span>
+        <span class="c1"># Derivative of μ_Δ w.r.t. μ̃, contracted with Σ̃ (Deisenroth 2010);</span>
+        <span class="c1"># shape [B, D+F, D]</span>
+        <span class="n">t_inv_Lambda</span> <span class="o">=</span> <span class="n">t</span> <span class="o">@</span> <span class="n">inv_Lambda_diag_mats</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">cov_xtilde_Delta</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span>
+                <span class="n">t_inv_Lambda</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">beta_q_a</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="o">*</span> <span class="n">c_a</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># ---- Compute Q_{ab} (cross-kernel matrix, Eqs. 21-22) ----</span>
+        <span class="n">X_i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X_tilde_train</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [n, 1, D+F]</span>
+        <span class="n">X_j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X_tilde_train</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># [1, n, D+F]</span>
+        <span class="n">diff_ij</span> <span class="o">=</span> <span class="n">X_i</span> <span class="o">-</span> <span class="n">X_j</span>  <span class="c1"># x̃_i - x̃_j; [n, n, D+F]  (Eq. 22)</span>
+
+        <span class="c1"># ell stores ℓ_a; ℓ²_a is the diagonal of Λ_a  (Eq. 6)</span>
+        <span class="n">ell_sq_a</span> <span class="o">=</span> <span class="p">(</span><span class="n">ell</span><span class="o">**</span><span class="mi">2</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>  <span class="c1"># [D, 1, D+F]</span>
+        <span class="n">ell_sq_b</span> <span class="o">=</span> <span class="p">(</span><span class="n">ell</span><span class="o">**</span><span class="mi">2</span><span class="p">)[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>  <span class="c1"># [1, D, D+F]</span>
+
+        <span class="c1"># Λ_{ab} = (Λ_a^{-1} + Λ_b^{-1})^{-1},  diagonal entries; [D, D, D+F]</span>
+        <span class="n">inv_ell_sq_sum</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">ell_sq_a</span> <span class="o">+</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">ell_sq_b</span>
+        <span class="n">Lambda_ab</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">inv_ell_sq_sum</span>
+
+        <span class="c1"># First exponential in Q_{ab,ij}: kernel product at training inputs (Eq. 22)</span>
+        <span class="c1"># -½ (x̃_i - x̃_j)^T (Λ_a + Λ_b)^{-1} (x̃_i - x̃_j); shape [D, D, n, n]</span>
+        <span class="n">inv_ell_sq_sum_ab</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">ell_sq_a</span> <span class="o">+</span> <span class="n">ell_sq_b</span><span class="p">)</span>
+        <span class="n">exp1</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span>
+            <span class="n">diff_ij</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="o">*</span> <span class="n">inv_ell_sq_sum_ab</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="o">*</span> <span class="n">diff_ij</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>  <span class="c1"># [D, D, n, n]</span>
+
+        <span class="c1"># z̄_{ij} = Λ_{ab} (Λ_a^{-1} x̃_i + Λ_b^{-1} x̃_j)  – midpoint (Eq. 22);</span>
+        <span class="c1"># shape [D, D, n, n, D+F]</span>
+        <span class="n">z_bar</span> <span class="o">=</span> <span class="n">Lambda_ab</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span>
+            <span class="n">X_i</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">ell_sq_a</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="o">+</span> <span class="n">X_j</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">ell_sq_b</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># z_{ij} = z̄_{ij} - μ̃_{t-1}; shape [B, D, D, n, n, D+F]</span>
+        <span class="n">z_bar</span> <span class="o">=</span> <span class="n">z_bar</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">z_ij</span> <span class="o">=</span> <span class="n">z_bar</span> <span class="o">-</span> <span class="n">mu_tilde</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">z_ij_flat</span> <span class="o">=</span> <span class="n">z_ij</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">n</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span> <span class="n">DF</span><span class="p">)</span>
+
+        <span class="c1"># M_{ab} = Σ̃_{t-1} + diag(Λ_{ab})  – matrix in second exp of Eq. 22;</span>
+        <span class="c1"># shape [B, D, D, D+F, D+F]</span>
+        <span class="n">M_ab</span> <span class="o">=</span> <span class="n">Sigma_tilde</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">diag_embed</span><span class="p">(</span><span class="n">Lambda_ab</span><span class="p">)</span>
+
+        <span class="c1"># Second exponential: -½ z_{ij}^T M_{ab}^{-1} z_{ij}; shape [B, D, D, n, n]</span>
+        <span class="n">M_ab_solved</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">M_ab</span><span class="p">,</span> <span class="n">z_ij_flat</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span>
+            <span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="p">)</span>
+        <span class="n">exp2</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">z_ij_flat</span> <span class="o">*</span> <span class="n">M_ab_solved</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+
+        <span class="c1"># R_{ab} = Σ̃_{t-1} (Λ_a^{-1} + Λ_b^{-1}) + I  – normalising matrix (Eq. 22);</span>
+        <span class="c1"># shape [B, D, D, D+F, D+F]</span>
+        <span class="n">R_ab</span> <span class="o">=</span> <span class="n">Sigma_tilde</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">@</span> <span class="n">torch</span><span class="o">.</span><span class="n">diag_embed</span><span class="p">(</span>
+            <span class="n">inv_ell_sq_sum</span>
+        <span class="p">)</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">DF</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">det_R_ab</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">R_ab</span><span class="p">)</span>  <span class="c1"># [B, D, D]</span>
+
+        <span class="c1"># Scalar prefactor α²_a α²_b / sqrt(|R_{ab}|)  (Eq. 22); shape [B, D, D]</span>
+        <span class="n">c_ab</span> <span class="o">=</span> <span class="p">(</span><span class="n">alpha_sq</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">alpha_sq</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span> <span class="o">/</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">det_R_ab</span><span class="p">)</span>
+
+        <span class="c1"># Q_{ab,ij}  (Eq. 22); shape [B, D, D, n, n]</span>
+        <span class="n">Q_ab</span> <span class="o">=</span> <span class="n">c_ab</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">exp1</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">exp2</span><span class="p">)</span>
+
+        <span class="c1"># ---- Σ_Δ = predictive covariance of Δ  (Eqs. 17-23) ----</span>
+        <span class="c1"># Off-diagonal entries: σ²_{ab} = β_a^T Q_{ab} β_b - μ^a_Δ μ^b_Δ  (Eqs. 18, 20)</span>
+        <span class="n">beta_a</span> <span class="o">=</span> <span class="n">beta</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>  <span class="c1"># [1, D, 1, n]</span>
+        <span class="n">beta_b</span> <span class="o">=</span> <span class="n">beta</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>  <span class="c1"># [1, 1, D, n]</span>
+
+        <span class="n">Q_ab_beta_b</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">Q_ab</span><span class="p">,</span> <span class="n">beta_b</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span>
+            <span class="o">-</span><span class="mi">1</span>
+        <span class="p">)</span>  <span class="c1"># [B, D, D, n]</span>
+        <span class="n">Sigma_Delta</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">beta_a</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">Q_ab_beta_b</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+            <span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>  <span class="c1"># [B, D, D]  – β_a^T Q_{ab} β_b  (Eq. 20)</span>
+
+        <span class="c1"># Diagonal correction  E_{x̃}[var_f[Δ_a | x̃]] = α²_a - tr(K_a^{-1} Q_{aa})</span>
+        <span class="c1"># added to σ²_{aa}  (Eqs. 17, 23)</span>
+        <span class="n">invK_Q</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span>
+            <span class="n">inv_K_noisy</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>  <span class="c1"># [1, D, 1, n, n]</span>
+            <span class="n">Q_ab</span><span class="p">,</span>  <span class="c1"># [B, D, D, n, n]</span>
+        <span class="p">)</span>  <span class="c1"># [B, D, D, n, n]</span>
+        <span class="n">trace_invK_Q</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">invK_Q</span><span class="p">,</span> <span class="n">dim1</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">dim2</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [B, D, D]</span>
+
+        <span class="n">diag_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">D</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">alpha_sq_b</span> <span class="o">=</span> <span class="n">alpha_sq</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [B, D]</span>
+        <span class="n">sigma_sq_eps_b</span> <span class="o">=</span> <span class="n">sigma_sq_eps</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [B, D]</span>
+
+        <span class="c1"># Add α²_a - tr(K_a^{-1} Q_{aa}) + σ²_{ε_a} to the diagonal  (Eqs. 17, 23)</span>
+        <span class="n">Sigma_Delta</span><span class="p">[:,</span> <span class="n">diag_idx</span><span class="p">,</span> <span class="n">diag_idx</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span>
+            <span class="n">alpha_sq_b</span> <span class="o">-</span> <span class="n">trace_invK_Q</span><span class="p">[:,</span> <span class="n">diag_idx</span><span class="p">,</span> <span class="n">diag_idx</span><span class="p">]</span> <span class="o">+</span> <span class="n">sigma_sq_eps_b</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Subtract outer product of means: Σ_Δ -= μ_Δ μ_Δ^T  (Eqs. 17-18)</span>
+        <span class="n">Sigma_Delta</span> <span class="o">=</span> <span class="n">Sigma_Delta</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">bmm</span><span class="p">(</span>
+            <span class="n">mu_Delta</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">mu_Delta</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">Sigma_Delta</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">Sigma_Delta</span> <span class="o">+</span> <span class="n">Sigma_Delta</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>  <span class="c1"># enforce symmetry</span>
+
+        <span class="c1"># ---- Propagate to next-state belief (Eqs. 10-12) ----</span>
+        <span class="c1"># cov[x_{t-1}, Δ_t] = cov[x_{t-1}, x̃_{t-1}] · cov_xtilde_Delta  (Eq. 12)</span>
+        <span class="c1"># cov[x_{t-1}, x̃_{t-1}] is the top-D rows of Σ̃_{t-1}: shape [B, D, D+F].</span>
+        <span class="c1"># Using only Sigma_x_C_xu ([B, D, F]) here would be wrong — it drops</span>
+        <span class="c1"># the Σ_x block and produces a [B, D, F] @ [B, D+F, D] shape mismatch.</span>
+        <span class="n">Sigma_x_rows</span> <span class="o">=</span> <span class="n">Sigma_tilde</span><span class="p">[:,</span> <span class="p">:</span><span class="n">D</span><span class="p">,</span> <span class="p">:]</span>  <span class="c1"># [B, D, D+F]</span>
+        <span class="n">cov_x_Delta</span> <span class="o">=</span> <span class="n">Sigma_x_rows</span> <span class="o">@</span> <span class="n">cov_xtilde_Delta</span>  <span class="c1"># [B, D, D]</span>
+
+        <span class="c1"># μ_t = μ_{t-1} + μ_Δ  (Eq. 10)</span>
+        <span class="n">mu_t</span> <span class="o">=</span> <span class="n">mu_x</span> <span class="o">+</span> <span class="n">mu_Delta</span>
+
+        <span class="c1"># Σ_t = Σ_{t-1} + Σ_Δ + cov[x_{t-1},Δ_t] + cov[Δ_t,x_{t-1}]  (Eq. 11)</span>
+        <span class="n">Sigma_t</span> <span class="o">=</span> <span class="n">Sigma_x</span> <span class="o">+</span> <span class="n">Sigma_Delta</span> <span class="o">+</span> <span class="n">cov_x_Delta</span> <span class="o">+</span> <span class="n">cov_x_Delta</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">Sigma_t</span> <span class="o">=</span> <span class="p">(</span><span class="n">Sigma_t</span> <span class="o">+</span> <span class="n">Sigma_t</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span> <span class="o">/</span> <span class="mi">2</span>  <span class="c1"># enforce symmetry</span>
+        <span class="n">Sigma_t</span> <span class="o">=</span> <span class="n">Sigma_t</span> <span class="o">+</span> <span class="mf">1e-8</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">D</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span>
+            <span class="n">B</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="p">)</span>  <span class="c1"># jitter</span>
+
+        <span class="k">if</span> <span class="n">unbatched</span><span class="p">:</span>
+            <span class="n">mu_t</span> <span class="o">=</span> <span class="n">mu_t</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">Sigma_t</span> <span class="o">=</span> <span class="n">Sigma_t</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">out_mean_key</span><span class="p">,</span> <span class="n">out_var_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span>
+        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_mean_key</span><span class="p">,</span> <span class="n">mu_t</span><span class="p">)</span>
+        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_var_key</span><span class="p">,</span> <span class="n">Sigma_t</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+
+
+    <span class="k">def</span> <span class="nf">deterministic_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deterministic forward pass using GP posterior mean and variance (Eqs. 7-8).</span>
+
+<span class="sd">        Used when the input observation is a point estimate with no uncertainty.</span>
+<span class="sd">        Returns the GP posterior mean ``m_f(x̃_*)`` (Eq. 7) and per-dimension</span>
+<span class="sd">        variance ``σ²_f(x̃_*)`` (Eq. 8) for each state dimension.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): Input tensordict with keys defined by</span>
+<span class="sd">                ``in_keys``. Supports arbitrary leading batch dimensions</span>
+<span class="sd">                ``(*batch, D)`` / ``(*batch, F)``, as well as unbatched</span>
+<span class="sd">                ``(D,)`` / ``(F,)`` inputs.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TensorDictBase: The same tensordict updated with next-state mean</span>
+<span class="sd">            ``μ_t`` and diagonal covariance ``Σ_t = diag(σ²_Δ)`` at</span>
+<span class="sd">            ``out_keys``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">u_mean_key</span><span class="p">,</span> <span class="n">u_var_key</span><span class="p">,</span> <span class="n">u_cc_key</span><span class="p">,</span> <span class="n">x_mean_key</span><span class="p">,</span> <span class="n">x_var_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span>
+        <span class="n">mu_x</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">x_mean_key</span><span class="p">)</span>  <span class="c1"># x_{t-1}, shape (*batch, D) or (D,)</span>
+        <span class="n">mu_u</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">u_mean_key</span><span class="p">)</span>  <span class="c1"># u_{t-1}, shape (*batch, F) or (F,)</span>
+
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">mu_x</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># leading dims; () for unbatched inputs</span>
+
+        <span class="c1"># Flatten all leading batch dimensions to a single axis for the GP</span>
+        <span class="c1"># posterior call, then restore the original shape afterwards.</span>
+        <span class="n">x_flat</span> <span class="o">=</span> <span class="n">mu_x</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span><span class="p">)</span>  <span class="c1"># [B_flat, D]</span>
+        <span class="n">u_flat</span> <span class="o">=</span> <span class="n">mu_u</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_dim</span><span class="p">)</span>  <span class="c1"># [B_flat, F]</span>
+
+        <span class="c1"># x̃_* = [x_{t-1}, u_{t-1}] ∈ R^{B_flat×(D+F)}  (Sec. 2.1)</span>
+        <span class="n">X_tilde_test</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">x_flat</span><span class="p">,</span> <span class="n">u_flat</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># GP posterior mean m_f(x̃_*) (Eq. 7) and std σ_f(x̃_*) (Eq. 8)</span>
+        <span class="n">mu_Delta_list</span><span class="p">,</span> <span class="n">sigma_Delta_list</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">gp_a</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_list</span><span class="o">.</span><span class="n">models</span><span class="p">:</span>
+                <span class="n">posterior_a</span> <span class="o">=</span> <span class="n">gp_a</span><span class="o">.</span><span class="n">posterior</span><span class="p">(</span><span class="n">X_tilde_test</span><span class="p">)</span>
+                <span class="n">mu_Delta_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">posterior_a</span><span class="o">.</span><span class="n">mean</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>  <span class="c1"># m_f  (Eq. 7)</span>
+                <span class="n">sigma_Delta_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">posterior_a</span><span class="o">.</span><span class="n">variance</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># σ_f  (Eq. 8)</span>
+                <span class="p">)</span>
+
+        <span class="c1"># μ_Δ – predicted residual mean; restore original batch shape</span>
+        <span class="n">mu_Delta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">mu_Delta_list</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">*</span><span class="n">batch_shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span><span class="p">)</span>
+
+        <span class="c1"># σ_Δ – predicted residual std; restore original batch shape</span>
+        <span class="n">sigma_Delta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">sigma_Delta_list</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">batch_shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_dim</span>
+        <span class="p">)</span>
+
+        <span class="c1"># μ_t = x_{t-1} + μ_Δ  (deterministic version of Eq. 10)</span>
+        <span class="n">mu_t</span> <span class="o">=</span> <span class="n">mu_x</span> <span class="o">+</span> <span class="n">mu_Delta</span>
+
+        <span class="c1"># Σ_t = diag(σ²_Δ)  – diagonal covariance from independent GP variances (Eq. 8)</span>
+        <span class="n">Sigma_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">diag_embed</span><span class="p">(</span><span class="n">sigma_Delta</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="n">out_mean_key</span><span class="p">,</span> <span class="n">out_var_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span>
+        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_mean_key</span><span class="p">,</span> <span class="n">mu_t</span><span class="p">)</span>
+        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_var_key</span><span class="p">,</span> <span class="n">Sigma_t</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.modules.models.gp",
+       "headline": "torchrl.modules.models.gp",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/modules/models/gp.html",
+       "articleBody": "Source code for torchrl.modules.models.gp # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. # # Variable naming follows Deisenroth \u0026 Rasmussen (2011), \"PILCO: A Model-Based # and Data-Efficient Approach to Policy Search\" (cited inline as \"Eq. N\"). # # Key symbols # ----------- # x\u0303 := [x, u] concatenated state-action input (Eq. 1 / Sec. 2.1) # \u0394 := x_t - x_{t-1} transition residual (Sec. 2.1) # K_a Gram matrix K_{a,ij}=k_a(x\u0303_i,x\u0303_j) (Eq. 6) # \u03b2_a := (K_a + \u03c3\u00b2_\u03b5 I)^{-1}y_a GP weight vector (Eq. 7) # q_a kernel-mean vector (Eq. 15) # Q_{ab} cross-kernel matrix (Eqs. 21-22) # \u03bc\u0303 / \u03a3\u0303 joint state-action mean/cov (Sec. 2.2) # \u03bc_\u0394 / \u03a3_\u0394 predictive mean/cov of \u0394 (Eqs. 14, 17-23) # \u03bc_t / \u03a3_t next-state mean/cov (Eqs. 10-11) import importlib.util import torch import torch.nn as nn from tensordict import TensorDictBase _has_gpytorch = importlib.util.find_spec(\"gpytorch\") is not None _has_botorch = importlib.util.find_spec(\"botorch\") is not None [docs] class GPWorldModel(nn.Module): \"\"\"Gaussian Process world model with moment-matching uncertainty propagation. Implements the probabilistic dynamics model from PILCO (Deisenroth \u0026 Rasmussen, 2011). One independent GP is fit per state dimension, each predicting the transition residual ``\u0394 = x_t - x_{t-1}`` from the concatenated state-action input ``x\u0303 = [x, u]`` (Sec. 2.1). :meth:`forward` supports two modes depending on whether the input observation carries non-zero variance: - **Deterministic**: uses the GP posterior mean and variance directly (Eqs. 7-8). - **Uncertain** (moment-matching): propagates a Gaussian belief ``N(\u03bc, \u03a3)`` through the GP analytically (Eqs. 10-23). .. note:: Requires ``botorch`` and ``gpytorch`` as optional dependencies. Args: obs_dim (int): Dimension D of the observation (state) space. action_dim (int): Dimension F of the action (control) space. in_keys (list of NestedKey, optional): Keys to read from the input :class:`~tensordict.TensorDictBase`. Must contain five entries in order: action mean, action covariance, state-action cross-covariance, observation mean, observation covariance. Defaults to ``[(\"action\", \"mean\"), (\"action\", \"var\"), (\"action\", \"cross_covariance\"), (\"observation\", \"mean\"), (\"observation\", \"var\")]``. out_keys (list of NestedKey, optional): Keys to write the predicted next-state mean and covariance to. Defaults to ``[(\"next\", \"observation\", \"mean\"), (\"next\", \"observation\", \"var\")]``. Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e model = GPWorldModel(obs_dim=4, action_dim=1) \u003e\u003e\u003e dataset = TensorDict( ... { ... \"observation\": torch.randn(50, 4), ... \"action\": torch.randn(50, 1), ... (\"next\", \"observation\"): torch.randn(50, 4), ... }, ... batch_size=[50], ... ) \u003e\u003e\u003e model.fit(dataset) Reference: Deisenroth, M. P. \u0026 Rasmussen, C. E. (2011). PILCO: A model-based and data-efficient approach to policy search. *ICML*. \"\"\" def __init__( self, obs_dim: int, action_dim: int, in_keys: list[str | tuple[str, ...]] | None = None, out_keys: list[str | tuple[str, ...]] | None = None, ) -\u003e None: if not _has_botorch or not _has_gpytorch: raise ImportError( \"botorch and gpytorch are required to use GPWorldModel. \" \"Please install them to proceed.\" ) super().__init__() self.obs_dim = obs_dim # D in the paper self.action_dim = action_dim # F in the paper self.state_action_dim = obs_dim + action_dim # D+F, dimension of x\u0303 (Sec. 2.1) self.in_keys = ( in_keys if in_keys is not None else [ (\"action\", \"mean\"), (\"action\", \"var\"), (\"action\", \"cross_covariance\"), (\"observation\", \"mean\"), (\"observation\", \"var\"), ] ) self.out_keys = ( out_keys if out_keys is not None else [ (\"next\", \"observation\", \"mean\"), (\"next\", \"observation\", \"var\"), ] ) self.model_list = None # X\u0303 = [x\u0303_1, ..., x\u0303_n] \u2208 R^{n\u00d7(D+F)} \u2013 training inputs (Sec. 2.1) self.register_buffer(\"X_tilde_train\", torch.empty(0)) # \u2113_a \u2208 R^{D+F} \u2013 ARD length-scales for each output dimension a (Eq. 6). # Stored as [D, D+F]; the full matrix \u039b_a = diag(\u2113_a\u00b2) is never # materialised \u2014 \u2113_a is squared on the fly wherever needed. # Note: GPyTorch\u0027s .lengthscale returns \u2113 directly (not \u2113\u00b2). self.register_buffer(\"ell\", torch.zeros(self.obs_dim, self.state_action_dim)) # \u03b1\u00b2_a \u2013 signal variance for each output dimension a (Eq. 6); shape [D, 1] self.register_buffer(\"alpha_sq\", torch.zeros(self.obs_dim, 1)) # \u03c3\u00b2_{\u03b5_a} \u2013 noise variance for each output dimension a (Sec. 2.1); shape [D] self.register_buffer(\"sigma_sq_eps\", torch.zeros(self.obs_dim)) # (K_a + \u03c3\u00b2_{\u03b5_a} I)^{-1} \u2013 cached inverse Gram matrices (Eq. 7); shape [D, n, n]. # Registered as buffers so they survive .to(device) and state_dict round-trips. self.register_buffer(\"_cached_inv_K_noisy\", None) # \u03b2_a = (K_a + \u03c3\u00b2_{\u03b5_a} I)^{-1} y_a \u2013 GP weight vectors (Eq. 7); shape [D, n]. # Registered as a buffer so it survives .to(device) and state_dict round-trips. self.register_buffer(\"_cached_beta\", None) @property def device(self) -\u003e torch.device: return self.ell.device [docs] def fit(self, dataset: TensorDictBase) -\u003e None: \"\"\"Fit one GP per state dimension to a dataset of transitions. Constructs training inputs ``X\u0303 = [x, u]`` and targets ``\u0394_a = x_{t,a} - x_{t-1,a}``, then maximises the marginal log-likelihood to learn SE kernel hyper-parameters (\u2113_a, \u03b1\u00b2_a, \u03c3\u00b2_{\u03b5_a}) for each output dimension (Sec. 2.1, Eq. 6). .. note:: The dataset is expected to be flat with shape ``[n, *]``. If your replay buffer returns multi-dimensional batches (e.g. ``[B, T, *]``), call ``dataset.reshape(-1)`` before passing it here. Args: dataset (TensorDictBase): Transition dataset with keys ``\"observation\"`` of shape ``(n, D)``, ``\"action\"`` of shape ``(n, F)``, and ``(\"next\", \"observation\")`` of shape ``(n, D)``. \"\"\" from botorch.fit import fit_gpytorch_mll from botorch.models import ModelListGP, SingleTaskGP from gpytorch.kernels import RBFKernel, ScaleKernel from gpytorch.mlls import SumMarginalLogLikelihood from gpytorch.priors import GammaPrior x_t_minus_1 = dataset[\"observation\"] # x_{t-1} \u2208 R^{n\u00d7D} u_t_minus_1 = dataset[\"action\"] # u_{t-1} \u2208 R^{n\u00d7F} x_t = dataset[(\"next\", \"observation\")] # x_t \u2208 R^{n\u00d7D} # x\u0303 = [x_{t-1}, u_{t-1}] \u2208 R^{n\u00d7(D+F)} \u2013 training inputs (Sec. 2.1) X_tilde_train = ( torch.cat([x_t_minus_1, u_t_minus_1], dim=-1).detach().to(self.device) ) # \u0394 \u2208 R^{n\u00d7D}, \u0394_{i,a} = x_{t,a} - x_{t-1,a} \u2013 training targets (Sec. 2.1) Delta_train = (x_t - x_t_minus_1).detach().to(self.device) self.X_tilde_train = X_tilde_train models = [] for a in range(self.obs_dim): # Each GP_a models p(\u0394_a | x\u0303) independently (Sec. 2.1) Delta_a = Delta_train[:, a].unsqueeze(-1) # y_a \u2208 R^{n\u00d71} covar_module = ScaleKernel( # SE kernel k_a(x\u0303, x\u0303\u0027) with ARD length-scales (one \u2113_{a,i} # per input dimension, Eq. 6) RBFKernel( ard_num_dims=self.state_action_dim, lengthscale_prior=GammaPrior(1.1, 0.1), ), outputscale_prior=GammaPrior(1.5, 0.5), # prior on \u03b1\u00b2_a (Eq. 6) ) gp_a = SingleTaskGP( train_X=X_tilde_train, train_Y=Delta_a, covar_module=covar_module, ) gp_a.likelihood.noise_covar.register_prior( \"noise_prior\", GammaPrior(1.2, 0.05), \"noise\", # prior on \u03c3\u00b2_{\u03b5_a} (Sec. 2.1) ) models.append(gp_a) self.model_list = ModelListGP(*models).to(self.device) mll = SumMarginalLogLikelihood(self.model_list.likelihood, self.model_list) fit_gpytorch_mll(mll) # evidence maximisation (Sec. 2.1) self._extract_and_cache_parameters(Delta_train) def _extract_and_cache_parameters(self, Delta_train: torch.Tensor) -\u003e None: # Extract learned hyper-parameters from each GP_a and pre-compute the # quantities that are fixed after fitting: # \u2113_a, \u03b1\u00b2_a, \u03c3\u00b2_{\u03b5_a} (Eq. 6 / Sec. 2.1) # (K_a + \u03c3\u00b2_{\u03b5_a} I)^{-1} (Eq. 7) # \u03b2_a = (K_a + \u03c3\u00b2_{\u03b5_a} I)^{-1} y_a (Eq. 7) ell_list, alpha_sq_list, sigma_sq_eps_list = [], [], [] inv_K_noisy_list, beta_list = [], [] n = self.X_tilde_train.shape[0] # number of training points for a, gp_a in enumerate(self.model_list.models): gp_a.eval() gp_a.likelihood.eval() # \u2113_a \u2208 R^{D+F} \u2013 ARD length-scales for GP_a (Eq. 6). # GPyTorch\u0027s .lengthscale returns \u2113 directly (not \u2113\u00b2). ell_a = gp_a.covar_module.base_kernel.lengthscale.squeeze().detach() # \u03b1\u00b2_a \u2013 signal variance for GP_a (Eq. 6) alpha_sq_a = gp_a.covar_module.outputscale.detach() # \u03c3\u00b2_{\u03b5_a} \u2013 noise variance for GP_a (Sec. 2.1) sigma_sq_eps_a = gp_a.likelihood.noise.squeeze().detach() ell_list.append(ell_a) alpha_sq_list.append(alpha_sq_a) sigma_sq_eps_list.append(sigma_sq_eps_a) # K_{a,ij} = \u03b1\u00b2_a exp(-\u00bd (x\u0303_i-x\u0303_j)^T \u039b_a^{-1} (x\u0303_i-x\u0303_j)) (Eq. 6) # Dividing X\u0303 by \u2113_a gives \u039b_a^{-1/2}-scaled inputs for cdist. X_tilde_scaled = self.X_tilde_train / ell_a sq_dist = torch.cdist(X_tilde_scaled, X_tilde_scaled, p=2) ** 2 K_a = alpha_sq_a * torch.exp(-0.5 * sq_dist) # K_{a,noisy} = K_a + \u03c3\u00b2_{\u03b5_a} I (denominator in Eq. 7) K_a_noisy = K_a + (sigma_sq_eps_a + 1e-6) * torch.eye(n, device=self.device) L_a = torch.linalg.cholesky(K_a_noisy) eye_n = torch.eye(n, dtype=L_a.dtype, device=L_a.device) # (K_a + \u03c3\u00b2_{\u03b5_a} I)^{-1} (Eq. 7) inv_K_a_noisy = torch.cholesky_solve(eye_n, L_a) # y_a = [\u0394_{1,a}, ..., \u0394_{n,a}]^T \u2013 targets for GP_a (Sec. 2.1) y_a = Delta_train[:, a].unsqueeze(-1) # \u03b2_a = (K_a + \u03c3\u00b2_{\u03b5_a} I)^{-1} y_a (Eq. 7) beta_a = torch.cholesky_solve(y_a, L_a).squeeze(-1) inv_K_noisy_list.append(inv_K_a_noisy) beta_list.append(beta_a) self.ell = torch.stack(ell_list) # [D, D+F] self.alpha_sq = torch.stack(alpha_sq_list).unsqueeze(-1) # [D, 1] self.sigma_sq_eps = torch.stack(sigma_sq_eps_list) # [D] self._cached_inv_K_noisy = torch.stack(inv_K_noisy_list) # [D, n, n] self._cached_beta = torch.stack(beta_list) # [D, n] [docs] def compute_factorizations(self) -\u003e tuple[torch.Tensor, torch.Tensor]: \"\"\"Return the cached kernel inverses and GP weight vectors. Returns: tuple[Tensor, Tensor]: A pair ``(inv_K_noisy, beta)`` where ``inv_K_noisy`` has shape ``(D, n, n)`` and contains ``(K_a + \u03c3\u00b2_{\u03b5_a} I)^{-1}`` for each output dimension (Eq. 7), and ``beta`` has shape ``(D, n)`` and contains ``\u03b2_a = (K_a + \u03c3\u00b2_{\u03b5_a} I)^{-1} y_a`` (Eq. 7). \"\"\" return self._cached_inv_K_noisy, self._cached_beta def _gather_gp_hyperparams(self) -\u003e tuple[torch.Tensor, torch.Tensor, torch.Tensor]: # Returns (ell, alpha_sq, sigma_sq_eps) \u2014 the SE kernel hyper-parameters # for each GP_a (Eq. 6 / Sec. 2.1): # ell: \u2113_{a,i}, shape [D, D+F] (\u2113, not \u2113\u00b2) # alpha_sq: \u03b1\u00b2_a, shape [D, 1] # sigma_sq_eps: \u03c3\u00b2_{\u03b5_a}, shape [D] return self.ell, self.alpha_sq, self.sigma_sq_eps [docs] def forward(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Predict the next-state distribution given the current state and action. Routes to :meth:`uncertain_forward` (moment-matching, Eqs. 10-23) when any input covariance is non-zero, and to :meth:`deterministic_forward` (Eqs. 7-8) otherwise. Args: tensordict (TensorDictBase): Input tensordict containing keys defined by ``in_keys``. Observation and action tensors may be unbatched ``(D,)`` / ``(F,)`` or batched ``(B, D)`` / ``(B, F)``; a leading batch dimension will be added and removed automatically for unbatched inputs. The observation covariance, when present, must be a full matrix of shape ``(..., D, D)`` \u2014 per-dimension variance vectors are not accepted; use :func:`torch.diag_embed` to convert them first. Returns: TensorDictBase: The same tensordict, updated in-place with the predicted next-state mean and covariance written to ``out_keys``. \"\"\" u_mean_key, u_var_key, u_cc_key, x_mean_key, x_var_key = self.in_keys Sigma_x = tensordict.get(x_var_key, None) if Sigma_x is not None and Sigma_x.dim() \u003c 2: raise ValueError( f\"Expected observation covariance to have at least 2 dimensions \" f\"(..., D, D), got shape {tuple(Sigma_x.shape)}. \" \"Convert per-dimension variances with torch.diag_embed() first.\" ) Sigma_u = tensordict.get(u_var_key, None) Sigma_xu = tensordict.get(u_cc_key, None) def _has_nonzero_covariance(covariance: torch.Tensor | None) -\u003e bool: return covariance is not None and not torch.all( torch.isclose(covariance, torch.zeros_like(covariance)) ) observation_uncertain = _has_nonzero_covariance(Sigma_x) action_uncertain = _has_nonzero_covariance(Sigma_u) cross_uncertain = _has_nonzero_covariance(Sigma_xu) if observation_uncertain or action_uncertain or cross_uncertain: return self.uncertain_forward(tensordict) else: return self.deterministic_forward(tensordict) [docs] def uncertain_forward(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Moment-matching forward pass for a Gaussian input belief (Eqs. 10-23). Propagates the joint Gaussian belief ``p(x\u0303_{t-1}) = N(\u03bc\u0303_{t-1}, \u03a3\u0303_{t-1})`` (Sec. 2.2) through the GP dynamics model and returns a Gaussian approximation to ``p(x_t)`` via exact moment matching. Args: tensordict (TensorDictBase): Input tensordict with keys defined by ``in_keys``. Supports unbatched ``(D,)`` inputs or batched inputs with a single leading batch dimension ``(B, D)``. Returns: TensorDictBase: The same tensordict updated with next-state mean ``\u03bc_t`` (Eq. 10) and covariance ``\u03a3_t`` (Eq. 11) at ``out_keys``. \"\"\" inv_K_noisy, beta = self.compute_factorizations() ell, alpha_sq, sigma_sq_eps = self._gather_gp_hyperparams() u_mean_key, u_var_key, u_cc_key, x_mean_key, x_var_key = self.in_keys mu_x = tensordict.get(x_mean_key) # \u03bc_x, shape (B\u00d7)D Sigma_x = tensordict.get(x_var_key) # \u03a3_x, shape (B\u00d7)D\u00d7D mu_u = tensordict.get(u_mean_key) # \u03bc_u, shape (B\u00d7)F Sigma_u = tensordict.get(u_var_key) # \u03a3_u, shape (B\u00d7)F\u00d7F C_xu = tensordict.get( u_cc_key ) # \u2202\u03bc_u/\u2202\u03bc_x (policy Jacobian), (B\u00d7)D\u00d7F (Eq. 12) # Support unbatched inputs by temporarily adding a leading batch dimension. unbatched = mu_x.dim() == 1 if unbatched: mu_x, Sigma_x, mu_u, Sigma_u, C_xu = ( mu_x.unsqueeze(0), Sigma_x.unsqueeze(0), mu_u.unsqueeze(0), Sigma_u.unsqueeze(0), C_xu.unsqueeze(0), ) device, dtype = mu_x.device, mu_x.dtype B = mu_x.shape[0] # batch size n = self.X_tilde_train.shape[0] # number of training points D = self.obs_dim # state dimension DF = self.state_action_dim # D+F, dimension of x\u0303 # ---- Build joint state-action distribution p(x\u0303_{t-1}) (Sec. 2.2) ---- # \u03bc\u0303_{t-1} = [\u03bc_x; \u03bc_u] \u2208 R^{B\u00d7(D+F)} mu_tilde = torch.cat([mu_x, mu_u], dim=-1) # \u03a3\u0303_{t-1} = [[\u03a3_x, \u03a3_x \u2202\u03c0/\u2202\u03bc_x ], # [(\u2202\u03c0/\u2202\u03bc_x)^T \u03a3_x, \u03a3_u ]] \u2208 R^{B\u00d7(D+F)\u00d7(D+F)} # C_xu is the policy Jacobian \u2202\u03bc_u/\u2202\u03bc_x, so cov(x,u) = \u03a3_x @ C_xu (Eq. 12) Sigma_x_C_xu = Sigma_x @ C_xu # upper-right block [B, D, F] Sigma_tilde = torch.cat( [ torch.cat([Sigma_x, Sigma_x_C_xu], dim=-1), torch.cat([Sigma_x_C_xu.transpose(-1, -2), Sigma_u], dim=-1), ], dim=-2, ) # [B, D+F, D+F] # ---- Compute q_a (mean-prediction kernel vector, Eq. 15) ---- # \u03bd_i = x\u0303_i - \u03bc\u0303_{t-1} (Eq. 16); shape [B, n, D+F] nu = self.X_tilde_train - mu_tilde.unsqueeze(1) # \u039b_a^{-1} as diagonal matrices; shape [D, D+F, D+F]. # ell stores \u2113_a (not \u2113\u00b2_a), so 1/\u2113_a gives the diagonal of \u039b_a^{-1/2}; # used here to form the full \u039b_a^{-1} = diag(1/\u2113\u00b2_a) = diag(1/\u2113_a)\u00b2. inv_Lambda_diag_mats = torch.diag_embed(1.0 / ell).to( device=device, dtype=dtype ) # \u039b_a^{-1} \u03bd_i; shape [B, D, n, D+F] inv_Lambda_nu = nu.unsqueeze(1) @ inv_Lambda_diag_mats.unsqueeze(0) # R_a = \u039b_a^{-1} \u03a3\u0303_{t-1} \u039b_a^{-1} + I \u2013 normalising matrix in Eq. 15; # shape [B, D, D+F, D+F] R_a = ( inv_Lambda_diag_mats.unsqueeze(0) [docs] @ Sigma_tilde.unsqueeze(1) @ inv_Lambda_diag_mats.unsqueeze(0) ) R_a = R_a + torch.eye(DF, device=device, dtype=dtype).view(1, 1, DF, DF) # Solve R_a t = (\u039b_a^{-1} \u03bd_i)^T \u2192 t = R_a^{-1} \u039b_a^{-1} \u03bd_i^T t = torch.linalg.solve(R_a, inv_Lambda_nu.transpose(-2, -1)).transpose(-2, -1) # exp(-\u00bd \u03bd_i^T (\u03a3\u0303 + \u039b_a)^{-1} \u03bd_i) \u2013 exponent in Eq. 15; shape [B, D, n] scaled_exp = torch.exp(-0.5 * torch.sum(inv_Lambda_nu * t, dim=-1)) # Scalar prefactor \u03b1\u00b2_a / sqrt(|\u03a3\u0303_{t-1} \u039b_a^{-1} + I|) from Eq. 15; shape [B, D] det_R_a = torch.linalg.det(R_a) c_a = alpha_sq.squeeze(-1).unsqueeze(0) / torch.sqrt(det_R_a) # \u03b2_a \u2299 q_a (pointwise); shape [B, D, n] beta_q_a = scaled_exp * beta.unsqueeze(0) # \u03bc^a_\u0394 = \u03b2_a^T q_a (Eq. 14); shape [B, D] mu_Delta = torch.sum(beta_q_a, dim=-1) * c_a.squeeze(0) # ---- Cross-covariance cov[x\u0303_{t-1}, \u0394_t] (used in Eq. 12) ---- # Derivative of \u03bc_\u0394 w.r.t. \u03bc\u0303, contracted with \u03a3\u0303 (Deisenroth 2010); # shape [B, D+F, D] t_inv_Lambda = t @ inv_Lambda_diag_mats.unsqueeze(0) cov_xtilde_Delta = ( torch.matmul( t_inv_Lambda.transpose(-2, -1), beta_q_a.unsqueeze(-1) ).squeeze(-1) * c_a.unsqueeze(-1) ).transpose(-2, -1) # ---- Compute Q_{ab} (cross-kernel matrix, Eqs. 21-22) ---- X_i = self.X_tilde_train.unsqueeze(1) # [n, 1, D+F] X_j = self.X_tilde_train.unsqueeze(0) # [1, n, D+F] diff_ij = X_i - X_j # x\u0303_i - x\u0303_j; [n, n, D+F] (Eq. 22) # ell stores \u2113_a; \u2113\u00b2_a is the diagonal of \u039b_a (Eq. 6) ell_sq_a = (ell**2)[:, None, :] # [D, 1, D+F] ell_sq_b = (ell**2)[None, :, :] # [1, D, D+F] # \u039b_{ab} = (\u039b_a^{-1} + \u039b_b^{-1})^{-1}, diagonal entries; [D, D, D+F] inv_ell_sq_sum = 1.0 / ell_sq_a + 1.0 / ell_sq_b Lambda_ab = 1.0 / inv_ell_sq_sum # First exponential in Q_{ab,ij}: kernel product at training inputs (Eq. 22) # -\u00bd (x\u0303_i - x\u0303_j)^T (\u039b_a + \u039b_b)^{-1} (x\u0303_i - x\u0303_j); shape [D, D, n, n] inv_ell_sq_sum_ab = 1.0 / (ell_sq_a + ell_sq_b) exp1 = -0.5 * torch.sum( diff_ij.unsqueeze(0).unsqueeze(0) * inv_ell_sq_sum_ab.unsqueeze(2).unsqueeze(2) * diff_ij.unsqueeze(0).unsqueeze(0), dim=-1, ) # [D, D, n, n] # z\u0304_{ij} = \u039b_{ab} (\u039b_a^{-1} x\u0303_i + \u039b_b^{-1} x\u0303_j) \u2013 midpoint (Eq. 22); # shape [D, D, n, n, D+F] z_bar = Lambda_ab.unsqueeze(2).unsqueeze(2) * ( X_i.unsqueeze(0).unsqueeze(0) / ell_sq_a.unsqueeze(2).unsqueeze(2) + X_j.unsqueeze(0).unsqueeze(0) / ell_sq_b.unsqueeze(2).unsqueeze(2) ) # z_{ij} = z\u0304_{ij} - \u03bc\u0303_{t-1}; shape [B, D, D, n, n, D+F] z_bar = z_bar.unsqueeze(0).expand(B, -1, -1, -1, -1, -1) z_ij = z_bar - mu_tilde[:, None, None, None, None, :] z_ij_flat = z_ij.view(B, D, D, n * n, DF) # M_{ab} = \u03a3\u0303_{t-1} + diag(\u039b_{ab}) \u2013 matrix in second exp of Eq. 22; # shape [B, D, D, D+F, D+F] M_ab = Sigma_tilde[:, None, None] + torch.diag_embed(Lambda_ab) # Second exponential: -\u00bd z_{ij}^T M_{ab}^{-1} z_{ij}; shape [B, D, D, n, n] M_ab_solved = torch.linalg.solve(M_ab, z_ij_flat.transpose(-2, -1)).transpose( -2, -1 ) exp2 = (-0.5 * torch.sum(z_ij_flat * M_ab_solved, dim=-1)).view(B, D, D, n, n) # R_{ab} = \u03a3\u0303_{t-1} (\u039b_a^{-1} + \u039b_b^{-1}) + I \u2013 normalising matrix (Eq. 22); # shape [B, D, D, D+F, D+F] R_ab = Sigma_tilde[:, None, None] @ torch.diag_embed( inv_ell_sq_sum ) + torch.eye(DF, device=device, dtype=dtype) det_R_ab = torch.linalg.det(R_ab) # [B, D, D] # Scalar prefactor \u03b1\u00b2_a \u03b1\u00b2_b / sqrt(|R_{ab}|) (Eq. 22); shape [B, D, D] c_ab = (alpha_sq.view(1, D, 1) * alpha_sq.view(1, 1, D)) / torch.sqrt(det_R_ab) # Q_{ab,ij} (Eq. 22); shape [B, D, D, n, n] Q_ab = c_ab.unsqueeze(-1).unsqueeze(-1) * torch.exp(exp1.unsqueeze(0) + exp2) # ---- \u03a3_\u0394 = predictive covariance of \u0394 (Eqs. 17-23) ---- # Off-diagonal entries: \u03c3\u00b2_{ab} = \u03b2_a^T Q_{ab} \u03b2_b - \u03bc^a_\u0394 \u03bc^b_\u0394 (Eqs. 18, 20) beta_a = beta.view(1, D, 1, n) # [1, D, 1, n] beta_b = beta.view(1, 1, D, n) # [1, 1, D, n] Q_ab_beta_b = torch.matmul(Q_ab, beta_b.unsqueeze(-1)).squeeze( -1 ) # [B, D, D, n] Sigma_Delta = ( torch.matmul(beta_a.unsqueeze(-2), Q_ab_beta_b.unsqueeze(-1)) .squeeze(-1) .squeeze(-1) ) # [B, D, D] \u2013 \u03b2_a^T Q_{ab} \u03b2_b (Eq. 20) # Diagonal correction E_{x\u0303}[var_f[\u0394_a | x\u0303]] = \u03b1\u00b2_a - tr(K_a^{-1} Q_{aa}) # added to \u03c3\u00b2_{aa} (Eqs. 17, 23) invK_Q = torch.matmul( inv_K_noisy.unsqueeze(0).unsqueeze(2), # [1, D, 1, n, n] Q_ab, # [B, D, D, n, n] ) # [B, D, D, n, n] trace_invK_Q = torch.diagonal(invK_Q, dim1=-2, dim2=-1).sum(-1) # [B, D, D] diag_idx = torch.arange(D, device=device) alpha_sq_b = alpha_sq.squeeze(-1).unsqueeze(0).expand(B, -1) # [B, D] sigma_sq_eps_b = sigma_sq_eps.unsqueeze(0).expand(B, -1) # [B, D] # Add \u03b1\u00b2_a - tr(K_a^{-1} Q_{aa}) + \u03c3\u00b2_{\u03b5_a} to the diagonal (Eqs. 17, 23) Sigma_Delta[:, diag_idx, diag_idx] += ( alpha_sq_b - trace_invK_Q[:, diag_idx, diag_idx] + sigma_sq_eps_b ) # Subtract outer product of means: \u03a3_\u0394 -= \u03bc_\u0394 \u03bc_\u0394^T (Eqs. 17-18) Sigma_Delta = Sigma_Delta - torch.bmm( mu_Delta.unsqueeze(-1), mu_Delta.unsqueeze(-2) ) Sigma_Delta = ( Sigma_Delta + Sigma_Delta.transpose(-2, -1) ) / 2 # enforce symmetry # ---- Propagate to next-state belief (Eqs. 10-12) ---- # cov[x_{t-1}, \u0394_t] = cov[x_{t-1}, x\u0303_{t-1}] \u00b7 cov_xtilde_Delta (Eq. 12) # cov[x_{t-1}, x\u0303_{t-1}] is the top-D rows of \u03a3\u0303_{t-1}: shape [B, D, D+F]. # Using only Sigma_x_C_xu ([B, D, F]) here would be wrong \u2014 it drops # the \u03a3_x block and produces a [B, D, F] @ [B, D+F, D] shape mismatch. Sigma_x_rows = Sigma_tilde[:, :D, :] # [B, D, D+F] cov_x_Delta = Sigma_x_rows @ cov_xtilde_Delta # [B, D, D] # \u03bc_t = \u03bc_{t-1} + \u03bc_\u0394 (Eq. 10) mu_t = mu_x + mu_Delta # \u03a3_t = \u03a3_{t-1} + \u03a3_\u0394 + cov[x_{t-1},\u0394_t] + cov[\u0394_t,x_{t-1}] (Eq. 11) Sigma_t = Sigma_x + Sigma_Delta + cov_x_Delta + cov_x_Delta.transpose(-2, -1) Sigma_t = (Sigma_t + Sigma_t.transpose(-2, -1)) / 2 # enforce symmetry Sigma_t = Sigma_t + 1e-8 * torch.eye(D, device=device).expand( B, -1, -1 ) # jitter if unbatched: mu_t = mu_t.squeeze(0) Sigma_t = Sigma_t.squeeze(0) out_mean_key, out_var_key = self.out_keys tensordict.set(out_mean_key, mu_t) tensordict.set(out_var_key, Sigma_t) return tensordict def deterministic_forward(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Deterministic forward pass using GP posterior mean and variance (Eqs. 7-8). Used when the input observation is a point estimate with no uncertainty. Returns the GP posterior mean ``m_f(x\u0303_*)`` (Eq. 7) and per-dimension variance ``\u03c3\u00b2_f(x\u0303_*)`` (Eq. 8) for each state dimension. Args: tensordict (TensorDictBase): Input tensordict with keys defined by ``in_keys``. Supports arbitrary leading batch dimensions ``(*batch, D)`` / ``(*batch, F)``, as well as unbatched ``(D,)`` / ``(F,)`` inputs. Returns: TensorDictBase: The same tensordict updated with next-state mean ``\u03bc_t`` and diagonal covariance ``\u03a3_t = diag(\u03c3\u00b2_\u0394)`` at ``out_keys``. \"\"\" u_mean_key, u_var_key, u_cc_key, x_mean_key, x_var_key = self.in_keys mu_x = tensordict.get(x_mean_key) # x_{t-1}, shape (*batch, D) or (D,) mu_u = tensordict.get(u_mean_key) # u_{t-1}, shape (*batch, F) or (F,) batch_shape = mu_x.shape[:-1] # leading dims; () for unbatched inputs # Flatten all leading batch dimensions to a single axis for the GP # posterior call, then restore the original shape afterwards. x_flat = mu_x.reshape(-1, self.obs_dim) # [B_flat, D] u_flat = mu_u.reshape(-1, self.action_dim) # [B_flat, F] # x\u0303_* = [x_{t-1}, u_{t-1}] \u2208 R^{B_flat\u00d7(D+F)} (Sec. 2.1) X_tilde_test = torch.cat([x_flat, u_flat], dim=-1) # GP posterior mean m_f(x\u0303_*) (Eq. 7) and std \u03c3_f(x\u0303_*) (Eq. 8) mu_Delta_list, sigma_Delta_list = [], [] with torch.no_grad(): for gp_a in self.model_list.models: posterior_a = gp_a.posterior(X_tilde_test) mu_Delta_list.append(posterior_a.mean.squeeze(-1)) # m_f (Eq. 7) sigma_Delta_list.append( torch.sqrt(posterior_a.variance).squeeze(-1) # \u03c3_f (Eq. 8) ) # \u03bc_\u0394 \u2013 predicted residual mean; restore original batch shape mu_Delta = torch.stack(mu_Delta_list, dim=-1).view(*batch_shape, self.obs_dim) # \u03c3_\u0394 \u2013 predicted residual std; restore original batch shape sigma_Delta = torch.stack(sigma_Delta_list, dim=-1).view( *batch_shape, self.obs_dim ) # \u03bc_t = x_{t-1} + \u03bc_\u0394 (deterministic version of Eq. 10) mu_t = mu_x + mu_Delta # \u03a3_t = diag(\u03c3\u00b2_\u0394) \u2013 diagonal covariance from independent GP variances (Eq. 8) Sigma_t = torch.diag_embed(sigma_Delta**2) out_mean_key, out_var_key = self.out_keys tensordict.set(out_mean_key, mu_t) tensordict.set(out_var_key, Sigma_t) return tensordict",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/modules/models/gp.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

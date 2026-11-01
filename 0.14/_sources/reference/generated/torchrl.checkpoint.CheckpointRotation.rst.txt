@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+CheckpointRotation
+==================
+
+.. autoclass:: CheckpointRotation
+    :members:
+    :inherited-members:

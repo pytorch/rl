@@ -1,0 +1,2404 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Flaky Test Resolution Guide &#8212; torchrl 0.13 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=9bec1924"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/knowledge_base/FLAKY_TESTS';</script>
+    <script src="../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Working with gym" href="GYM.html" />
+    <link rel="prev" title="Installing dm_control" href="DM_CONTROL_INSTALLATION.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="Flaky Test Resolution Guide - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="0.13">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="api">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '0.13');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../index.html" class="version">0.13</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="../../index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="../../knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../index.html" class="version">0.13</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown current active">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal active" href="../../index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown current active">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal active" href="../../knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="#">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="DEBUGGING_RL.html">Things to consider when debugging RL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="DM_CONTROL_INSTALLATION.html">Installing dm_control</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Flaky Test Resolution Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="GYM.html">Working with gym</a></li>
+<li class="toctree-l1"><a class="reference internal" href="HABITAT.html">Working with <code class="docutils literal notranslate"><span class="pre">habitat-lab</span></code></a></li>
+<li class="toctree-l1"><a class="reference internal" href="ISAACLAB.html">IsaacLab Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="MUJOCO_INSTALLATION.html">Working with MuJoCo-based environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="PRO-TIPS.html">Common PyTorch errors and solutions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="RESOURCES.html">Useful resources</a></li>
+<li class="toctree-l1"><a class="reference internal" href="VERSIONING_ISSUES.html">Versioning Issues</a></li>
+<li class="toctree-l1"><a class="reference internal" href="VIDEO_CUSTOMISATION.html">Customising Video Renders</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../knowledge_base.html" class="nav-link">Knowledge Base</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Flaky Test...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../knowledge_base.html">
+      <meta itemprop="name" content="Knowledge Base">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="Flaky Test Resolution Guide">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">reference/generated/knowledge_base/FLAKY_TESTS</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="flaky-test-resolution-guide">
+<h1>Flaky Test Resolution Guide<a class="headerlink" href="#flaky-test-resolution-guide" title="Link to this heading">#</a></h1>
+<p>This guide provides step-by-step instructions for identifying, debugging, and fixing flaky tests in the TorchRL codebase.</p>
+<section id="instructions-for-llm-agents">
+<h2>Instructions for LLM Agents<a class="headerlink" href="#instructions-for-llm-agents" title="Link to this heading">#</a></h2>
+<p><strong>Follow these rules exactly when fixing flaky tests:</strong></p>
+<section id="must-do">
+<h3>MUST DO<a class="headerlink" href="#must-do" title="Link to this heading">#</a></h3>
+<ol class="arabic simple">
+<li><p>Fix the underlying code/feature, not just the test</p></li>
+<li><p>Include the fix AND test validation in the SAME PR</p></li>
+<li><p>Use ghstack when fixing multiple flaky tests (one commit = one PR = one fix)</p></li>
+<li><p>Add the flaky validation block to <code class="docutils literal notranslate"><span class="pre">run_all.sh</span></code> to run the test 20 times</p></li>
+<li><p>Remove the validation block before the PR is merged</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">rebase</span></code> to update commits, then run <code class="docutils literal notranslate"><span class="pre">ghstack</span></code> again</p></li>
+</ol>
+</section>
+<section id="must-not-do">
+<h3>MUST NOT DO<a class="headerlink" href="#must-not-do" title="Link to this heading">#</a></h3>
+<ol class="arabic simple">
+<li><p>Never skip tests (<code class="docutils literal notranslate"><span class="pre">&#64;pytest.mark.skip</span></code>) or xfail them (<code class="docutils literal notranslate"><span class="pre">&#64;pytest.mark.xfail</span></code>)</p></li>
+<li><p>Never create a separate PR just for testing flaky tests</p></li>
+<li><p>Never merge test repetition code into main</p></li>
+<li><p>Never use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">merge</span></code> with ghstack - always use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">rebase</span></code></p></li>
+<li><p>Never create a PR that only adds test repetition without the actual fix</p></li>
+</ol>
+</section>
+<section id="workflow-summary">
+<h3>Workflow Summary<a class="headerlink" href="#workflow-summary" title="Link to this heading">#</a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mf">1.</span> <span class="n">Identify</span> <span class="n">flaky</span> <span class="n">test</span> <span class="kn">from</span> <span class="nn">dashboard</span><span class="o">/</span><span class="n">issue</span>
+<span class="mf">2.</span> <span class="n">Find</span> <span class="n">error</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">CI</span> <span class="n">logs</span>
+<span class="mf">3.</span> <span class="n">Fix</span> <span class="n">the</span> <span class="n">underlying</span> <span class="n">issue</span> <span class="ow">in</span> <span class="n">the</span> <span class="n">code</span>
+<span class="mf">4.</span> <span class="n">Add</span> <span class="n">validation</span> <span class="n">block</span> <span class="n">to</span> <span class="n">run_all</span><span class="o">.</span><span class="n">sh</span> <span class="p">(</span><span class="ow">in</span> <span class="n">same</span> <span class="n">commit</span><span class="p">)</span>
+<span class="mf">5.</span> <span class="n">Push</span> <span class="ow">and</span> <span class="n">verify</span> <span class="n">test</span> <span class="n">passes</span> <span class="mi">20</span> <span class="n">times</span>
+<span class="mf">6.</span> <span class="n">Remove</span> <span class="n">validation</span> <span class="n">block</span> <span class="p">(</span><span class="n">amend</span> <span class="n">commit</span> <span class="ow">or</span> <span class="n">rebase</span><span class="p">)</span>
+<span class="mf">7.</span> <span class="n">Push</span> <span class="n">clean</span> <span class="n">commit</span> <span class="ow">and</span> <span class="n">verify</span> <span class="n">normal</span> <span class="n">CI</span> <span class="n">passes</span>
+<span class="mf">8.</span> <span class="n">PR</span> <span class="ow">is</span> <span class="n">ready</span> <span class="k">for</span> <span class="n">review</span><span class="o">/</span><span class="n">merge</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>A flaky test is one that fails intermittently without code changes. The TorchRL CI automatically tracks flaky tests using the <a class="reference external" href="https://docs.pytorch.org/rl/flaky/">Flaky Test Dashboard</a>. Tests are considered flaky if they have a failure rate between 5% and 95% with at least 2 failures across recent CI runs.</p>
+</section>
+<section id="step-1-gather-flaky-test-information">
+<h2>Step 1: Gather Flaky Test Information<a class="headerlink" href="#step-1-gather-flaky-test-information" title="Link to this heading">#</a></h2>
+<section id="from-the-github-issue-recommended-starting-point">
+<h3>From the GitHub Issue (Recommended Starting Point)<a class="headerlink" href="#from-the-github-issue-recommended-starting-point" title="Link to this heading">#</a></h3>
+<p>The CI automatically maintains a GitHub issue with the complete flaky test report:</p>
+<p><strong>Find the current issue:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>gh<span class="w"> </span>issue<span class="w"> </span>list<span class="w"> </span>--repo<span class="w"> </span>pytorch/rl<span class="w"> </span>--label<span class="w"> </span>flaky-test-tracker<span class="w"> </span>--state<span class="w"> </span>open
+</pre></div>
+</div>
+<p>Or browse directly: https://github.com/pytorch/rl/issues?q=label%3Aflaky-test-tracker+is%3Aopen</p>
+<p>The issue contains:</p>
+<ul class="simple">
+<li><p>Full test nodeids (not truncated like in the dashboard)</p></li>
+<li><p>Failure rates and flaky scores</p></li>
+<li><p>List of newly flaky tests (last 7 days)</p></li>
+</ul>
+</section>
+<section id="from-the-dashboard">
+<h3>From the Dashboard<a class="headerlink" href="#from-the-dashboard" title="Link to this heading">#</a></h3>
+<p>Visit https://docs.pytorch.org/rl/flaky/ to see a visual overview with trend charts. The dashboard shows:</p>
+<ul class="simple">
+<li><p><strong>Test nodeid</strong>: The pytest node identifier (may be truncated for long names)</p></li>
+<li><p><strong>Failure Rate</strong>: Percentage of runs where the test failed</p></li>
+<li><p><strong>Flaky Score</strong>: A confidence score (0-1) indicating how flaky the test is</p></li>
+<li><p><strong>Recent Failures</strong>: Dates of the most recent failures</p></li>
+</ul>
+<p>Note: The dashboard currently does not link directly to failing workflow runs. To find the actual error messages, you need to search the CI logs (see below).</p>
+</section>
+<section id="get-the-exact-error-message">
+<h3>Get the Exact Error Message<a class="headerlink" href="#get-the-exact-error-message" title="Link to this heading">#</a></h3>
+<p>To fix a flaky test, you need the actual error. The dashboard and issue show which tests are flaky, but not the error messages. Find them in the CI logs:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List recent failed runs for the main test workflow</span>
+gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--repo<span class="w"> </span>pytorch/rl<span class="w"> </span>--workflow<span class="o">=</span>test-linux.yml<span class="w"> </span>--status<span class="o">=</span>failure<span class="w"> </span>--limit<span class="o">=</span><span class="m">10</span>
+
+<span class="c1"># View the failed logs for a specific run</span>
+gh<span class="w"> </span>run<span class="w"> </span>view<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>--repo<span class="w"> </span>pytorch/rl<span class="w"> </span>--log-failed
+
+<span class="c1"># Search for a specific test in recent runs</span>
+gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--repo<span class="w"> </span>pytorch/rl<span class="w"> </span>--workflow<span class="o">=</span>test-linux.yml<span class="w"> </span>--limit<span class="o">=</span><span class="m">20</span><span class="w"> </span>--json<span class="w"> </span>databaseId,conclusion,createdAt<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[] | select(.conclusion == &quot;failure&quot;)&#39;</span>
+</pre></div>
+</div>
+<p><strong>Finding the right workflow:</strong> Check the “Recent Failures” dates in the flaky report, then look for failed runs around those dates in the relevant workflow:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux.yml</span></code> - Most common (CPU + GPU tests)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux-libs.yml</span></code> - External library tests</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux-llm.yml</span></code> - LLM tests</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux-habitat.yml</span></code> - Habitat tests</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux-sota.yml</span></code> - SOTA implementation tests</p></li>
+</ul>
+<p>Alternatively, browse the Actions tab: https://github.com/pytorch/rl/actions and filter by workflow and status.</p>
+</section>
+</section>
+<section id="step-2-identify-non-deterministic-failure-causes">
+<h2>Step 2: Identify Non-Deterministic Failure Causes<a class="headerlink" href="#step-2-identify-non-deterministic-failure-causes" title="Link to this heading">#</a></h2>
+<p>Common causes of flaky tests in TorchRL:</p>
+<section id="random-seed-issues">
+<h3>Random Seed Issues<a class="headerlink" href="#random-seed-issues" title="Link to this heading">#</a></h3>
+<p>RL algorithms are inherently stochastic. Tests may fail when:</p>
+<ul class="simple">
+<li><p>Random seeds are not set or not set early enough</p></li>
+<li><p>Seeds don’t cover all sources of randomness (numpy, torch, gym environments)</p></li>
+</ul>
+</section>
+<section id="race-conditions">
+<h3>Race Conditions<a class="headerlink" href="#race-conditions" title="Link to this heading">#</a></h3>
+<p>Multiprocessing tests (collectors, distributed) can have:</p>
+<ul class="simple">
+<li><p>Timing-dependent behavior</p></li>
+<li><p>Shared state between workers</p></li>
+<li><p>Improper synchronization</p></li>
+</ul>
+</section>
+<section id="resource-contention">
+<h3>Resource Contention<a class="headerlink" href="#resource-contention" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>GPU memory not properly freed between tests</p></li>
+<li><p>File handles or ports not released</p></li>
+<li><p>Temporary files conflicting</p></li>
+</ul>
+</section>
+<section id="timing-dependent-assertions">
+<h3>Timing-Dependent Assertions<a class="headerlink" href="#timing-dependent-assertions" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Assertions on execution time</p></li>
+<li><p>Polling/waiting with insufficient timeouts</p></li>
+<li><p>Async operations not properly awaited</p></li>
+</ul>
+</section>
+<section id="test-ordering-contamination">
+<h3>Test Ordering/Contamination<a class="headerlink" href="#test-ordering-contamination" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Shared global state modified by earlier tests</p></li>
+<li><p>Module-level caching not reset</p></li>
+<li><p>Environment variables persisting</p></li>
+</ul>
+</section>
+<section id="external-dependencies">
+<h3>External Dependencies<a class="headerlink" href="#external-dependencies" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Network requests (downloading models, gym environments)</p></li>
+<li><p>External services being unavailable</p></li>
+<li><p>Version mismatches in dependencies</p></li>
+</ul>
+</section>
+</section>
+<section id="step-3-implement-the-fix">
+<h2>Step 3: Implement the Fix<a class="headerlink" href="#step-3-implement-the-fix" title="Link to this heading">#</a></h2>
+<section id="important-never-skip-or-xfail-flaky-tests">
+<h3>Important: Never Skip or xfail Flaky Tests<a class="headerlink" href="#important-never-skip-or-xfail-flaky-tests" title="Link to this heading">#</a></h3>
+<p><strong>Skipping tests (<code class="docutils literal notranslate"><span class="pre">&#64;pytest.mark.skip</span></code>) or marking them as expected failures (<code class="docutils literal notranslate"><span class="pre">&#64;pytest.mark.xfail</span></code>) is never an acceptable solution for flaky tests.</strong></p>
+<p>A flaky test indicates a flaky feature. The test is doing its job by exposing non-deterministic behavior in the code. The correct approach is to fix the underlying issue in the feature itself, not to hide it.</p>
+<p>If a test is flaky because of a race condition in a collector, fix the collector. If it’s flaky because of improper state management, fix the state management. The test should pass reliably once the feature works reliably.</p>
+</section>
+<section id="common-fixes">
+<h3>Common Fixes<a class="headerlink" href="#common-fixes" title="Link to this heading">#</a></h3>
+<p><strong>Set seeds explicitly:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="c1"># For gym environments:</span>
+<span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Add proper synchronization:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Wait for all processes</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">barrier</span><span class="p">()</span>
+
+<span class="c1"># Use timeouts with retries</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_retries</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">operation_with_timeout</span><span class="p">()</span>
+        <span class="k">break</span>
+    <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
+        <span class="k">continue</span>
+</pre></div>
+</div>
+<p><strong>Increase timeouts for slow operations:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="mi">120</span><span class="p">)</span>  <span class="c1"># Increase from default</span>
+<span class="k">def</span> <span class="nf">test_slow_operation</span><span class="p">():</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p><strong>Isolate tests that modify global state:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">autouse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">reset_global_state</span><span class="p">():</span>
+    <span class="n">original</span> <span class="o">=</span> <span class="n">some_module</span><span class="o">.</span><span class="n">GLOBAL_VAR</span>
+    <span class="k">yield</span>
+    <span class="n">some_module</span><span class="o">.</span><span class="n">GLOBAL_VAR</span> <span class="o">=</span> <span class="n">original</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="step-4-create-a-pr-with-the-fix-and-test-validation">
+<h2>Step 4: Create a PR with the Fix AND Test Validation<a class="headerlink" href="#step-4-create-a-pr-with-the-fix-and-test-validation" title="Link to this heading">#</a></h2>
+<section id="critical-rules">
+<h3>Critical Rules<a class="headerlink" href="#critical-rules" title="Link to this heading">#</a></h3>
+<p><strong>DO:</strong></p>
+<ul class="simple">
+<li><p>Include BOTH the fix AND the test validation in the SAME PR</p></li>
+<li><p>Each PR fixes ONE flaky test (use ghstack for multiple fixes)</p></li>
+<li><p>Add test repetition to validate your fix before the PR is merged</p></li>
+<li><p>Remove the test repetition before the PR is merged</p></li>
+</ul>
+<p><strong>DO NOT:</strong></p>
+<ul class="simple">
+<li><p>Create a separate PR just for testing flaky tests</p></li>
+<li><p>Create a PR that only adds test repetition without the actual fix</p></li>
+<li><p>Merge test repetition code into main</p></li>
+</ul>
+</section>
+<section id="fixing-multiple-flaky-tests-with-ghstack">
+<h3>Fixing Multiple Flaky Tests with ghstack<a class="headerlink" href="#fixing-multiple-flaky-tests-with-ghstack" title="Link to this heading">#</a></h3>
+<p>When fixing multiple flaky tests, use <a class="reference external" href="https://github.com/ezyang/ghstack">ghstack</a> to create one PR per fix:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Start from a clean main</span>
+git<span class="w"> </span>checkout<span class="w"> </span>main
+git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
+
+<span class="c1"># Create one commit per fix with descriptive names</span>
+git<span class="w"> </span>add<span class="w"> </span>&lt;files<span class="w"> </span><span class="k">for</span><span class="w"> </span>first<span class="w"> </span>fix&gt;
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;[BugFix] Fix race condition in LazyMemmapStorage cleanup&quot;</span>
+
+git<span class="w"> </span>add<span class="w"> </span>&lt;files<span class="w"> </span><span class="k">for</span><span class="w"> </span>second<span class="w"> </span>fix&gt;
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;[BugFix] Add proper synchronization to MultiKeyEnv rollout&quot;</span>
+
+git<span class="w"> </span>add<span class="w"> </span>&lt;files<span class="w"> </span><span class="k">for</span><span class="w"> </span>third<span class="w"> </span>fix&gt;
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;[BugFix] Set random seed in SAC prioritized weights test&quot;</span>
+
+<span class="c1"># Push all commits as separate stacked PRs</span>
+ghstack
+</pre></div>
+</div>
+<p><strong>ghstack workflow for updates:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># To update a commit after review feedback:</span>
+git<span class="w"> </span>rebase<span class="w"> </span>-i<span class="w"> </span>origin/main
+<span class="c1"># Edit the commit(s) you want to change</span>
+<span class="c1"># Save and exit</span>
+
+<span class="c1"># Push the updated stack</span>
+ghstack
+</pre></div>
+</div>
+<p><strong>Important ghstack rules:</strong></p>
+<ul class="simple">
+<li><p>Never use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">merge</span></code> - always use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">rebase</span></code></p></li>
+<li><p>You can rebase on <code class="docutils literal notranslate"><span class="pre">origin/main</span></code> to pick up new changes</p></li>
+<li><p>After editing commits, run <code class="docutils literal notranslate"><span class="pre">ghstack</span></code> again to update all PRs</p></li>
+<li><p>Each commit becomes its own PR with independent CI</p></li>
+</ul>
+</section>
+<section id="adding-test-validation-to-your-pr">
+<h3>Adding Test Validation to Your PR<a class="headerlink" href="#adding-test-validation-to-your-pr" title="Link to this heading">#</a></h3>
+<p>In the SAME commit as your fix, add test repetition to <code class="docutils literal notranslate"><span class="pre">.github/unittest/linux/scripts/run_all.sh</span></code>. Use this template block (add it right before the <code class="docutils literal notranslate"><span class="pre">TORCHRL_TEST_SUITE=</span></code> line):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Flaky test validation: Run specific tests with repetition to verify fixes.</span>
+<span class="c1"># Set TORCHRL_VALIDATE_FLAKY=1 to enable.</span>
+<span class="c1"># IMPORTANT: Remove this block before merging!</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">TORCHRL_VALIDATE_FLAKY</span><span class="k">:-</span><span class="nv">0</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== Validating flaky test fixes with 20 repetitions ===&quot;</span>
+
+<span class="w">  </span><span class="c1"># Install pytest-repeat for test repetition</span>
+<span class="w">  </span>uv_pip_install<span class="w"> </span>pytest-repeat
+
+<span class="w">  </span><span class="c1"># Add your specific test here:</span>
+<span class="w">  </span>pytest<span class="w"> </span>test/test_file.py::TestClass::test_method<span class="w"> </span>--count<span class="o">=</span><span class="m">20</span><span class="w"> </span>-v<span class="w"> </span>--timeout<span class="o">=</span><span class="m">120</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
+
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== Flaky test validation passed! ===&quot;</span>
+<span class="w">  </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
+<span class="k">fi</span>
+</pre></div>
+</div>
+<p><strong>Then trigger CI with the environment variable:</strong></p>
+<ul class="simple">
+<li><p>The CI will run with <code class="docutils literal notranslate"><span class="pre">TORCHRL_VALIDATE_FLAKY=1</span></code> when you push</p></li>
+<li><p>To set this, you may need to temporarily add <code class="docutils literal notranslate"><span class="pre">TORCHRL_VALIDATE_FLAKY:</span> <span class="pre">&quot;1&quot;</span></code> to the workflow env section</p></li>
+</ul>
+</section>
+<section id="why-not-a-separate-ci-workflow">
+<h3>Why Not a Separate CI Workflow?<a class="headerlink" href="#why-not-a-separate-ci-workflow" title="Link to this heading">#</a></h3>
+<p>Running flaky tests in a dedicated workflow can be faster, but has complications:</p>
+<ul class="simple">
+<li><p>Need to match the original platform (Linux, macOS, Windows)</p></li>
+<li><p>Need to match GPU/CPU configuration</p></li>
+<li><p>Some flaky tests fail due to test contamination (other tests running first), which a separate workflow won’t catch</p></li>
+</ul>
+<p>For these reasons, testing in the existing workflow (with the validation block) is more reliable.</p>
+</section>
+</section>
+<section id="step-5-monitor-the-ci-run">
+<h2>Step 5: Monitor the CI Run<a class="headerlink" href="#step-5-monitor-the-ci-run" title="Link to this heading">#</a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">gh</span></code> to monitor your PR’s CI status:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List runs for your PR</span>
+gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--branch<span class="o">=</span>&lt;your-branch&gt;<span class="w"> </span>--limit<span class="o">=</span><span class="m">5</span>
+
+<span class="c1"># Watch a run in real-time</span>
+gh<span class="w"> </span>run<span class="w"> </span>watch<span class="w"> </span>&lt;run-id&gt;
+
+<span class="c1"># View details of a completed run</span>
+gh<span class="w"> </span>run<span class="w"> </span>view<span class="w"> </span>&lt;run-id&gt;
+
+<span class="c1"># View only failed job logs</span>
+gh<span class="w"> </span>run<span class="w"> </span>view<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>--log-failed
+
+<span class="c1"># Download artifacts (including test results JSON)</span>
+gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-n<span class="w"> </span>test-results-cpu-3.12
+</pre></div>
+</div>
+<section id="check-specific-jobs">
+<h3>Check Specific Jobs<a class="headerlink" href="#check-specific-jobs" title="Link to this heading">#</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List jobs in a run</span>
+gh<span class="w"> </span>run<span class="w"> </span>view<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>--json<span class="w"> </span><span class="nb">jobs</span><span class="w"> </span>--jq<span class="w"> </span><span class="s1">&#39;.jobs[] | &quot;\(.name): \(.status) \(.conclusion)&quot;&#39;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="step-6-verify-the-fix">
+<h2>Step 6: Verify the Fix<a class="headerlink" href="#step-6-verify-the-fix" title="Link to this heading">#</a></h2>
+<section id="how-many-runs-are-needed">
+<h3>How Many Runs Are Needed?<a class="headerlink" href="#how-many-runs-are-needed" title="Link to this heading">#</a></h3>
+<p>The number of successful runs needed depends on the original failure rate:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Original Failure Rate</p></th>
+<th class="head"><p>Runs Needed for 95% Confidence</p></th>
+<th class="head"><p>Runs Needed for 99% Confidence</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>50%</p></td>
+<td><p>5</p></td>
+<td><p>7</p></td>
+</tr>
+<tr class="row-odd"><td><p>20%</p></td>
+<td><p>14</p></td>
+<td><p>21</p></td>
+</tr>
+<tr class="row-even"><td><p>10%</p></td>
+<td><p>29</p></td>
+<td><p>44</p></td>
+</tr>
+<tr class="row-odd"><td><p>5%</p></td>
+<td><p>59</p></td>
+<td><p>90</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Formula:</strong> To achieve confidence level C that the test is fixed:</p>
+<ul class="simple">
+<li><p>Number of runs N = log(1 - C) / log(1 - p)</p></li>
+<li><p>Where p = original failure rate</p></li>
+</ul>
+<p><strong>Practical recommendation:</strong> Run the test 10-20 times for tests with &gt;10% failure rate, or 30-50 times for tests with lower failure rates.</p>
+</section>
+<section id="what-if-it-still-fails">
+<h3>What If It Still Fails?<a class="headerlink" href="#what-if-it-still-fails" title="Link to this heading">#</a></h3>
+<p>If the test still fails during repeated runs:</p>
+<ol class="arabic simple">
+<li><p>Check if it’s a different failure mode</p></li>
+<li><p>Look for additional sources of non-determinism</p></li>
+<li><p>Consider if the test needs fundamental redesign</p></li>
+</ol>
+</section>
+</section>
+<section id="step-7-cleanup-before-merging">
+<h2>Step 7: Cleanup Before Merging<a class="headerlink" href="#step-7-cleanup-before-merging" title="Link to this heading">#</a></h2>
+<p>Once the test passes 20 times in CI, you MUST clean up before the PR can be merged:</p>
+<section id="required-cleanup-steps">
+<h3>Required Cleanup Steps<a class="headerlink" href="#required-cleanup-steps" title="Link to this heading">#</a></h3>
+<ol class="arabic">
+<li><p><strong>Remove the flaky validation block from <code class="docutils literal notranslate"><span class="pre">run_all.sh</span></code></strong></p>
+<ul class="simple">
+<li><p>Delete the entire <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">[</span> <span class="pre">&quot;${TORCHRL_VALIDATE_FLAKY:-0}&quot;</span> <span class="pre">=</span> <span class="pre">&quot;1&quot;</span> <span class="pre">];</span> <span class="pre">then</span> <span class="pre">...</span> <span class="pre">fi</span></code> block</p></li>
+<li><p>This code must NOT be merged into main</p></li>
+</ul>
+</li>
+<li><p><strong>Remove any workflow env changes</strong></p>
+<ul class="simple">
+<li><p>If you added <code class="docutils literal notranslate"><span class="pre">TORCHRL_VALIDATE_FLAKY:</span> <span class="pre">&quot;1&quot;</span></code> to a workflow file, remove it</p></li>
+</ul>
+</li>
+<li><p><strong>Update PR description</strong></p>
+<ul class="simple">
+<li><p>Document what caused the flakiness</p></li>
+<li><p>Explain how your fix resolves it</p></li>
+</ul>
+</li>
+<li><p><strong>Push the cleaned commit and verify CI passes</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># If using ghstack:</span>
+git<span class="w"> </span>rebase<span class="w"> </span>-i<span class="w"> </span>origin/main
+<span class="c1"># Edit the commit to remove validation code</span>
+ghstack
+
+<span class="c1"># If using regular git:</span>
+git<span class="w"> </span>add<span class="w"> </span>.github/unittest/linux/scripts/run_all.sh
+git<span class="w"> </span>commit<span class="w"> </span>--amend
+git<span class="w"> </span>push<span class="w"> </span>--force-with-lease
+</pre></div>
+</div>
+</li>
+<li><p><strong>Verify normal CI passes</strong></p>
+<ul class="simple">
+<li><p>The full test suite must pass without the validation block</p></li>
+<li><p>The fixed test should now pass reliably as part of the normal test run</p></li>
+</ul>
+</li>
+</ol>
+</section>
+</section>
+<section id="reference">
+<h2>Reference<a class="headerlink" href="#reference" title="Link to this heading">#</a></h2>
+<section id="key-resources">
+<h3>Key Resources<a class="headerlink" href="#key-resources" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Resource</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference external" href="https://github.com/pytorch/rl/issues?q=label%3Aflaky-test-tracker+is%3Aopen">Flaky Test Issue</a></p></td>
+<td><p>GitHub issue with full flaky test report (updated daily)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference external" href="https://docs.pytorch.org/rl/flaky/">Flaky Test Dashboard</a></p></td>
+<td><p>Visual dashboard with trend charts</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference external" href="https://github.com/pytorch/rl/actions">GitHub Actions</a></p></td>
+<td><p>CI runs with error logs</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="key-files">
+<h3>Key Files<a class="headerlink" href="#key-files" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">.github/workflows/flaky-test-tracker.yml</span></code></p></td>
+<td><p>Workflow that analyzes and reports flaky tests</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">.github/scripts/analyze_flaky_tests.py</span></code></p></td>
+<td><p>Script that identifies flaky tests from CI history</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">.github/unittest/linux/scripts/run_all.sh</span></code></p></td>
+<td><p>Main test runner script</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="workflows-analyzed-for-flaky-tests">
+<h3>Workflows Analyzed for Flaky Tests<a class="headerlink" href="#workflows-analyzed-for-flaky-tests" title="Link to this heading">#</a></h3>
+<p>The flaky test tracker monitors these workflows:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux.yml</span></code> - Main Linux tests (CPU and GPU)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux-libs.yml</span></code> - Tests with external libraries</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux-habitat.yml</span></code> - Habitat environment tests</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux-llm.yml</span></code> - LLM-related tests</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test-linux-sota.yml</span></code> - SOTA implementation tests</p></li>
+</ul>
+</section>
+<section id="flaky-test-detection-thresholds">
+<h3>Flaky Test Detection Thresholds<a class="headerlink" href="#flaky-test-detection-thresholds" title="Link to this heading">#</a></h3>
+<p>From <code class="docutils literal notranslate"><span class="pre">.github/scripts/analyze_flaky_tests.py</span></code>:</p>
+<ul class="simple">
+<li><p><strong>Minimum failure rate</strong>: 5% (below this = probably fixed)</p></li>
+<li><p><strong>Maximum failure rate</strong>: 95% (above this = broken, not flaky)</p></li>
+<li><p><strong>Minimum failures</strong>: 2 (need at least 2 failures to flag)</p></li>
+<li><p><strong>Minimum executions</strong>: 3 (need enough data points)</p></li>
+<li><p><strong>New flaky window</strong>: 7 days (tests that became flaky recently)</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="DM_CONTROL_INSTALLATION.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Installing dm_control</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="GYM.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Working with gym</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="DM_CONTROL_INSTALLATION.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Installing dm_control</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="GYM.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Working with gym</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instructions-for-llm-agents">Instructions for LLM Agents</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#must-do">MUST DO</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#must-not-do">MUST NOT DO</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#workflow-summary">Workflow Summary</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-gather-flaky-test-information">Step 1: Gather Flaky Test Information</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#from-the-github-issue-recommended-starting-point">From the GitHub Issue (Recommended Starting Point)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#from-the-dashboard">From the Dashboard</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#get-the-exact-error-message">Get the Exact Error Message</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-identify-non-deterministic-failure-causes">Step 2: Identify Non-Deterministic Failure Causes</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#random-seed-issues">Random Seed Issues</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#race-conditions">Race Conditions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-contention">Resource Contention</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#timing-dependent-assertions">Timing-Dependent Assertions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#test-ordering-contamination">Test Ordering/Contamination</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#external-dependencies">External Dependencies</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-implement-the-fix">Step 3: Implement the Fix</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#important-never-skip-or-xfail-flaky-tests">Important: Never Skip or xfail Flaky Tests</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#common-fixes">Common Fixes</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-4-create-a-pr-with-the-fix-and-test-validation">Step 4: Create a PR with the Fix AND Test Validation</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#critical-rules">Critical Rules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fixing-multiple-flaky-tests-with-ghstack">Fixing Multiple Flaky Tests with ghstack</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-test-validation-to-your-pr">Adding Test Validation to Your PR</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#why-not-a-separate-ci-workflow">Why Not a Separate CI Workflow?</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-5-monitor-the-ci-run">Step 5: Monitor the CI Run</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#check-specific-jobs">Check Specific Jobs</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-6-verify-the-fix">Step 6: Verify the Fix</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#how-many-runs-are-needed">How Many Runs Are Needed?</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-if-it-still-fails">What If It Still Fails?</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-7-cleanup-before-merging">Step 7: Cleanup Before Merging</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#required-cleanup-steps">Required Cleanup Steps</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference">Reference</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#key-resources">Key Resources</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#key-files">Key Files</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#workflows-analyzed-for-flaky-tests">Workflows Analyzed for Flaky Tests</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#flaky-test-detection-thresholds">Flaky Test Detection Thresholds</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pytorch/rl/edit/main/docs/source/reference/generated/knowledge_base/FLAKY_TESTS.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="../../../_sources/reference/generated/knowledge_base/FLAKY_TESTS.rst.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+<div class="sidebar-secondary-item">
+  <div class="sidebar-heading">PyTorch Libraries</div>
+  <ul style="list-style-type: none; padding: 0; padding-bottom: 80px;">
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/executorch" style="color: var(--pst-color-text-muted)">ExecuTorch</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/helion" style="color: var(--pst-color-text-muted)">Helion</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/ao" style="color: var(--pst-color-text-muted)">torchao</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/kineto" style="color: var(--pst-color-text-muted)">kineto</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/torchtitan" style="color: var(--pst-color-text-muted)">torchtitan</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/rl" style="color: var(--pst-color-text-muted)">TorchRL</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/vision" style="color: var(--pst-color-text-muted)">torchvision</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/audio" style="color: var(--pst-color-text-muted)">torchaudio</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/tensordict" style="color: var(--pst-color-text-muted)">tensordict</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/xla" style="color: var(--pst-color-text-muted)">PyTorch on XLA Devices</a></li>
+  
+  </ul>
+</div>
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Flaky Test Resolution Guide",
+       "headline": "Flaky Test Resolution Guide",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/reference/generated/knowledge_base/FLAKY_TESTS.html",
+       "articleBody": "Flaky Test Resolution Guide# This guide provides step-by-step instructions for identifying, debugging, and fixing flaky tests in the TorchRL codebase. Instructions for LLM Agents# Follow these rules exactly when fixing flaky tests: MUST DO# Fix the underlying code/feature, not just the test Include the fix AND test validation in the SAME PR Use ghstack when fixing multiple flaky tests (one commit = one PR = one fix) Add the flaky validation block to run_all.sh to run the test 20 times Remove the validation block before the PR is merged Use git rebase to update commits, then run ghstack again MUST NOT DO# Never skip tests (@pytest.mark.skip) or xfail them (@pytest.mark.xfail) Never create a separate PR just for testing flaky tests Never merge test repetition code into main Never use git merge with ghstack - always use git rebase Never create a PR that only adds test repetition without the actual fix Workflow Summary# 1. Identify flaky test from dashboard/issue 2. Find error message in CI logs 3. Fix the underlying issue in the code 4. Add validation block to run_all.sh (in same commit) 5. Push and verify test passes 20 times 6. Remove validation block (amend commit or rebase) 7. Push clean commit and verify normal CI passes 8. PR is ready for review/merge Overview# A flaky test is one that fails intermittently without code changes. The TorchRL CI automatically tracks flaky tests using the Flaky Test Dashboard. Tests are considered flaky if they have a failure rate between 5% and 95% with at least 2 failures across recent CI runs. Step 1: Gather Flaky Test Information# From the GitHub Issue (Recommended Starting Point)# The CI automatically maintains a GitHub issue with the complete flaky test report: Find the current issue: gh issue list --repo pytorch/rl --label flaky-test-tracker --state open Or browse directly: https://github.com/pytorch/rl/issues?q=label%3Aflaky-test-tracker+is%3Aopen The issue contains: Full test nodeids (not truncated like in the dashboard) Failure rates and flaky scores List of newly flaky tests (last 7 days) From the Dashboard# Visit https://docs.pytorch.org/rl/flaky/ to see a visual overview with trend charts. The dashboard shows: Test nodeid: The pytest node identifier (may be truncated for long names) Failure Rate: Percentage of runs where the test failed Flaky Score: A confidence score (0-1) indicating how flaky the test is Recent Failures: Dates of the most recent failures Note: The dashboard currently does not link directly to failing workflow runs. To find the actual error messages, you need to search the CI logs (see below). Get the Exact Error Message# To fix a flaky test, you need the actual error. The dashboard and issue show which tests are flaky, but not the error messages. Find them in the CI logs: # List recent failed runs for the main test workflow gh run list --repo pytorch/rl --workflow=test-linux.yml --status=failure --limit=10 # View the failed logs for a specific run gh run view \u003crun-id\u003e --repo pytorch/rl --log-failed # Search for a specific test in recent runs gh run list --repo pytorch/rl --workflow=test-linux.yml --limit=20 --json databaseId,conclusion,createdAt \\ | jq \u0027.[] | select(.conclusion == \"failure\")\u0027 Finding the right workflow: Check the \u201cRecent Failures\u201d dates in the flaky report, then look for failed runs around those dates in the relevant workflow: test-linux.yml - Most common (CPU + GPU tests) test-linux-libs.yml - External library tests test-linux-llm.yml - LLM tests test-linux-habitat.yml - Habitat tests test-linux-sota.yml - SOTA implementation tests Alternatively, browse the Actions tab: https://github.com/pytorch/rl/actions and filter by workflow and status. Step 2: Identify Non-Deterministic Failure Causes# Common causes of flaky tests in TorchRL: Random Seed Issues# RL algorithms are inherently stochastic. Tests may fail when: Random seeds are not set or not set early enough Seeds don\u2019t cover all sources of randomness (numpy, torch, gym environments) Race Conditions# Multiprocessing tests (collectors, distributed) can have: Timing-dependent behavior Shared state between workers Improper synchronization Resource Contention# GPU memory not properly freed between tests File handles or ports not released Temporary files conflicting Timing-Dependent Assertions# Assertions on execution time Polling/waiting with insufficient timeouts Async operations not properly awaited Test Ordering/Contamination# Shared global state modified by earlier tests Module-level caching not reset Environment variables persisting External Dependencies# Network requests (downloading models, gym environments) External services being unavailable Version mismatches in dependencies Step 3: Implement the Fix# Important: Never Skip or xfail Flaky Tests# Skipping tests (@pytest.mark.skip) or marking them as expected failures (@pytest.mark.xfail) is never an acceptable solution for flaky tests. A flaky test indicates a flaky feature. The test is doing its job by exposing non-deterministic behavior in the code. The correct approach is to fix the underlying issue in the feature itself, not to hide it. If a test is flaky because of a race condition in a collector, fix the collector. If it\u2019s flaky because of improper state management, fix the state management. The test should pass reliably once the feature works reliably. Common Fixes# Set seeds explicitly: import torch import numpy as np torch.manual_seed(42) np.random.seed(42) # For gym environments: env.reset(seed=42) Add proper synchronization: # Wait for all processes torch.distributed.barrier() # Use timeouts with retries for _ in range(max_retries): try: result = operation_with_timeout() break except TimeoutError: continue Increase timeouts for slow operations: @pytest.mark.timeout(120) # Increase from default def test_slow_operation(): ... Isolate tests that modify global state: @pytest.fixture(autouse=True) def reset_global_state(): original = some_module.GLOBAL_VAR yield some_module.GLOBAL_VAR = original Step 4: Create a PR with the Fix AND Test Validation# Critical Rules# DO: Include BOTH the fix AND the test validation in the SAME PR Each PR fixes ONE flaky test (use ghstack for multiple fixes) Add test repetition to validate your fix before the PR is merged Remove the test repetition before the PR is merged DO NOT: Create a separate PR just for testing flaky tests Create a PR that only adds test repetition without the actual fix Merge test repetition code into main Fixing Multiple Flaky Tests with ghstack# When fixing multiple flaky tests, use ghstack to create one PR per fix: # Start from a clean main git checkout main git pull origin main # Create one commit per fix with descriptive names git add \u003cfiles for first fix\u003e git commit -m \"[BugFix] Fix race condition in LazyMemmapStorage cleanup\" git add \u003cfiles for second fix\u003e git commit -m \"[BugFix] Add proper synchronization to MultiKeyEnv rollout\" git add \u003cfiles for third fix\u003e git commit -m \"[BugFix] Set random seed in SAC prioritized weights test\" # Push all commits as separate stacked PRs ghstack ghstack workflow for updates: # To update a commit after review feedback: git rebase -i origin/main # Edit the commit(s) you want to change # Save and exit # Push the updated stack ghstack Important ghstack rules: Never use git merge - always use git rebase You can rebase on origin/main to pick up new changes After editing commits, run ghstack again to update all PRs Each commit becomes its own PR with independent CI Adding Test Validation to Your PR# In the SAME commit as your fix, add test repetition to .github/unittest/linux/scripts/run_all.sh. Use this template block (add it right before the TORCHRL_TEST_SUITE= line): # Flaky test validation: Run specific tests with repetition to verify fixes. # Set TORCHRL_VALIDATE_FLAKY=1 to enable. # IMPORTANT: Remove this block before merging! if [ \"${TORCHRL_VALIDATE_FLAKY:-0}\" = \"1\" ]; then echo \"=== Validating flaky test fixes with 20 repetitions ===\" # Install pytest-repeat for test repetition uv_pip_install pytest-repeat # Add your specific test here: pytest test/test_file.py::TestClass::test_method --count=20 -v --timeout=120 || exit 1 echo \"=== Flaky test validation passed! ===\" exit 0 fi Then trigger CI with the environment variable: The CI will run with TORCHRL_VALIDATE_FLAKY=1 when you push To set this, you may need to temporarily add TORCHRL_VALIDATE_FLAKY: \"1\" to the workflow env section Why Not a Separate CI Workflow?# Running flaky tests in a dedicated workflow can be faster, but has complications: Need to match the original platform (Linux, macOS, Windows) Need to match GPU/CPU configuration Some flaky tests fail due to test contamination (other tests running first), which a separate workflow won\u2019t catch For these reasons, testing in the existing workflow (with the validation block) is more reliable. Step 5: Monitor the CI Run# Use gh to monitor your PR\u2019s CI status: # List runs for your PR gh run list --branch=\u003cyour-branch\u003e --limit=5 # Watch a run in real-time gh run watch \u003crun-id\u003e # View details of a completed run gh run view \u003crun-id\u003e # View only failed job logs gh run view \u003crun-id\u003e --log-failed # Download artifacts (including test results JSON) gh run download \u003crun-id\u003e -n test-results-cpu-3.12 Check Specific Jobs# # List jobs in a run gh run view \u003crun-id\u003e --json jobs --jq \u0027.jobs[] | \"\\(.name): \\(.status) \\(.conclusion)\"\u0027 Step 6: Verify the Fix# How Many Runs Are Needed?# The number of successful runs needed depends on the original failure rate: Original Failure Rate Runs Needed for 95% Confidence Runs Needed for 99% Confidence 50% 5 7 20% 14 21 10% 29 44 5% 59 90 Formula: To achieve confidence level C that the test is fixed: Number of runs N = log(1 - C) / log(1 - p) Where p = original failure rate Practical recommendation: Run the test 10-20 times for tests with \u003e10% failure rate, or 30-50 times for tests with lower failure rates. What If It Still Fails?# If the test still fails during repeated runs: Check if it\u2019s a different failure mode Look for additional sources of non-determinism Consider if the test needs fundamental redesign Step 7: Cleanup Before Merging# Once the test passes 20 times in CI, you MUST clean up before the PR can be merged: Required Cleanup Steps# Remove the flaky validation block from run_all.sh Delete the entire if [ \"${TORCHRL_VALIDATE_FLAKY:-0}\" = \"1\" ]; then ... fi block This code must NOT be merged into main Remove any workflow env changes If you added TORCHRL_VALIDATE_FLAKY: \"1\" to a workflow file, remove it Update PR description Document what caused the flakiness Explain how your fix resolves it Push the cleaned commit and verify CI passes # If using ghstack: git rebase -i origin/main # Edit the commit to remove validation code ghstack # If using regular git: git add .github/unittest/linux/scripts/run_all.sh git commit --amend git push --force-with-lease Verify normal CI passes The full test suite must pass without the validation block The fixed test should now pass reliably as part of the normal test run Reference# Key Resources# Resource Purpose Flaky Test Issue GitHub issue with full flaky test report (updated daily) Flaky Test Dashboard Visual dashboard with trend charts GitHub Actions CI runs with error logs Key Files# File Purpose .github/workflows/flaky-test-tracker.yml Workflow that analyzes and reports flaky tests .github/scripts/analyze_flaky_tests.py Script that identifies flaky tests from CI history .github/unittest/linux/scripts/run_all.sh Main test runner script Workflows Analyzed for Flaky Tests# The flaky test tracker monitors these workflows: test-linux.yml - Main Linux tests (CPU and GPU) test-linux-libs.yml - Tests with external libraries test-linux-habitat.yml - Habitat environment tests test-linux-llm.yml - LLM-related tests test-linux-sota.yml - SOTA implementation tests Flaky Test Detection Thresholds# From .github/scripts/analyze_flaky_tests.py: Minimum failure rate: 5% (below this = probably fixed) Maximum failure rate: 95% (above this = broken, not flaky) Minimum failures: 2 (need at least 2 failures to flag) Minimum executions: 3 (need enough data points) New flaky window: 7 days (tests that became flaky recently)",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/reference/generated/knowledge_base/FLAKY_TESTS.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

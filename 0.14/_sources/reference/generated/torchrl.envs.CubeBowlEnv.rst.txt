@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+CubeBowlEnv
+===========
+
+.. autoclass:: CubeBowlEnv
+    :members:
+    :inherited-members:

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+StackedComposite
+================
+
+.. autoclass:: StackedComposite
+    :members:
+    :inherited-members:

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+infer_state_dict
+================
+
+.. autofunction:: infer_state_dict

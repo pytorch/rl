@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+display_mujoco_wasm_viewer
+==========================
+
+.. autofunction:: display_mujoco_wasm_viewer

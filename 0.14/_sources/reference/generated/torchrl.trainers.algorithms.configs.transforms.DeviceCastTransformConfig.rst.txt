@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.DeviceCastTransformConfig
+========================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: DeviceCastTransformConfig

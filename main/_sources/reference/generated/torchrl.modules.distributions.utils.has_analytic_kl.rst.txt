@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.modules.distributions.utils
+
+
+has_analytic_kl
+===============
+
+.. autofunction:: has_analytic_kl

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.weight_update
+
+
+NoWeightSyncScheme
+==================
+
+.. autoclass:: NoWeightSyncScheme
+    :members:
+    :inherited-members:

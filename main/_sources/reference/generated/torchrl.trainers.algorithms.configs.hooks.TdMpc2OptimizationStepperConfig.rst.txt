@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.hooks.TdMpc2OptimizationStepperConfig
+=========================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.hooks
+
+.. autoclass:: TdMpc2OptimizationStepperConfig

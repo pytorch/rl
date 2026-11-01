@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+JSONCheckpointAdapter
+=====================
+
+.. autoclass:: JSONCheckpointAdapter
+    :members:
+    :inherited-members:

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+DistributionalDQNnet
+====================
+
+.. autoclass:: DistributionalDQNnet
+    :members:

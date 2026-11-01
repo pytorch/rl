@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+register_gym_spec_conversion
+============================
+
+.. autofunction:: register_gym_spec_conversion

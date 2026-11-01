@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+MenagerieTask
+=============
+
+.. autoclass:: MenagerieTask
+    :members:
+    :inherited-members:

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.collectors.utils
+
+
+split_trajectories
+==================
+
+.. autofunction:: split_trajectories

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.data.vla
+
+
+ActionTokenizerBase
+===================
+
+.. autoclass:: ActionTokenizerBase
+    :members:

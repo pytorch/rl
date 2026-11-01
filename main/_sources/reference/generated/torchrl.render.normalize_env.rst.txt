@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+normalize_env
+=============
+
+.. autofunction:: normalize_env

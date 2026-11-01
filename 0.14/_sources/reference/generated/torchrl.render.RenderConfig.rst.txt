@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.render
+
+
+RenderConfig
+============
+
+.. autoclass:: RenderConfig
+    :members:
+    :inherited-members:

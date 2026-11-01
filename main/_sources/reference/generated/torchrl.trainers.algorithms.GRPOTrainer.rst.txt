@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms
+
+
+GRPOTrainer
+===========
+
+.. autoclass:: GRPOTrainer
+    :members:
+    :inherited-members:

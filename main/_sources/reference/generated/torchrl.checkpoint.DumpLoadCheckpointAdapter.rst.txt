@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+DumpLoadCheckpointAdapter
+=========================
+
+.. autoclass:: DumpLoadCheckpointAdapter
+    :members:
+    :inherited-members:

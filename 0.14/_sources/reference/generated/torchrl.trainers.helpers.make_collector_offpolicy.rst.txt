@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.helpers
+
+
+make_collector_offpolicy
+========================
+
+.. autofunction:: make_collector_offpolicy

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+WorldModel
+==========
+
+.. autoclass:: WorldModel
+    :members:

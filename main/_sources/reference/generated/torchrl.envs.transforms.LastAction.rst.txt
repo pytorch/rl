@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+LastAction
+==========
+
+.. autoclass:: LastAction
+    :members:

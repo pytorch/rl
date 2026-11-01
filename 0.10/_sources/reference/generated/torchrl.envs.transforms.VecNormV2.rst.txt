@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+VecNormV2
+=========
+
+.. autoclass:: VecNormV2
+    :members:

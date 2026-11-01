@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+PercentileValueNorm
+===================
+
+.. autoclass:: PercentileValueNorm
+    :members:

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms
+
+
+TD3Trainer
+==========
+
+.. autoclass:: TD3Trainer
+    :members:
+    :inherited-members:

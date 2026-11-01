@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+LazyStackedTensorSpec
+=====================
+
+.. autoclass:: LazyStackedTensorSpec
+    :members:
+    :inherited-members:

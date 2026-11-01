@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+OneStepModel
+============
+
+.. autoclass:: OneStepModel
+    :members:

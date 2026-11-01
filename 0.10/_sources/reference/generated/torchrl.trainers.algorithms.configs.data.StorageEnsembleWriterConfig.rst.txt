@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig
+====================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.data
+
+.. autoclass:: StorageEnsembleWriterConfig

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: IQLTrainerConfig

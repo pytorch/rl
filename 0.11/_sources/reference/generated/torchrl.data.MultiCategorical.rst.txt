@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+MultiCategorical
+================
+
+.. autoclass:: MultiCategorical
+    :members:
+    :inherited-members:

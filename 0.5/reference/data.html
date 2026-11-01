@@ -1,0 +1,1781 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.data package &mdash; torchrl 0.5 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ReplayBuffer" href="generated/torchrl.data.ReplayBuffer.html" />
+    <link rel="prev" title="split_trajectories" href="generated/torchrl.collectors.utils.split_trajectories.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2023">
+                  <span class="dropdown-title">Contributor Awards - 2023</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                  <p></p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.5 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+      <li>torchrl.data package</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/data.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="torchrl-data-package">
+<h1>torchrl.data package<a class="headerlink" href="#torchrl-data-package" title="Permalink to this heading">¶</a></h1>
+<section id="replay-buffers">
+<span id="ref-data"></span><h2>Replay Buffers<a class="headerlink" href="#replay-buffers" title="Permalink to this heading">¶</a></h2>
+<p>Replay buffers are a central part of off-policy RL algorithms. TorchRL provides an efficient implementation of a few,
+widely used replay buffers:</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a>(*[, storage, sampler, writer, ...])</p></td>
+<td><p>A generic, composable replay buffer class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer" title="torchrl.data.PrioritizedReplayBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PrioritizedReplayBuffer</span></code></a>(*, alpha, beta[, ...])</p></td>
+<td><p>Prioritized replay buffer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer" title="torchrl.data.TensorDictReplayBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictReplayBuffer</span></code></a>(*[, priority_key])</p></td>
+<td><p>TensorDict-specific wrapper around the <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a> class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer" title="torchrl.data.TensorDictPrioritizedReplayBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictPrioritizedReplayBuffer</span></code></a>(*, alpha, beta)</p></td>
+<td><p>TensorDict-specific wrapper around the <a class="reference internal" href="generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer" title="torchrl.data.PrioritizedReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">PrioritizedReplayBuffer</span></code></a> class.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="composable-replay-buffers">
+<h2>Composable Replay Buffers<a class="headerlink" href="#composable-replay-buffers" title="Permalink to this heading">¶</a></h2>
+<p id="ref-buffers">We also give users the ability to compose a replay buffer.
+We provide a wide panel of solutions for replay buffer usage, including support for
+almost any data type; storage in memory, on device or on physical memory;
+several sampling strategies; usage of transforms etc.</p>
+<section id="supported-data-types-and-choosing-a-storage">
+<h3>Supported data types and choosing a storage<a class="headerlink" href="#supported-data-types-and-choosing-a-storage" title="Permalink to this heading">¶</a></h3>
+<p>In theory, replay buffers support any data type but we can’t guarantee that each
+component will support any data type. The most crude replay buffer implementation
+is made of a <code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code> base with a
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage" title="torchrl.data.replay_buffers.ListStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">ListStorage</span></code></a> storage. This is very inefficient
+but it will allow you to store complex data structures with non-tensor data.
+Storages in contiguous memory include <a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage" title="torchrl.data.replay_buffers.TensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorStorage</span></code></a>,
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyTensorStorage.html#torchrl.data.replay_buffers.LazyTensorStorage" title="torchrl.data.replay_buffers.LazyTensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyTensorStorage</span></code></a> and
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.LazyMemmapStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a>.
+These classes support <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> data as first-class citizens, but also
+any PyTree data structure (eg, tuples, lists, dictionaries and nested versions
+of these). The <a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage" title="torchrl.data.replay_buffers.TensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorStorage</span></code></a> storage requires
+you to provide the storage at construction time, whereas <a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage" title="torchrl.data.replay_buffers.TensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorStorage</span></code></a>
+(RAM, CUDA) and <a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.LazyMemmapStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a> (physical memory)
+will preallocate the storage for you after they’ve been extended the first time.</p>
+<p>Here are a few examples, starting with the generic <a class="reference internal" href="generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage" title="torchrl.data.replay_buffers.ListStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">ListStorage</span></code></a>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">ListStorage</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">ListStorage</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;a string!&quot;</span><span class="p">)</span> <span class="c1"># first element will be a string</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="mi">30</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span>  <span class="c1"># element [1] is an int, [2] is None</span>
+</pre></div>
+</div>
+<p>The main entry points to write onto a buffer are <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.add" title="torchrl.data.ReplayBuffer.add"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add()</span></code></a> and
+<a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend" title="torchrl.data.ReplayBuffer.extend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code></a>.
+One can also use <code class="xref py py-meth docutils literal notranslate"><span class="pre">__setitem__()</span></code>, in which case the data is written
+where indicated without updating the length or cursor of the buffer. This can be useful when sampling
+items from the buffer and them updating their values in-place afterwards.</p>
+<p>Using a <a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage" title="torchrl.data.replay_buffers.TensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorStorage</span></code></a> we tell our RB that
+we want the storage to be contiguous, which is by far more efficient but also
+more restrictive:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">TensorStorage</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">container</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">unit8</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">TensorStorage</span><span class="p">(</span><span class="n">container</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">img</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">255</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Next we can avoid creating the container and ask the storage to do it automatically.
+This is very useful when using PyTrees and tensordicts! For PyTrees as other data
+structures, <code class="xref py py-meth docutils literal notranslate"><span class="pre">add()</span></code> considers the sampled
+passed to it as a single instance of the type. <code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code>
+on the other hand will consider that the data is an iterable. For tensors, tensordicts
+and lists (see below), the iterable is looked for at the root level. For PyTrees,
+we assume that the leading dimension of all the leaves (tensors) in the tree
+match. If they don’t, <code class="docutils literal notranslate"><span class="pre">extend</span></code> will throw an exception.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">LazyMemmapStorage</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb_td</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># max 10 elements stored</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb_td</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;img&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">255</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">unit8</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="p">())},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb_pytree</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>  <span class="c1"># max 10 elements stored</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># extend with a PyTree where all tensors have the same leading dim (3)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb_pytree</span><span class="o">.</span><span class="n">extend</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">10</span><span class="p">),)]}})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">rb_pytree</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>  <span class="c1"># the replay buffer has 3 elements!</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code> can have an
+ambiguous signature when dealing with lists of values, which should be interpreted
+either as PyTree (in which case all elements in the list will be put in a slice
+in the stored PyTree in the storage) or a list of values to add one at a time.
+To solve this, TorchRL makes the clear-cut distinction between list and tuple:
+a tuple will be viewed as a PyTree, a list (at the root level) will be interpreted
+as a stack of values to add one at a time to the buffer.</p>
+</div>
+</section>
+<section id="sampling-and-indexing">
+<h3>Sampling and indexing<a class="headerlink" href="#sampling-and-indexing" title="Permalink to this heading">¶</a></h3>
+<p>Replay buffers can be indexed and sampled.
+Indexing and sampling collect data at given indices in the storage and then process them
+through a series of transforms and <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> that can be passed to the <cite>__init__</cite>
+function of the replay buffer. <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> comes with default values that should
+match user expectations in the majority of cases, such that you should not have
+to worry about it most of the time. Transforms are usually instances of <a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a>
+even though regular functions will work too (in the latter case, the <code class="xref py py-meth docutils literal notranslate"><span class="pre">inv()</span></code>
+method will obviously be ignored, whereas in the first case it can be used to
+preprocess the data before it is passed to the buffer).
+Finally, sampling can be achieved using multithreading by passing the number of threads
+to the constructor through the <code class="docutils literal notranslate"><span class="pre">prefetch</span></code> keyword argument. We advise users to
+benchmark this technique in real life settings before adopting it, as there is
+no guarantee that it will lead to a faster throughput in practice depending on
+the machine and setting where it is used.</p>
+<p>When sampling, the <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> can be either passed during construction
+(e.g., if it’s constant throughout training) or
+to the <code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code> method.</p>
+<p>To further refine the sampling strategy, we advise you to look into our samplers!</p>
+<p>Here are a couple of examples of how to get data out of a replay buffer:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">first_elt</span> <span class="o">=</span> <span class="n">rb_td</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">storage</span> <span class="o">=</span> <span class="n">rb_td</span><span class="p">[:]</span> <span class="c1"># returns all valid elements from the buffer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sample</span> <span class="o">=</span> <span class="n">rb_td</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">128</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">rb_td</span><span class="p">:</span>  <span class="c1"># iterate over the buffer using the sampler -- batch-size was set in the constructor to 1</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>using the following components:</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.FlatStorageCheckpointer.html#torchrl.data.replay_buffers.FlatStorageCheckpointer" title="torchrl.data.replay_buffers.FlatStorageCheckpointer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlatStorageCheckpointer</span></code></a>([done_keys, reward_keys])</p></td>
+<td><p>Saves the storage in a compact form, saving space on the TED format.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.H5StorageCheckpointer.html#torchrl.data.replay_buffers.H5StorageCheckpointer" title="torchrl.data.replay_buffers.H5StorageCheckpointer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">H5StorageCheckpointer</span></code></a>(*[, checkpoint_file, ...])</p></td>
+<td><p>Saves the storage in a compact form, saving space on the TED format and using H5 format to save the data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.ImmutableDatasetWriter.html#torchrl.data.replay_buffers.ImmutableDatasetWriter" title="torchrl.data.replay_buffers.ImmutableDatasetWriter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImmutableDatasetWriter</span></code></a>()</p></td>
+<td><p>A blocking writer for immutable datasets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.LazyMemmapStorage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a>(max_size, *[, ...])</p></td>
+<td><p>A memory-mapped storage for tensors and tensordicts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyTensorStorage.html#torchrl.data.replay_buffers.LazyTensorStorage" title="torchrl.data.replay_buffers.LazyTensorStorage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyTensorStorage</span></code></a>(max_size, *[, device, ndim])</p></td>
+<td><p>A pre-allocated tensor storage for tensors and tensordicts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage" title="torchrl.data.replay_buffers.ListStorage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ListStorage</span></code></a>(max_size)</p></td>
+<td><p>A storage stored in a list.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.ListStorageCheckpointer.html#torchrl.data.replay_buffers.ListStorageCheckpointer" title="torchrl.data.replay_buffers.ListStorageCheckpointer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ListStorageCheckpointer</span></code></a>()</p></td>
+<td><p>A storage checkpointer for ListStoage.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.NestedStorageCheckpointer.html#torchrl.data.replay_buffers.NestedStorageCheckpointer" title="torchrl.data.replay_buffers.NestedStorageCheckpointer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NestedStorageCheckpointer</span></code></a>([done_keys, ...])</p></td>
+<td><p>Saves the storage in a compact form, saving space on the TED format and using memory-mapped nested tensors.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.PrioritizedSampler.html#torchrl.data.replay_buffers.PrioritizedSampler" title="torchrl.data.replay_buffers.PrioritizedSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PrioritizedSampler</span></code></a>(max_capacity, alpha, beta)</p></td>
+<td><p>Prioritized sampler for replay buffer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.PrioritizedSliceSampler.html#torchrl.data.replay_buffers.PrioritizedSliceSampler" title="torchrl.data.replay_buffers.PrioritizedSliceSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PrioritizedSliceSampler</span></code></a>(max_capacity, alpha, ...)</p></td>
+<td><p>Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.RandomSampler.html#torchrl.data.replay_buffers.RandomSampler" title="torchrl.data.replay_buffers.RandomSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomSampler</span></code></a>()</p></td>
+<td><p>A uniformly random sampler for composable replay buffers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.RoundRobinWriter.html#torchrl.data.replay_buffers.RoundRobinWriter" title="torchrl.data.replay_buffers.RoundRobinWriter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RoundRobinWriter</span></code></a>(**kw)</p></td>
+<td><p>A RoundRobin Writer class for composable replay buffers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler" title="torchrl.data.replay_buffers.Sampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Sampler</span></code></a>()</p></td>
+<td><p>A generic sampler base class for composable Replay Buffers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.SamplerWithoutReplacement.html#torchrl.data.replay_buffers.SamplerWithoutReplacement" title="torchrl.data.replay_buffers.SamplerWithoutReplacement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SamplerWithoutReplacement</span></code></a>([drop_last, shuffle])</p></td>
+<td><p>A data-consuming sampler that ensures that the same sample is not present in consecutive batches.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SliceSampler</span></code></a>(*[, num_slices, slice_len, ...])</p></td>
+<td><p>Samples slices of data along the first dimension, given start and stop signals.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html#torchrl.data.replay_buffers.SliceSamplerWithoutReplacement" title="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SliceSamplerWithoutReplacement</span></code></a>(*[, ...])</p></td>
+<td><p>Samples slices of data along the first dimension, given start and stop signals, without replacement.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.Storage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Storage</span></code></a>(max_size[, checkpointer])</p></td>
+<td><p>A Storage is the container of a replay buffer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.StorageCheckpointerBase.html#torchrl.data.replay_buffers.StorageCheckpointerBase" title="torchrl.data.replay_buffers.StorageCheckpointerBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StorageCheckpointerBase</span></code></a>()</p></td>
+<td><p>Public base class for storage checkpointers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.StorageEnsembleCheckpointer.html#torchrl.data.replay_buffers.StorageEnsembleCheckpointer" title="torchrl.data.replay_buffers.StorageEnsembleCheckpointer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StorageEnsembleCheckpointer</span></code></a>()</p></td>
+<td><p>Checkpointer for ensemble storages.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorDictMaxValueWriter.html#torchrl.data.replay_buffers.TensorDictMaxValueWriter" title="torchrl.data.replay_buffers.TensorDictMaxValueWriter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictMaxValueWriter</span></code></a>([rank_key, reduction])</p></td>
+<td><p>A Writer class for composable replay buffers that keeps the top elements based on some ranking key.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html#torchrl.data.replay_buffers.TensorDictRoundRobinWriter" title="torchrl.data.replay_buffers.TensorDictRoundRobinWriter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictRoundRobinWriter</span></code></a>(**kw)</p></td>
+<td><p>A RoundRobin Writer class for composable, tensordict-based replay buffers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage" title="torchrl.data.replay_buffers.TensorStorage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorStorage</span></code></a>(storage[, max_size, device, ndim])</p></td>
+<td><p>A storage for tensors and tensordicts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorStorageCheckpointer.html#torchrl.data.replay_buffers.TensorStorageCheckpointer" title="torchrl.data.replay_buffers.TensorStorageCheckpointer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorStorageCheckpointer</span></code></a>()</p></td>
+<td><p>A storage checkpointer for TensorStorages.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer" title="torchrl.data.replay_buffers.Writer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Writer</span></code></a>()</p></td>
+<td><p>A ReplayBuffer base Writer class.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Storage choice is very influential on replay buffer sampling latency, especially
+in distributed reinforcement learning settings with larger data volumes.
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.storages.LazyMemmapStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a> is highly
+advised in distributed settings with shared storage due to the lower serialisation
+cost of MemoryMappedTensors as well as the ability to specify file storage locations
+for improved node failure recovery.
+The following mean sampling latency improvements over using <a class="reference internal" href="generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage" title="torchrl.data.replay_buffers.ListStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">ListStorage</span></code></a>
+were found from rough benchmarking in <a class="reference external" href="https://github.com/pytorch/rl/tree/main/benchmarks/storage">https://github.com/pytorch/rl/tree/main/benchmarks/storage</a>.</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Storage Type</p></th>
+<th class="head"><p>Speed up</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage" title="torchrl.data.replay_buffers.ListStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">ListStorage</span></code></a></p></td>
+<td><p>1x</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyTensorStorage.html#torchrl.data.replay_buffers.LazyTensorStorage" title="torchrl.data.replay_buffers.LazyTensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyTensorStorage</span></code></a></p></td>
+<td><p>1.83x</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.LazyMemmapStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a></p></td>
+<td><p>3.44x</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="sharing-replay-buffers-across-processes">
+<h3>Sharing replay buffers across processes<a class="headerlink" href="#sharing-replay-buffers-across-processes" title="Permalink to this heading">¶</a></h3>
+<p>Replay buffers can be shared between processes as long as their components are
+sharable. This feature allows for multiple processes to collect data and populate a shared
+replay buffer collaboratively, rather than centralizing the data on the main process
+which can incur some data transmission overhead.</p>
+<p>Sharable storages include <a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.storages.LazyMemmapStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a>
+or any subclass of <a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage" title="torchrl.data.replay_buffers.storages.TensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorStorage</span></code></a>
+as long as they are instantiated and their content is stored as memory-mapped
+tensors. Stateful writers such as <a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html#torchrl.data.replay_buffers.TensorDictRoundRobinWriter" title="torchrl.data.replay_buffers.writers.TensorDictRoundRobinWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictRoundRobinWriter</span></code></a>
+are currently not sharable, and the same goes for stateful samplers such as
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.PrioritizedSampler.html#torchrl.data.replay_buffers.PrioritizedSampler" title="torchrl.data.replay_buffers.samplers.PrioritizedSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">PrioritizedSampler</span></code></a>.</p>
+<p>A shared replay buffer can be read and extended on any process that has access
+to it, as the following example shows:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">TensorDictReplayBuffer</span><span class="p">,</span> <span class="n">LazyMemmapStorage</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">worker</span><span class="p">(</span><span class="n">rb</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="c1"># Updates the replay buffer with new data</span>
+<span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">10</span><span class="p">)},</span> <span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">rb</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">21</span><span class="p">))</span>
+<span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">)},</span> <span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="n">proc</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">worker</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">rb</span><span class="p">,))</span>
+<span class="gp">... </span>    <span class="n">proc</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="n">proc</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="c1"># the replay buffer now has a length of 20, since the worker updated it</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">rb</span><span class="p">)</span> <span class="o">==</span> <span class="mi">20</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">rb</span><span class="p">[</span><span class="s2">&quot;_data&quot;</span><span class="p">,</span> <span class="s2">&quot;a&quot;</span><span class="p">][:</span><span class="mi">10</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>  <span class="c1"># data from main process</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">rb</span><span class="p">[</span><span class="s2">&quot;_data&quot;</span><span class="p">,</span> <span class="s2">&quot;a&quot;</span><span class="p">][</span><span class="mi">10</span><span class="p">:</span><span class="mi">20</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>  <span class="c1"># data from remote process</span>
+</pre></div>
+</div>
+</section>
+<section id="storing-trajectories">
+<h3>Storing trajectories<a class="headerlink" href="#storing-trajectories" title="Permalink to this heading">¶</a></h3>
+<p>It is not too difficult to store trajectories in the replay buffer.
+One element to pay attention to is that the size of the replay buffer is by default
+the size of the leading dimension of the storage: in other words, creating a
+replay buffer with a storage of size 1M when storing multidimensional data
+does not mean storing 1M frames but 1M trajectories. However, if trajectories
+(or episodes/rollouts) are flattened before being stored, the capacity will still
+be 1M steps.</p>
+<p>There is a way to circumvent this by telling the storage how many dimensions
+it should take into account when saving data. This can be done through the <code class="docutils literal notranslate"><span class="pre">ndim</span></code>
+keyword argument which is accepted by all contiguous storages such as
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage" title="torchrl.data.replay_buffers.TensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorStorage</span></code></a> and the likes. When a
+multidimensional storage is passed to a buffer, the buffer will automatically
+consider the last dimension as the “time” dimension, as it is conventional in
+TorchRL. This can be overridden through the <code class="docutils literal notranslate"><span class="pre">dim_extend</span></code> keyword argument
+in <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a>.
+This is the recommended way to save trajectories that are obtained through
+<a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> or its serial counterpart, as we will see
+below.</p>
+<p>When sampling trajectories, it may be desirable to sample sub-trajectories
+to diversify learning or make the sampling more efficient.
+TorchRL offers two distinctive ways of accomplishing this:</p>
+<ul>
+<li><p>The <a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.samplers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> allows to
+sample a given number of slices of trajectories stored one after another
+along the leading dimension of the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorStorage</span></code>.
+This is the recommended way of sampling sub-trajectories in TorchRL __especially__
+when using offline datasets (which are stored using that convention).
+This strategy requires to flatten the trajectories before extending the replay
+buffer and reshaping them after sampling.
+The <a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.samplers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> class docstrings
+gives extensive details about this storage and sampling strategy.
+Note that <a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.samplers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a>
+is compatible with multidimensional storages. The following examples show
+how to use this feature with and without flattening of the tensordict.
+In the first scenario, we are collecting data from a single environment. In
+that case, we are happy with a storage that concatenates the data coming in
+along the first dimension, since there will be no interruption introduced
+by the collection schedule:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">StepCounter</span><span class="p">,</span> <span class="n">GymEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">SyncDataCollector</span><span class="p">,</span> <span class="n">RandomPolicy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">SliceSampler</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">),</span> <span class="n">StepCounter</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">100</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">num_slices</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">traj_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="n">truncated_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strict_length</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">10</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">break</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">rb</span><span class="p">)</span> <span class="o">==</span> <span class="mi">100</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rb</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">rb</span><span class="p">[:][</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;step_count&quot;</span><span class="p">])</span>
+<span class="go">tensor([[32],</span>
+<span class="go">        [33],</span>
+<span class="go">        [34],</span>
+<span class="go">        [35],</span>
+<span class="go">        [36],</span>
+<span class="go">        [37],</span>
+<span class="go">        [38],</span>
+<span class="go">        [39],</span>
+<span class="go">        [40],</span>
+<span class="go">        [41],</span>
+<span class="go">        [11],</span>
+<span class="go">        [12],</span>
+<span class="go">        [13],</span>
+<span class="go">        [14],</span>
+<span class="go">        [15],</span>
+<span class="go">        [16],</span>
+<span class="go">        [17],</span>
+<span class="go">        [...</span>
+</pre></div>
+</div>
+<p>If there are more than one environment run in a batch, we could still store
+the data in the same buffer as before by calling <code class="docutils literal notranslate"><span class="pre">data.reshape(-1)</span></code> which
+will flatten the <code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">T]</span></code> size into <code class="docutils literal notranslate"><span class="pre">[B</span> <span class="pre">*</span> <span class="pre">T]</span></code> but that means that the
+trajectories of, say, the first environment of the batch will be interleaved
+by trajectories of the other environments, a scenario that <code class="docutils literal notranslate"><span class="pre">SliceSampler</span></code>
+cannot handle. To solve this, we suggest to use the <code class="docutils literal notranslate"><span class="pre">ndim</span></code> argument in the
+storage constructor:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">SerialEnv</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">)),</span> <span class="n">StepCounter</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">ndim</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">num_slices</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">traj_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="n">truncated_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strict_length</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">100</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">break</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">rb</span><span class="p">)</span> <span class="o">==</span> <span class="mi">100</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rb</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">rb</span><span class="p">[:][</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;step_count&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">())</span>
+<span class="go">tensor([[ 6,  5],</span>
+<span class="go">        [ 2,  2],</span>
+<span class="go">        [ 3,  3],</span>
+<span class="go">        [ 4,  4],</span>
+<span class="go">        [ 5,  5],</span>
+<span class="go">        [ 6,  6],</span>
+<span class="go">        [ 7,  7],</span>
+<span class="go">        [ 8,  8],</span>
+<span class="go">        [ 9,  9],</span>
+<span class="go">        [10, 10],</span>
+<span class="go">        [11, 11],</span>
+<span class="go">        [12, 12],</span>
+<span class="go">        [13, 13],</span>
+<span class="go">        [14, 14],</span>
+<span class="go">        [15, 15],</span>
+<span class="go">        [16, 16],</span>
+<span class="go">        [17, 17],</span>
+<span class="go">        [18,  1],</span>
+<span class="go">        [19,  2],</span>
+<span class="go">        [...</span>
+</pre></div>
+</div>
+</li>
+<li><p>Trajectories can also be stored independently, with the each element of the
+leading dimension pointing to a different trajectory. This requires
+for the trajectories to have a congruent shape (or to be padded).
+We provide a custom <code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code> class named
+<code class="xref py py-class docutils literal notranslate"><span class="pre">RandomCropTensorDict</span></code> that allows to sample
+sub-trajectories in the buffer. Note that, unlike the <a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.samplers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a>-based
+strategy, here having an <code class="docutils literal notranslate"><span class="pre">&quot;episode&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> key pointing at the
+start and stop signals isn’t required.
+Here is an example of how this class can be used:</p>
+</li>
+</ul>
+</section>
+<section id="checkpointing-replay-buffers">
+<h3>Checkpointing Replay Buffers<a class="headerlink" href="#checkpointing-replay-buffers" title="Permalink to this heading">¶</a></h3>
+<p id="checkpoint-rb">Each component of the replay buffer can potentially be stateful and, as such,
+require a dedicated way of being serialized.
+Our replay buffer enjoys two separate APIs for saving their state on disk:
+<a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dumps" title="torchrl.data.ReplayBuffer.dumps"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dumps()</span></code></a> and <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.loads" title="torchrl.data.ReplayBuffer.loads"><code class="xref py py-meth docutils literal notranslate"><span class="pre">loads()</span></code></a> will save the
+data of each component except transforms (storage, writer, sampler) using memory-mapped
+tensors and json files for the metadata.</p>
+<p>This will work across all classes except
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage" title="torchrl.data.replay_buffers.storages.ListStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">ListStorage</span></code></a>, which content
+cannot be anticipated (and as such does not comply with memory-mapped data
+structures such as those that can be found in the tensordict library).</p>
+<p>This API guarantees that a buffer that is saved and then loaded back will be in
+the exact same state, whether we look at the status of its sampler (eg, priority trees)
+its writer (eg, max writer heaps) or its storage.</p>
+<p>Under the hood, a naive call to <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dumps" title="torchrl.data.ReplayBuffer.dumps"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dumps()</span></code></a> will just call the public
+<cite>dumps</cite> method in a specific folder for each of its components (except transforms
+which we don’t assume to be serializable using memory-mapped tensors in general).</p>
+<p>Saving data in <a class="reference internal" href="#ted-format"><span class="std std-ref">TED-format</span></a> may however consume much more memory than required. If continuous
+trajectories are stored in a buffer, we can avoid saving duplicated observations by saving all the
+observations at the root plus only the last element of the <cite>“next”</cite> sub-tensordict’s observations, which
+can reduce the storage consumption up to two times. To enable this, three checkpointer classes are available:
+<code class="xref py py-class docutils literal notranslate"><span class="pre">FlatStorageCheckpointer</span></code> will discard duplicated observations to compress the TED format. At
+load time, this class will re-write the observations in the correct format. If the buffer is saved on disk,
+the operations executed by this checkpointer will not require any additional RAM.
+The <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedStorageCheckpointer</span></code> will save the trajectories using nested tensors to make the data
+representation more apparent (each item along the first dimension representing a distinct trajectory).
+Finally, the <code class="xref py py-class docutils literal notranslate"><span class="pre">H5StorageCheckpointer</span></code> will save the buffer in an H5DB format, enabling users to
+compress the data and save some more space.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The checkpointers make some restrictive assumption about the replay buffers. First, it is assumed that
+the <code class="docutils literal notranslate"><span class="pre">done</span></code> state accurately represents the end of a trajectory (except for the last trajectory which was written
+for which the writer cursor indicates where to place the truncated signal). For MARL usage, one should note that
+only done states that have as many elements as the root tensordict are allowed:
+if the done state has extra elements that are not represented in
+the batch-size of the storage, these checkpointers will fail. For example, a done state with shape <code class="docutils literal notranslate"><span class="pre">torch.Size([3,</span> <span class="pre">4,</span> <span class="pre">5])</span></code>
+within a storage of shape <code class="docutils literal notranslate"><span class="pre">torch.Size([3,</span> <span class="pre">4])</span></code> is not allowed.</p>
+</div>
+<p>Here is a concrete example of how an H5DB checkpointer could be used in practice:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">H5StorageCheckpointer</span><span class="p">,</span> <span class="n">LazyMemmapStorage</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">SyncDataCollector</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">SerialEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">SerialEnv</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">22</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">ndim</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb_test</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">ndim</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">storage</span><span class="o">.</span><span class="n">checkpointer</span> <span class="o">=</span> <span class="n">H5StorageCheckpointer</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb_test</span><span class="o">.</span><span class="n">storage</span><span class="o">.</span><span class="n">checkpointer</span> <span class="o">=</span> <span class="n">H5StorageCheckpointer</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="n">rb</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">max_size</span> <span class="o">==</span> <span class="mi">102</span>
+<span class="gp">... </span>    <span class="n">rb</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">path_to_save_dir</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">rb_test</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path_to_save_dir</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">assert_allclose_td</span><span class="p">(</span><span class="n">rb_test</span><span class="p">[:],</span> <span class="n">rb</span><span class="p">[:])</span>
+</pre></div>
+</div>
+<p>Whenever saving data using <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dumps" title="torchrl.data.ReplayBuffer.dumps"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dumps()</span></code></a> is not possible, an
+alternative way is to use <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code>, which returns a data
+structure that can be saved using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> and loaded using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>
+before calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code>. The drawback
+of this method is that it will struggle to save big data structures, which is a
+common setting when using replay buffers.</p>
+</section>
+</section>
+<section id="torchrl-episode-data-format-ted">
+<h2>TorchRL Episode Data Format (TED)<a class="headerlink" href="#torchrl-episode-data-format-ted" title="Permalink to this heading">¶</a></h2>
+<p id="ted-format">In TorchRL, sequential data is consistently presented in a specific format, known
+as the TorchRL Episode Data Format (TED). This format is crucial for the seamless
+integration and functioning of various components within TorchRL.</p>
+<p>Some components, such as replay buffers, are somewhat indifferent to the data
+format. However, others, particularly environments, heavily depend on it for smooth operation.</p>
+<p>Therefore, it’s essential to understand the TED, its purpose, and how to interact
+with it. This guide will provide a clear explanation of the TED, why it’s used,
+and how to effectively work with it.</p>
+<section id="the-rationale-behind-ted">
+<h3>The Rationale Behind TED<a class="headerlink" href="#the-rationale-behind-ted" title="Permalink to this heading">¶</a></h3>
+<p>Formatting sequential data can be a complex task, especially in the realm of
+Reinforcement Learning (RL). As practitioners, we often encounter situations
+where data is delivered at the reset time (though not always), and sometimes data
+is provided or discarded at the final step of the trajectory.</p>
+<p>This variability means that we can observe data of different lengths in a dataset,
+and it’s not always immediately clear how to match each time step across the
+various elements of this dataset. Consider the following ambiguous dataset structure:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">observation</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">[200, 3]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">action</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">[199, 4]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">info</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">[200, 3]</span>
+</pre></div>
+</div>
+<p>At first glance, it seems that the info and observation were delivered
+together (one of each at reset + one of each at each step call), as suggested by
+the action having one less element. However, if info has one less element, we
+must assume that it was either omitted at reset time or not delivered or recorded
+for the last step of the trajectory. Without proper documentation of the data
+structure, it’s impossible to determine which info corresponds to which time step.</p>
+<p>Complicating matters further, some datasets provide inconsistent data formats,
+where <code class="docutils literal notranslate"><span class="pre">observations</span></code> or <code class="docutils literal notranslate"><span class="pre">infos</span></code> are missing at the start or end of the
+rollout, and this behavior is often not documented.
+The primary aim of TED is to eliminate these ambiguities by providing a clear
+and consistent data representation.</p>
+</section>
+<section id="the-structure-of-ted">
+<h3>The structure of TED<a class="headerlink" href="#the-structure-of-ted" title="Permalink to this heading">¶</a></h3>
+<p>TED is built upon the canonical definition of a Markov Decision Process (MDP) in RL contexts.
+At each step, an observation conditions an action that results in (1) a new
+observation, (2) an indicator of task completion (terminated, truncated, done),
+and (3) a reward signal.</p>
+<p>Some elements may be missing (for example, the reward is optional in imitation
+learning contexts), or additional information may be passed through a state or
+info container. In some cases, additional information is required to get the
+observation during a call to <code class="docutils literal notranslate"><span class="pre">step</span></code> (for instance, in stateless environment simulators). Furthermore,
+in certain scenarios, an “action” (or any other data) cannot be represented as a
+single tensor and needs to be organized differently. For example, in Multi-Agent RL
+settings, actions, observations, rewards, and completion signals may be composite.</p>
+<p>TED accommodates all these scenarios with a single, uniform, and unambiguous
+format. We distinguish what happens at time step <code class="docutils literal notranslate"><span class="pre">t</span></code> and <code class="docutils literal notranslate"><span class="pre">t+1</span></code> by setting a
+limit at the time the action is executed. In other words, everything that was
+present before <code class="docutils literal notranslate"><span class="pre">env.step</span></code> was called belongs to <code class="docutils literal notranslate"><span class="pre">t</span></code>, and everything that
+comes after belongs to <code class="docutils literal notranslate"><span class="pre">t+1</span></code>.</p>
+<p>The general rule is that everything that belongs to time step <code class="docutils literal notranslate"><span class="pre">t</span></code> is stored
+at the root of the tensordict, while everything that belongs to <code class="docutils literal notranslate"><span class="pre">t+1</span></code> is stored
+in the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry of the tensordict. Here’s an example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">policy</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        action: Tensor(...),  # The action taken at time t</span>
+<span class="go">        done: Tensor(...),  # The done state when the action was taken (at reset)</span>
+<span class="go">        next: TensorDict(  # all of this content comes from the call to `step`</span>
+<span class="go">            fields={</span>
+<span class="go">                done: Tensor(...),  # The done state after the action has been taken</span>
+<span class="go">                observation: Tensor(...),  # The observation resulting from the action</span>
+<span class="go">                reward: Tensor(...),  # The reward resulting from the action</span>
+<span class="go">                terminated: Tensor(...),  # The terminated state after the action has been taken</span>
+<span class="go">                truncated: Tensor(...),  # The truncated state after the action has been taken</span>
+<span class="go">            batch_size=torch.Size([]),</span>
+<span class="go">            device=cpu,</span>
+<span class="go">            is_shared=False),</span>
+<span class="go">        observation: Tensor(...),  # the observation at reset</span>
+<span class="go">        terminated: Tensor(...),  # the terminated at reset</span>
+<span class="go">        truncated: Tensor(...),  # the truncated at reset</span>
+<span class="go">    batch_size=torch.Size([]),</span>
+<span class="go">    device=cpu,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+<p>During a rollout (either using <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> or
+<a class="reference internal" href="generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>), the content of the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code>
+tensordict is brought to the root through the <a class="reference internal" href="generated/torchrl.envs.utils.step_mdp.html#torchrl.envs.utils.step_mdp" title="torchrl.envs.utils.step_mdp"><code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code></a>
+function when the agent resets its step count: <code class="docutils literal notranslate"><span class="pre">t</span> <span class="pre">&lt;-</span> <span class="pre">t+1</span></code>. You can read more
+about the environment API <a class="reference internal" href="envs.html#environment-api"><span class="std std-ref">here</span></a>.</p>
+<p>In most cases, there is no <cite>True</cite>-valued <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> state at the root since any
+done state will trigger a (partial) reset which will turn the <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+However, this is only true as long as resets are automatically performed. In some
+cases, partial resets will not trigger a reset, so we retain these data, which
+should have a considerably lower memory footprint than observations, for instance.</p>
+<p>This format eliminates any ambiguity regarding the matching of an observation with
+its action, info, or done state.</p>
+</section>
+<section id="flattening-ted-to-reduce-memory-consumption">
+<h3>Flattening TED to reduce memory consumption<a class="headerlink" href="#flattening-ted-to-reduce-memory-consumption" title="Permalink to this heading">¶</a></h3>
+<p>TED copies the observations twice in the memory, which can impact the feasibility of using this format
+in practice. Since it is being used mostly for ease of representation, one can store the data
+in a flat manner but represent it as TED during training.</p>
+<p>This is particularly useful when serializing replay buffers:
+For instance, the <a class="reference internal" href="generated/torchrl.data.TED2Flat.html#torchrl.data.TED2Flat" title="torchrl.data.TED2Flat"><code class="xref py py-class docutils literal notranslate"><span class="pre">TED2Flat</span></code></a> class ensures that a TED-formatted data
+structure is flattened before being written to disk, whereas the <a class="reference internal" href="generated/torchrl.data.Flat2TED.html#torchrl.data.Flat2TED" title="torchrl.data.Flat2TED"><code class="xref py py-class docutils literal notranslate"><span class="pre">Flat2TED</span></code></a>
+load hook will unflatten this structure during deserialization.</p>
+<section id="dimensionality-of-the-tensordict">
+<h4>Dimensionality of the Tensordict<a class="headerlink" href="#dimensionality-of-the-tensordict" title="Permalink to this heading">¶</a></h4>
+<p>During a rollout, all collected tensordicts will be stacked along a new dimension
+positioned at the end. Both collectors and environments will label this dimension
+with the <code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code> name. Here’s an example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">rollout</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">rollout</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">rollout</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;time&quot;</span>
+</pre></div>
+</div>
+<p>This ensures that the time dimension is clearly marked and easily identifiable
+in the data structure.</p>
+</section>
+</section>
+<section id="special-cases-and-footnotes">
+<h3>Special cases and footnotes<a class="headerlink" href="#special-cases-and-footnotes" title="Permalink to this heading">¶</a></h3>
+<section id="multi-agent-data-presentation">
+<h4>Multi-Agent data presentation<a class="headerlink" href="#multi-agent-data-presentation" title="Permalink to this heading">¶</a></h4>
+<p>The multi-agent data formatting documentation can be accessed in the <a class="reference internal" href="envs.html#marl-environment-api"><span class="std std-ref">MARL environment API</span></a> section.</p>
+</section>
+<section id="memory-based-policies-rnns-and-transformers">
+<h4>Memory-based policies (RNNs and Transformers)<a class="headerlink" href="#memory-based-policies-rnns-and-transformers" title="Permalink to this heading">¶</a></h4>
+<p>In the examples provided above, only <code class="docutils literal notranslate"><span class="pre">env.step(data)</span></code> generates data that
+needs to be read in the next step. However, in some cases, the policy also
+outputs information that will be required in the next step. This is typically
+the case for RNN-based policies, which output an action as well as a recurrent
+state that needs to be used in the next step.
+To accommodate this, we recommend users to adjust their RNN policy to write this
+data under the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry of the tensordict. This ensures that this content
+will be brought to the root in the next step. More information can be found in
+<a class="reference internal" href="generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule" title="torchrl.modules.GRUModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRUModule</span></code></a> and <a class="reference internal" href="generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a>.</p>
+</section>
+<section id="multi-step">
+<h4>Multi-step<a class="headerlink" href="#multi-step" title="Permalink to this heading">¶</a></h4>
+<p>Collectors allow users to skip steps when reading the data, accumulating reward
+for the upcoming n steps. This technique is popular in DQN-like algorithms like Rainbow.
+The <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiStep</span></code> class performs this data transformation
+on batches coming out of collectors. In these cases, a check like the following
+will fail since the next observation is shifted by n steps:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:][</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">data</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="what-about-memory-requirements">
+<h4>What about memory requirements?<a class="headerlink" href="#what-about-memory-requirements" title="Permalink to this heading">¶</a></h4>
+<p>Implemented naively, this data format consumes approximately twice the memory
+that a flat representation would. In some memory-intensive settings
+(for example, in the <a class="reference internal" href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay" title="torchrl.data.datasets.AtariDQNExperienceReplay"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay</span></code></a> dataset),
+we store only the <code class="docutils literal notranslate"><span class="pre">T+1</span></code> observation on disk and perform the formatting online at get time.
+In other cases, we assume that the 2x memory cost is a small price to pay for a
+clearer representation. However, generalizing the lazy representation for offline
+datasets would certainly be a beneficial feature to have, and we welcome
+contributions in this direction!</p>
+</section>
+</section>
+</section>
+<section id="datasets">
+<h2>Datasets<a class="headerlink" href="#datasets" title="Permalink to this heading">¶</a></h2>
+<p>TorchRL provides wrappers around offline RL datasets.
+These data are presented as <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a> instances, which
+means that they can be customized at will with transforms, samplers and storages.
+For instance, entries can be filtered in or out of a dataset with <code class="xref py py-class docutils literal notranslate"><span class="pre">SelectTransform</span></code>
+or <code class="xref py py-class docutils literal notranslate"><span class="pre">ExcludeTransform</span></code>.</p>
+<p>By default, datasets are stored as memory mapped tensors, allowing them to be
+promptly sampled with virtually no memory footprint.</p>
+<p>Here’s an example:</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Installing dependencies is the responsibility of the user. For D4RL, a clone of
+<a class="reference external" href="https://github.com/Farama-Foundation/D4RL">the repository</a> is needed as
+the latest wheels are not published on PyPI. For OpenML, <a class="reference external" href="https://pypi.org/project/scikit-learn/">scikit-learn</a> and
+<a class="reference external" href="https://pypi.org/project/pandas">pandas</a> are required.</p>
+</div>
+<section id="transforming-datasets">
+<h3>Transforming datasets<a class="headerlink" href="#transforming-datasets" title="Permalink to this heading">¶</a></h3>
+<p>In many instances, the raw data isn’t going to be used as-is.
+The natural solution could be to pass a <a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a>
+instance to the dataset constructor and modify the sample on-the-fly. This will
+work but it will incur an extra runtime for the transform.
+If the transformations can be (at least a part) pre-applied to the dataset,
+a conisderable disk space and some incurred overhead at sampling time can be
+saved. To do this, the
+<a class="reference internal" href="generated/torchrl.data.datasets.BaseDatasetExperienceReplay.html#torchrl.data.datasets.BaseDatasetExperienceReplay.preprocess" title="torchrl.data.datasets.BaseDatasetExperienceReplay.preprocess"><code class="xref py py-meth docutils literal notranslate"><span class="pre">preprocess()</span></code></a> can be
+used. This method will run a per-sample preprocessing pipeline on each element
+of the dataset, and replace the existing dataset by its transformed version.</p>
+<p>Once transformed, re-creating the same dataset will produce another object with
+the same transformed storage (unless <code class="docutils literal notranslate"><span class="pre">download=&quot;force&quot;</span></code> is being used):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dataset</span> <span class="o">=</span> <span class="n">RobosetExperienceReplay</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="s2">&quot;FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">download</span><span class="o">=</span><span class="s2">&quot;force&quot;</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">func</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;obs_norm&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;observation&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dataset</span><span class="o">.</span><span class="n">preprocess</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">func</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">num_workers</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span> <span class="o">-</span> <span class="mi">2</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">num_chunks</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">mp_start_method</span><span class="o">=</span><span class="s2">&quot;fork&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sample</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="s2">&quot;obs_norm&quot;</span> <span class="ow">in</span> <span class="n">sample</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># re-recreating the dataset gives us the transformed version back.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dataset</span> <span class="o">=</span> <span class="n">RobosetExperienceReplay</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="s2">&quot;FK1-v4(expert)/FK1_MicroOpenRandom_v2d-v4&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sample</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="s2">&quot;obs_norm&quot;</span> <span class="ow">in</span> <span class="n">sample</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+</pre></div>
+</div>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.BaseDatasetExperienceReplay.html#torchrl.data.datasets.BaseDatasetExperienceReplay" title="torchrl.data.datasets.BaseDatasetExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaseDatasetExperienceReplay</span></code></a>(*[, priority_key])</p></td>
+<td><p>Parent class for offline datasets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay" title="torchrl.data.datasets.AtariDQNExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay</span></code></a>(dataset_id[, ...])</p></td>
+<td><p>Atari DQN Experience replay class.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay" title="torchrl.data.datasets.D4RLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">D4RLExperienceReplay</span></code></a>(dataset_id, batch_size)</p></td>
+<td><p>An Experience replay class for D4RL.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay" title="torchrl.data.datasets.GenDGRLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GenDGRLExperienceReplay</span></code></a>(dataset_id[, ...])</p></td>
+<td><p>Gen-DGRL Experience Replay dataset.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay" title="torchrl.data.datasets.MinariExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MinariExperienceReplay</span></code></a>(dataset_id, batch_size, *)</p></td>
+<td><p>Minari Experience replay dataset.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay" title="torchrl.data.datasets.OpenMLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpenMLExperienceReplay</span></code></a>(name, batch_size[, ...])</p></td>
+<td><p>An experience replay for OpenML data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.OpenXExperienceReplay.html#torchrl.data.datasets.OpenXExperienceReplay" title="torchrl.data.datasets.OpenXExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpenXExperienceReplay</span></code></a>(dataset_id[, ...])</p></td>
+<td><p>Open X-Embodiment datasets experience replay.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.RobosetExperienceReplay.html#torchrl.data.datasets.RobosetExperienceReplay" title="torchrl.data.datasets.RobosetExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RobosetExperienceReplay</span></code></a>(dataset_id, ...[, ...])</p></td>
+<td><p>Roboset experience replay dataset.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.VD4RLExperienceReplay.html#torchrl.data.datasets.VD4RLExperienceReplay" title="torchrl.data.datasets.VD4RLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VD4RLExperienceReplay</span></code></a>(dataset_id, batch_size, *)</p></td>
+<td><p>V-D4RL experience replay dataset.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="composing-datasets">
+<h3>Composing datasets<a class="headerlink" href="#composing-datasets" title="Permalink to this heading">¶</a></h3>
+<p>In offline RL, it is customary to work with more than one dataset at the same time.
+Moreover, TorchRL usually has a fine-grained dataset nomenclature, where
+each task is represented separately when other libraries will represent these
+datasets in a more compact way. To allow users to compose multiple datasets
+together, we propose a <a class="reference internal" href="generated/torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>
+primitive that allows users to sample from multiple datasets at once.</p>
+<p>If the individual dataset formats differ, <code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code> instances
+can be used. In the following example, we create two dummy datasets with semantically
+identical entries that differ in names (<code class="docutils literal notranslate"><span class="pre">(&quot;some&quot;,</span> <span class="pre">&quot;key&quot;)</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;another_key&quot;</span></code>)
+and show how they can be renamed to have a matching name. We also resize images
+such that they can be stacked together during sampling.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">Comopse</span><span class="p">,</span> <span class="n">ToTensorImage</span><span class="p">,</span> <span class="n">Resize</span><span class="p">,</span> <span class="n">RenameTransform</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">TensorDictReplayBuffer</span><span class="p">,</span> <span class="n">ReplayBufferEnsemble</span><span class="p">,</span> <span class="n">LazyMemmapStorage</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb0</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">transform</span><span class="o">=</span><span class="n">Compose</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">ToTensorImage</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;pixels&quot;</span><span class="p">)]),</span>
+<span class="gp">... </span>        <span class="n">Resize</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;pixels&quot;</span><span class="p">)]),</span>
+<span class="gp">... </span>        <span class="n">RenameTransform</span><span class="p">([(</span><span class="s2">&quot;some&quot;</span><span class="p">,</span> <span class="s2">&quot;key&quot;</span><span class="p">)],</span> <span class="p">[</span><span class="s2">&quot;renamed&quot;</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb1</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">transform</span><span class="o">=</span><span class="n">Compose</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">ToTensorImage</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;pixels&quot;</span><span class="p">)]),</span>
+<span class="gp">... </span>        <span class="n">Resize</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;pixels&quot;</span><span class="p">)]),</span>
+<span class="gp">... </span>        <span class="n">RenameTransform</span><span class="p">([</span><span class="s2">&quot;another_key&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;renamed&quot;</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBufferEnsemble</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">rb0</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">rb1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">p</span><span class="o">=</span><span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">transform</span><span class="o">=</span><span class="n">Resize</span><span class="p">(</span><span class="mi">33</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels33&quot;</span><span class="p">]),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;pixels&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">255</span><span class="p">,</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">244</span><span class="p">,</span> <span class="mi">244</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;pixels&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">255</span><span class="p">,</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">244</span><span class="p">,</span> <span class="mi">244</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;some&quot;</span><span class="p">,</span> <span class="s2">&quot;key&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="p">},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;pixels&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">255</span><span class="p">,</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;pixels&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">255</span><span class="p">,</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="s2">&quot;another_key&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="p">},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">sample</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;pixels&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">32</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">32</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;pixels33&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">33</span><span class="p">,</span> <span class="mi">33</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;renamed&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+</pre></div>
+</div>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>(*rbs[, storages, ...])</p></td>
+<td><p>An ensemble of replay buffers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.SamplerEnsemble.html#torchrl.data.replay_buffers.SamplerEnsemble" title="torchrl.data.replay_buffers.SamplerEnsemble"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SamplerEnsemble</span></code></a>(*samplers[, p, ...])</p></td>
+<td><p>An ensemble of samplers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.StorageEnsemble.html#torchrl.data.replay_buffers.StorageEnsemble" title="torchrl.data.replay_buffers.StorageEnsemble"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StorageEnsemble</span></code></a>(*storages[, transforms])</p></td>
+<td><p>An ensemble of storages.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.WriterEnsemble.html#torchrl.data.replay_buffers.WriterEnsemble" title="torchrl.data.replay_buffers.WriterEnsemble"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WriterEnsemble</span></code></a>(*writers)</p></td>
+<td><p>An ensemble of writers.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="tensorspec">
+<h2>TensorSpec<a class="headerlink" href="#tensorspec" title="Permalink to this heading">¶</a></h2>
+<p id="ref-specs">The <cite>TensorSpec</cite> parent class and subclasses define the basic properties of observations and actions in TorchRL, such
+as shape, device, dtype and domain.
+It is important that your environment specs match the input and output that it sends and receives, as
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">ParallelEnv</span></code> will create buffers from these specs to communicate with the spawn processes.
+Check the <a class="reference internal" href="generated/torchrl.envs.utils.check_env_specs.html#torchrl.envs.utils.check_env_specs" title="torchrl.envs.utils.check_env_specs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrl.envs.utils.check_env_specs</span></code></a> method for a sanity check.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorSpec</span></code></a>(shape, space, Box], device, ...)</p></td>
+<td><p>Parent class of the tensor meta-data containers for observation, actions and rewards.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.BinaryDiscreteTensorSpec.html#torchrl.data.BinaryDiscreteTensorSpec" title="torchrl.data.BinaryDiscreteTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BinaryDiscreteTensorSpec</span></code></a>(n[, shape, device, ...])</p></td>
+<td><p>A binary discrete tensor spec.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.BoundedTensorSpec.html#torchrl.data.BoundedTensorSpec" title="torchrl.data.BoundedTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BoundedTensorSpec</span></code></a>([low, high, shape, ...])</p></td>
+<td><p>A bounded continuous tensor spec.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.CompositeSpec.html#torchrl.data.CompositeSpec" title="torchrl.data.CompositeSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CompositeSpec</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A composition of TensorSpecs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.DiscreteTensorSpec.html#torchrl.data.DiscreteTensorSpec" title="torchrl.data.DiscreteTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteTensorSpec</span></code></a>(n[, shape, device, ...])</p></td>
+<td><p>A discrete tensor spec.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.MultiDiscreteTensorSpec.html#torchrl.data.MultiDiscreteTensorSpec" title="torchrl.data.MultiDiscreteTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiDiscreteTensorSpec</span></code></a>(nvec[, shape, ...])</p></td>
+<td><p>A concatenation of discrete tensor spec.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.MultiOneHotDiscreteTensorSpec.html#torchrl.data.MultiOneHotDiscreteTensorSpec" title="torchrl.data.MultiOneHotDiscreteTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiOneHotDiscreteTensorSpec</span></code></a>(nvec[, shape, ...])</p></td>
+<td><p>A concatenation of one-hot discrete tensor spec.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.NonTensorSpec.html#torchrl.data.NonTensorSpec" title="torchrl.data.NonTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensorSpec</span></code></a>([shape, device, dtype])</p></td>
+<td><p>A spec for non-tensor data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.OneHotDiscreteTensorSpec.html#torchrl.data.OneHotDiscreteTensorSpec" title="torchrl.data.OneHotDiscreteTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OneHotDiscreteTensorSpec</span></code></a>(n[, shape, device, ...])</p></td>
+<td><p>A unidimensional, one-hot discrete tensor spec.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.UnboundedContinuousTensorSpec.html#torchrl.data.UnboundedContinuousTensorSpec" title="torchrl.data.UnboundedContinuousTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnboundedContinuousTensorSpec</span></code></a>([shape, ...])</p></td>
+<td><p>An unbounded continuous tensor spec.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.UnboundedDiscreteTensorSpec.html#torchrl.data.UnboundedDiscreteTensorSpec" title="torchrl.data.UnboundedDiscreteTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnboundedDiscreteTensorSpec</span></code></a>([shape, device, ...])</p></td>
+<td><p>An unbounded discrete tensor spec.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.LazyStackedTensorSpec.html#torchrl.data.LazyStackedTensorSpec" title="torchrl.data.LazyStackedTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyStackedTensorSpec</span></code></a>(*specs, dim)</p></td>
+<td><p>A lazy representation of a stack of tensor specs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.LazyStackedCompositeSpec.html#torchrl.data.LazyStackedCompositeSpec" title="torchrl.data.LazyStackedCompositeSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyStackedCompositeSpec</span></code></a>(*specs, dim)</p></td>
+<td><p>A lazy representation of a stack of composite specs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.NonTensorSpec.html#torchrl.data.NonTensorSpec" title="torchrl.data.NonTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensorSpec</span></code></a>([shape, device, dtype])</p></td>
+<td><p>A spec for non-tensor data.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="reinforcement-learning-from-human-feedback-rlhf">
+<h2>Reinforcement Learning From Human Feedback (RLHF)<a class="headerlink" href="#reinforcement-learning-from-human-feedback-rlhf" title="Permalink to this heading">¶</a></h2>
+<p>Data is of utmost importance in Reinforcement Learning from Human Feedback (RLHF).
+Given that these techniques are commonly employed in the realm of language,
+which is scarcely addressed in other subdomains of RL within the library,
+we offer specific utilities to facilitate interaction with external libraries
+like datasets. These utilities consist of tools for tokenizing data, formatting
+it in a manner suitable for TorchRL modules, and optimizing storage for
+efficient sampling.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset" title="torchrl.data.PairwiseDataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PairwiseDataset</span></code></a>(chosen_data, rejected_data, ...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.PromptData.html#torchrl.data.PromptData" title="torchrl.data.PromptData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PromptData</span></code></a>(input_ids, attention_mask, ...[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.PromptTensorDictTokenizer.html#torchrl.data.PromptTensorDictTokenizer" title="torchrl.data.PromptTensorDictTokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PromptTensorDictTokenizer</span></code></a>(tokenizer, max_length)</p></td>
+<td><p>Tokenization recipe for prompt datasets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.RewardData.html#torchrl.data.RewardData" title="torchrl.data.RewardData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardData</span></code></a>(input_ids, attention_mask[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.RolloutFromModel.html#torchrl.data.RolloutFromModel" title="torchrl.data.RolloutFromModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RolloutFromModel</span></code></a>(model, ref_model, reward_model)</p></td>
+<td><p>A class for performing rollouts with causal language models.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.TensorDictTokenizer.html#torchrl.data.TensorDictTokenizer" title="torchrl.data.TensorDictTokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictTokenizer</span></code></a>(tokenizer, max_length[, ...])</p></td>
+<td><p>Factory for a process function that applies a tokenizer over a text example.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader" title="torchrl.data.TokenizedDatasetLoader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TokenizedDatasetLoader</span></code></a>(split, max_length, ...)</p></td>
+<td><p>Loads a tokenizes dataset, and caches a memory-mapped copy of it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.create_infinite_iterator.html#torchrl.data.create_infinite_iterator" title="torchrl.data.create_infinite_iterator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_infinite_iterator</span></code></a>(iterator)</p></td>
+<td><p>Iterates indefinitely over an iterator.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.get_dataloader.html#torchrl.data.get_dataloader" title="torchrl.data.get_dataloader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_dataloader</span></code></a>(batch_size, block_size, ...)</p></td>
+<td><p>Creates a dataset and returns a dataloader from it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.ConstantKLController.html#torchrl.data.ConstantKLController" title="torchrl.data.ConstantKLController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConstantKLController</span></code></a>(*[, kl_coef, model])</p></td>
+<td><p>Constant KL Controller.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.AdaptiveKLController.html#torchrl.data.AdaptiveKLController" title="torchrl.data.AdaptiveKLController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdaptiveKLController</span></code></a>(*, init_kl_coef, ...[, ...])</p></td>
+<td><p>Adaptive KL Controller as described in Ziegler et al. &quot;Fine-Tuning Language Models from Human Preferences&quot;.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="utils">
+<h2>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.MultiStep.html#torchrl.data.MultiStep" title="torchrl.data.MultiStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiStep</span></code></a>(gamma, n_steps)</p></td>
+<td><p>Multistep reward transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.consolidate_spec.html#torchrl.data.consolidate_spec" title="torchrl.data.consolidate_spec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">consolidate_spec</span></code></a>(spec[, ...])</p></td>
+<td><p>Given a TensorSpec, removes exclusive keys by adding 0 shaped specs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.check_no_exclusive_keys.html#torchrl.data.check_no_exclusive_keys" title="torchrl.data.check_no_exclusive_keys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_no_exclusive_keys</span></code></a>(spec[, recurse])</p></td>
+<td><p>Given a TensorSpec, returns true if there are no exclusive keys.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.contains_lazy_spec.html#torchrl.data.contains_lazy_spec" title="torchrl.data.contains_lazy_spec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">contains_lazy_spec</span></code></a>(spec)</p></td>
+<td><p>Returns true if a spec contains lazy stacked specs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.Nested2TED.html#torchrl.data.Nested2TED" title="torchrl.data.Nested2TED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Nested2TED</span></code></a>([done_key, shift_key, ...])</p></td>
+<td><p>Converts a nested tensordict where each row is a trajectory into the TED format.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.Flat2TED.html#torchrl.data.Flat2TED" title="torchrl.data.Flat2TED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Flat2TED</span></code></a>([done_key, shift_key, is_full_key, ...])</p></td>
+<td><p>A storage loading hook to deserialize flattened TED data to TED format.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.H5Combine.html#torchrl.data.H5Combine" title="torchrl.data.H5Combine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">H5Combine</span></code></a>()</p></td>
+<td><p>Combines trajectories in a persistent tensordict into a single standing tensordict stored in filesystem.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.H5Split.html#torchrl.data.H5Split" title="torchrl.data.H5Split"><code class="xref py py-obj docutils literal notranslate"><span class="pre">H5Split</span></code></a>([done_key, shift_key, is_full_key, ...])</p></td>
+<td><p>Splits a dataset prepared with TED2Nested into a TensorDict where each trajectory is stored as views on their parent nested tensors.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TED2Flat.html#torchrl.data.TED2Flat" title="torchrl.data.TED2Flat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TED2Flat</span></code></a>([done_key, shift_key, is_full_key, ...])</p></td>
+<td><p>A storage saving hook to serialize TED data in a compact format.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.TED2Nested.html#torchrl.data.TED2Nested" title="torchrl.data.TED2Nested"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TED2Nested</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform" title="torchrl.envs.transforms.rb_transforms.MultiStepTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiStepTransform</span></code></a>(n_steps, gamma, *[, ...])</p></td>
+<td><p>A MultiStep transformation for ReplayBuffers.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.data.ReplayBuffer.html" class="btn btn-neutral float-right" title="ReplayBuffer" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.collectors.utils.split_trajectories.html" class="btn btn-neutral" title="split_trajectories" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">torchrl.data package</a><ul>
+<li><a class="reference internal" href="#replay-buffers">Replay Buffers</a></li>
+<li><a class="reference internal" href="#composable-replay-buffers">Composable Replay Buffers</a><ul>
+<li><a class="reference internal" href="#supported-data-types-and-choosing-a-storage">Supported data types and choosing a storage</a></li>
+<li><a class="reference internal" href="#sampling-and-indexing">Sampling and indexing</a></li>
+<li><a class="reference internal" href="#sharing-replay-buffers-across-processes">Sharing replay buffers across processes</a></li>
+<li><a class="reference internal" href="#storing-trajectories">Storing trajectories</a></li>
+<li><a class="reference internal" href="#checkpointing-replay-buffers">Checkpointing Replay Buffers</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrl-episode-data-format-ted">TorchRL Episode Data Format (TED)</a><ul>
+<li><a class="reference internal" href="#the-rationale-behind-ted">The Rationale Behind TED</a></li>
+<li><a class="reference internal" href="#the-structure-of-ted">The structure of TED</a></li>
+<li><a class="reference internal" href="#flattening-ted-to-reduce-memory-consumption">Flattening TED to reduce memory consumption</a><ul>
+<li><a class="reference internal" href="#dimensionality-of-the-tensordict">Dimensionality of the Tensordict</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#special-cases-and-footnotes">Special cases and footnotes</a><ul>
+<li><a class="reference internal" href="#multi-agent-data-presentation">Multi-Agent data presentation</a></li>
+<li><a class="reference internal" href="#memory-based-policies-rnns-and-transformers">Memory-based policies (RNNs and Transformers)</a></li>
+<li><a class="reference internal" href="#multi-step">Multi-step</a></li>
+<li><a class="reference internal" href="#what-about-memory-requirements">What about memory requirements?</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#datasets">Datasets</a><ul>
+<li><a class="reference internal" href="#transforming-datasets">Transforming datasets</a></li>
+<li><a class="reference internal" href="#composing-datasets">Composing datasets</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#tensorspec">TensorSpec</a></li>
+<li><a class="reference internal" href="#reinforcement-learning-from-human-feedback-rlhf">Reinforcement Learning From Human Feedback (RLHF)</a></li>
+<li><a class="reference internal" href="#utils">Utils</a><ul>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+         <script src="../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2023</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs.utils
+
+
+set_exploration_mode
+====================
+
+.. autofunction:: set_exploration_mode

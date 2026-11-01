@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+resume_config
+=============
+
+.. autofunction:: resume_config

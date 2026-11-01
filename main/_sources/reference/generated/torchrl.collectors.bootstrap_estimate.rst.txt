@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.collectors
+
+
+bootstrap_estimate
+==================
+
+.. autoclass:: bootstrap_estimate
+    :members:
+    :inherited-members:

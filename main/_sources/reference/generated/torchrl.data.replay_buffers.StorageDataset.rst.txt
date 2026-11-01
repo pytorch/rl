@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.replay_buffers
+
+
+StorageDataset
+==============
+
+.. autoclass:: StorageDataset
+    :members:
+    :inherited-members:

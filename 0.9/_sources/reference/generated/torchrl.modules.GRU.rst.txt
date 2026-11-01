@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+GRU
+===
+
+.. autoclass:: GRU
+    :members:

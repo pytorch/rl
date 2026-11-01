@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+set_recurrent_matmul_precision
+==============================
+
+.. autofunction:: set_recurrent_matmul_precision

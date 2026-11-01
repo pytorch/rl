@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig
+==============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: DDPGTrainerConfig

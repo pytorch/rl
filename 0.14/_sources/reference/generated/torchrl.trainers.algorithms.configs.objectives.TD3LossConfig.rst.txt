@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.TD3LossConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: TD3LossConfig

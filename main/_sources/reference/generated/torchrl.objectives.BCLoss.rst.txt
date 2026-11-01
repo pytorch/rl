@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+BCLoss
+======
+
+.. autoclass:: BCLoss
+    :members:

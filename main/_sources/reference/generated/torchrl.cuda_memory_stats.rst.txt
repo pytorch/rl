@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl
+
+
+cuda_memory_stats
+=================
+
+.. autoclass:: cuda_memory_stats
+    :members:
+    :inherited-members:

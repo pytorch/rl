@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.weight_update
+
+
+InitialSyncTransport
+====================
+
+.. autoclass:: InitialSyncTransport
+    :members:
+    :inherited-members:

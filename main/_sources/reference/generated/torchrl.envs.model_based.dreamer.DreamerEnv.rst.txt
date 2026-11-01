@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs.model_based.dreamer
+
+
+DreamerEnv
+==========
+
+.. autofunction:: DreamerEnv

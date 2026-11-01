@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.checkpoint.CheckpointConfig
+===============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.checkpoint
+
+.. autoclass:: CheckpointConfig

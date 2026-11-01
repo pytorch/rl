@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs.llm
+
+
+make_mlgym
+==========
+
+.. autoclass:: make_mlgym
+    :members:
+    :inherited-members:

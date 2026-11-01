@@ -1,0 +1,29 @@
+# LLM Transforms
+
+Transforms for LLM environments, including tools and utilities.
+
+| [`AddThinkingPrompt`](generated/torchrl.envs.llm.transforms.AddThinkingPrompt.html#torchrl.envs.llm.transforms.AddThinkingPrompt)(cond[, prompt, ...]) | A transform that adds thinking prompts to encourage the LLM to reconsider its response. |
+| --- | --- |
+| [`BrowserTransform`](generated/torchrl.envs.llm.transforms.BrowserTransform.html#torchrl.envs.llm.transforms.BrowserTransform)([allowed_domains, ...]) | A transform that enables web browsing capabilities. |
+| [`DataLoadingPrimer`](generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer)(*args[, use_ray_service]) | A primer that loads data from a dataloader and converts it into a tensordict using `stack_method`. |
+| [`ExecuteToolsInOrder`](generated/torchrl.envs.llm.transforms.ExecuteToolsInOrder.html#torchrl.envs.llm.transforms.ExecuteToolsInOrder)(registry, parser[, ...]) | A Transform that executes tools in the order they appear in LLM output. |
+| [`IncrementalTokenizer`](generated/torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer)(tokenizer, *[, ...]) | Maintains tokens synchronized with history for token-first LLM inference. |
+| [`JSONCallParser`](generated/torchrl.envs.llm.transforms.JSONCallParser.html#torchrl.envs.llm.transforms.JSONCallParser)() | Parser for JSON-style function-calling responses. |
+| [`KLComputation`](generated/torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation)([gen_log_probs_full_key, ...]) | A transform to compute KL divergence between two log-prob tensors and optionally add it to the reward. |
+| [`KLRewardTransform`](generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform)(*args[, use_ray_service]) | A legacy transform for computing KL divergence-based rewards. |
+| [`MCPToolTransform`](generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform)(servers[, ...]) | A transform that executes tools via the Model Context Protocol (MCP). |
+| [`PolicyVersion`](generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)(version_type, ] =) | A transform that keeps track of the version of the policy. |
+| [`PythonExecutorService`](generated/torchrl.envs.llm.transforms.PythonExecutorService.html#torchrl.envs.llm.transforms.PythonExecutorService)([pool_size, timeout]) | Ray actor that manages a pool of persistent Python interpreters. |
+| [`PythonInterpreter`](generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter)([tokenizer, tool_name, ...]) | A transform that executes Python code in the LLM response. |
+| [`RayDataLoadingPrimer`](generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer)(*[, dataloader, ...]) | A [`DataLoadingPrimer`](generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer) that creates a single actor that can be shared by multiple environments. |
+| [`RetrieveKL`](generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL)(*args[, use_ray_service]) | A transform to retrieve the KL divergence between two models' log-probabilities. |
+| [`RetrieveLogProb`](generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb)(model, *[, ...]) | A transform to retrieve log-probabilities from a model for KL divergence computation. |
+| [`SimpleToolTransform`](generated/torchrl.envs.llm.transforms.SimpleToolTransform.html#torchrl.envs.llm.transforms.SimpleToolTransform)(tools[, tool_schemas, ...]) | A simple transform that executes tools from a dictionary of callables. |
+| [`TemplateTransform`](generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform)(tokenizer[, chat_template]) | A transform that maps applies a chat template to an input string during the forward pass, and parses the strings to the template during backward. |
+| [`Tokenizer`](generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer)([in_keys, out_keys, in_keys_inv, ...]) | Applies a tokenization operation on the specified inputs. |
+| [`ToolCall`](generated/torchrl.envs.llm.transforms.ToolCall.html#torchrl.envs.llm.transforms.ToolCall)(tool, args[, tag]) | Representation of a parsed tool call from LLM output. |
+| [`ToolRegistry`](generated/torchrl.envs.llm.transforms.ToolRegistry.html#torchrl.envs.llm.transforms.ToolRegistry)([services]) | Registry for managing available tool services. |
+| [`ToolService`](generated/torchrl.envs.llm.transforms.ToolService.html#torchrl.envs.llm.transforms.ToolService)(*args, **kwargs) | Protocol for side-effecting service callable with structured IO. |
+| [`XMLBlockParser`](generated/torchrl.envs.llm.transforms.XMLBlockParser.html#torchrl.envs.llm.transforms.XMLBlockParser)() | Parser for XML-style tool blocks in LLM responses. |
+| [`as_nested_tensor`](generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor)(list_of_tensordicts) | Stacks a list of tensordicts into a single tensordict with nested tensors. |
+| [`as_padded_tensor`](generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor)(list_of_tensordicts[, dim, ...]) | Stacks a list of tensordicts into a single tensordict with padded tensors. |

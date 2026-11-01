@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.inference_server
+
+
+ProcessInferenceServer
+======================
+
+.. autoclass:: ProcessInferenceServer
+    :members:
