@@ -71,7 +71,7 @@ class IndependentNormal(D.Independent):
 
             Default is 5.0
 
-        tanh_loc (bool, optional): if ``False``, the above formula is used for
+        tanh_loc (bool, optional): if ``True``, the above formula is used for
             the location scaling, otherwise the raw value
             is kept. Default is ``False``;
 
@@ -105,14 +105,7 @@ class IndependentNormal(D.Independent):
         self.upscale = upscale
         self._event_dim = event_dim
         self._kwargs = kwargs
-        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
-        if callable(scale) and not isinstance(scale, torch.Tensor):
-            scale = scale(loc)
-        elif not isinstance(scale, torch.Tensor):
-            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
-        elif scale.device != loc.device:
-            scale = scale.to(loc.device, non_blocking=loc.device.type == "cuda")
-        super().__init__(D.Normal(loc, scale, **kwargs), event_dim)
+        self.update(loc, scale)
 
     def update(self, loc, scale):
         if self.tanh_loc:
