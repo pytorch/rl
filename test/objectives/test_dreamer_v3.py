@@ -538,6 +538,38 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             two_hot(logits).squeeze(-1).double(), reference, rtol=1e-4, atol=1e-3
         )
 
+    def test_dreamer_v3_two_hot_decode_gradient_matches_float64(self, device):
+        # d decode / d logit_j = p_j * (bin_j - decode); mirrored logits make
+        # decode 0, so each gradient is p_j * bin_j with bins up to 4.85e8.
+        two_hot = SymExpTwoHot(255).to(device)
+        torch.manual_seed(0)
+        half = torch.randn(32, 127, device=device) * 1e-3
+        center = torch.zeros(32, 1, device=device)
+        logits = torch.cat([half.flip(-1), center, half], dim=-1).requires_grad_()
+        (gradient,) = torch.autograd.grad(two_hot.decode(logits).sum(), logits)
+
+        probs = logits.detach().double().softmax(-1)
+        bins = two_hot.bins.double()
+        decoded = (probs * bins).sum(-1, keepdim=True)
+        reference = probs * (bins - decoded)
+        torch.testing.assert_close(gradient.double(), reference, rtol=1e-4, atol=1e-5)
+
+    @pytest.mark.gpu
+    def test_dreamer_v3_two_hot_decode_compiled_mirror_symmetric_cuda(self, device):
+        # Inductor on CUDA used to fuse the softmax normalization into the paired
+        # difference and decode these logits to about 0.5 instead of 0.
+        if torch.device(device).type != "cuda":
+            pytest.skip("The fused kernels that broke the pairing are CUDA only.")
+        torch._dynamo.reset()
+        two_hot = SymExpTwoHot(255).to(device)
+        torch.manual_seed(0)
+        half = torch.randn(64, 127, device=device) * 1e-3
+        center = torch.randn(64, 1, device=device) * 1e-3
+        logits = torch.cat([half.flip(-1), center, half], dim=-1)
+        compiled = torch.compile(two_hot, backend=_compile_backend, fullgraph=True)
+        assert two_hot(logits).abs().max().item() == 0.0
+        assert compiled(logits).abs().max().item() == 0.0
+
     # ------------------------------------------------------------------ #
     # World model loss tests
     # ------------------------------------------------------------------ #
