@@ -152,7 +152,10 @@ uv_pip_install \
   coverage \
   transformers \
   ninja \
-  timm
+  timm \
+  onnx \
+  "onnxscript>=0.7.1" \
+  onnxruntime
 
 # Dataset adapter tests are collected by the CPU bulk shard.
 if [[ "${CU_VERSION:-}" == cpu && "${TORCHRL_TEST_SHARD:-all}" == bulk ]]; then

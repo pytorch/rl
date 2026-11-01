@@ -2288,6 +2288,77 @@ class TestObservationNorm(TransformBase):
         with pytest.raises(RuntimeError, match=err_msg):
             transform._apply_transform(torch.Tensor([1]))
 
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_compile_fullgraph(self, standard_normal):
+        t = ObservationNorm(
+            loc=torch.full((3,), 2.0),
+            scale=torch.full((3,), 0.5),
+            in_keys=["observation"],
+            in_keys_inv=["action"],
+            standard_normal=standard_normal,
+        )
+        obs = torch.randn(4, 3)
+        action = torch.randn(4, 3)
+        td = TensorDict({"observation": obs, "action": action}, [4])
+        forward = torch.compile(t.forward, backend="eager", fullgraph=True)
+        inverse = torch.compile(t.inv, backend="eager", fullgraph=True)
+        if standard_normal:
+            expected_obs, expected_action = (obs - 2.0) / 0.5, action * 0.5 + 2.0
+        else:
+            expected_obs, expected_action = obs * 0.5 + 2.0, (action - 2.0) / 0.5
+        torch.testing.assert_close(forward(td.clone())["observation"], expected_obs)
+        torch.testing.assert_close(inverse(td.clone())["action"], expected_action)
+
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_precision_far_from_origin(self, standard_normal):
+        t = ObservationNorm(
+            loc=torch.full((4,), 1e8),
+            scale=torch.full((4,), 3.0),
+            in_keys=["observation"],
+            in_keys_inv=["action"],
+            standard_normal=standard_normal,
+        )
+        offsets = torch.tensor([-24.0, 0.0, 8.0, 64.0], dtype=torch.float64)
+        raw, normalized = 1e8 + offsets, offsets / 3
+
+        def forward(value):
+            return t(TensorDict({"observation": value.float()}))["observation"]
+
+        def inverse(value):
+            return t.inv(TensorDict({"action": value.float()}))["action"]
+
+        normalize, denormalize = (
+            (forward, inverse) if standard_normal else (inverse, forward)
+        )
+        torch.testing.assert_close(normalize(raw), normalized.float())
+        torch.testing.assert_close(denormalize(normalized), raw.float())
+
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    @pytest.mark.parametrize("inverse", [False, True])
+    def test_gradients_with_zero_scale(self, standard_normal, inverse):
+        t = ObservationNorm(
+            loc=torch.ones(2),
+            scale=torch.tensor([0.0, 2.0]),
+            in_keys=["observation"],
+            in_keys_inv=["action"],
+            standard_normal=standard_normal,
+        )
+        t.loc.requires_grad_()
+        t.scale.requires_grad_()
+        value = torch.tensor([2.0, 3.0], requires_grad=True)
+        if inverse:
+            out = t.inv(TensorDict({"action": value}))["action"]
+        else:
+            out = t(TensorDict({"observation": value}))["observation"]
+        out.sum().backward()
+        inf = float("inf")
+        if standard_normal != inverse:
+            expected = ([inf, 0.5], [-inf, -0.5], [-inf, -0.5])
+        else:
+            expected = ([0.0, 2.0], [1.0, 1.0], [2.0, 3.0])
+        for grad, values in zip((value.grad, t.loc.grad, t.scale.grad), expected):
+            torch.testing.assert_close(grad, torch.tensor(values))
+
 
 @pytest.mark.skipif(not _has_tv, reason="no torchvision")
 class TestResize(TransformBase):
