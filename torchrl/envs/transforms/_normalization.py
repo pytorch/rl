@@ -495,7 +495,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         lock (mp.Lock): a lock to prevent race conditions between processes.
             Defaults to None (lock created during init).
         decay (number, optional): decay rate of the moving average.
-            default: 0.99
+            default: 0.9999
         eps (number, optional): lower bound of the running standard
             deviation (for numerical underflow). Default is 1e-4.
         shapes (List[torch.Size], optional): if provided, represents the shape
