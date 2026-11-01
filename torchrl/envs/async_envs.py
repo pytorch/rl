@@ -894,13 +894,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             if self._worker_affinity is not None:
                 try:
                     for i in range(self.num_workers):
-                        status, payload = _receive_batch(
-                            self.output_queue[i],
-                            1,
-                            1,
-                            None,
-                            check_worker_errors=self._check_worker_errors,
-                        )[0]
+                        status, payload = self._receive_affinity_status(i)
                         if status != "affinity_ready":
                             raise RuntimeError(
                                 f"AsyncEnvPool worker {i} failed to set its CPU "
@@ -1038,6 +1032,26 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         return self._slot_exchange.write_input(
             env_index, tensordict, record_action=record_action
         )
+
+    def _receive_affinity_status(self, worker_index: int) -> tuple[str, str | None]:
+        # Watch only the worker whose status is read. A worker that cannot set
+        # its affinity posts the error and exits, so the exit of another worker
+        # must not hide this worker's status.
+        output_queue = self.output_queue[worker_index]
+        worker = self.threads[worker_index]
+        while True:
+            try:
+                return output_queue.get(timeout=0.1)
+            except queue.Empty:
+                if worker.exitcode is not None:
+                    break
+        # The worker may have posted its status just before it exited.
+        try:
+            return output_queue.get(timeout=0.1)
+        except queue.Empty:
+            raise RuntimeError(
+                "AsyncEnvPool worker process exited unexpectedly."
+            ) from None
 
     def _check_worker_errors(self) -> None:
         if self._worker_error is None:
