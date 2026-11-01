@@ -934,6 +934,35 @@ class TestParallel:
         finally:
             env.close(raise_if_closed=False)
 
+    def test_parallel_env_shutdown_workers_unstarted_or_closed_raises(
+        self, maybe_fork_ParallelEnv
+    ):
+        env = maybe_fork_ParallelEnv(2, CountingEnv)
+        try:
+            assert env.is_closed
+            with pytest.raises(
+                RuntimeError, match="only allowed when env.is_closed = False"
+            ):
+                env._shutdown_workers()
+            assert env.is_closed
+            assert "_workers" not in env.__dict__
+
+            env.reset()
+            assert not env.is_closed
+            assert "_workers" in env.__dict__
+            env._shutdown_workers()
+            assert env.is_closed
+            assert "_workers" not in env.__dict__
+
+            with pytest.raises(
+                RuntimeError, match="only allowed when env.is_closed = False"
+            ):
+                env._shutdown_workers()
+
+            env.close(raise_if_closed=False)
+        finally:
+            env.close(raise_if_closed=False)
+
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_custom_method(self, parallel, maybe_fork_ParallelEnv):
         # define env
