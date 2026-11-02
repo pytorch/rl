@@ -75,8 +75,9 @@ from heuristic_gait import MicroDuckGaitActor  # noqa: E402
 # displays the recorded video. We will come back to each part below and see how
 # the collector, replay buffer, and dataset adapter fit together.
 
-QUICK_STEPS = 250
-QUICK_WIDTH, QUICK_HEIGHT = 320, 240
+TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
+QUICK_STEPS = 100 if TUTORIAL_FAST else 250
+QUICK_WIDTH, QUICK_HEIGHT = (160, 120) if TUTORIAL_FAST else (320, 240)
 quick_policy = MicroDuckGaitActor()
 quick_base_env = MicroDuckEnv(
     download=True,
@@ -157,14 +158,15 @@ Video(filename=str(quick_video_paths[0]), embed=True, width=QUICK_WIDTH)
 # Setting up the collection
 # -------------------------
 #
-# We will collect 1,500 frames, with at most 500 steps per episode. Each run
-# writes a new dataset because the LeRobot writer expects a new destination.
-# To keep the result at a known location, set ``TORCHRL_LEROBOT_OUTPUT`` to a
-# new directory before running the tutorial.
+# A normal run collects 1,500 frames, with at most 500 steps per episode. In
+# docs CI, ``TORCHRL_TUTORIALS_FAST=1`` shortens this to 300 frames across three
+# 100-step episodes. Each run writes a new dataset because the LeRobot writer
+# expects a new destination. To keep the result at a known location, set
+# ``TORCHRL_LEROBOT_OUTPUT`` to a new directory before running the tutorial.
 
-EPISODE_STEPS = 500
-TOTAL_FRAMES = 1500
-WIDTH, HEIGHT = 320, 240
+EPISODE_STEPS = 100 if TUTORIAL_FAST else 500
+TOTAL_FRAMES = 3 * EPISODE_STEPS
+WIDTH, HEIGHT = (160, 120) if TUTORIAL_FAST else (320, 240)
 REPO_ID = os.environ.get("TORCHRL_LEROBOT_REPO_ID", "local/microduck-walk")
 PRIVATE_DATASET = True
 OUTPUT_ROOT = (
