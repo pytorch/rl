@@ -120,6 +120,7 @@ Intermediate
    tutorials/recurrent_sequence_training
    tutorials/mujoco_cube_bowl_macros
    tutorials/microduck
+   tutorials/lerobot_export
    tutorials/collector_trajectory_assembly
    tutorials/evaluator
    tutorials/rlrender
