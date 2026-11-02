@@ -180,12 +180,12 @@ jobs:
         # PR previews keep the LeRobot collection short. Docs published from
         # main or release tags use the full recording; the Sphinx pass below
         # reuses this generated gallery page while keeping other tutorials fast.
-        lerobot_tutorial_fast=1
         if [[ "${GH_EVENT_NAME}" == "push" && ( "${GH_REF_TYPE}" == "tag" || ( "${GH_REF_TYPE}" == "branch" && "${GH_REF_NAME}" == "main" ) ) ]]; then
-          lerobot_tutorial_fast=0
-        fi
-        TORCHRL_TUTORIALS_FAST="${lerobot_tutorial_fast}" \
+          TORCHRL_TUTORIALS_FAST=0 \
+            bash .github/unittest/tutorials/scripts/build_lerobot_gallery.sh
+        else
           bash .github/unittest/tutorials/scripts/build_lerobot_gallery.sh
+        fi
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
