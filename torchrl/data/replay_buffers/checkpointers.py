@@ -22,7 +22,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.memmap import MemoryMappedTensor
-from torchrl._utils import _STRDTYPE2DTYPE, implement_for
+from torchrl._utils import _STRDTYPE2DTYPE
 
 from torchrl.data.replay_buffers.utils import (
     _save_pytree,
@@ -33,16 +33,6 @@ from torchrl.data.replay_buffers.utils import (
     TED2Flat,
     TED2Nested,
 )
-
-
-@implement_for("tensordict", None, "0.15")
-def _persistent_tensordict_from_h5(path: str) -> PersistentTensorDict:
-    return PersistentTensorDict.from_h5(path)
-
-
-@implement_for("tensordict", "0.15")
-def _persistent_tensordict_from_h5(path: str) -> PersistentTensorDict:  # noqa: F811
-    return PersistentTensorDict.from_h5(path, auto_batch_size=True)
 
 
 def _map_metadata(function, metadata, *, is_leaf):
@@ -610,7 +600,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
 
     def loads(self, storage, path):
         path = self._get_path(path)
-        data = _persistent_tensordict_from_h5(path)
+        data = PersistentTensorDict.from_h5(path, auto_batch_size=True)
         _len = data["_len"]
         if not _len:
             storage._len = 0
