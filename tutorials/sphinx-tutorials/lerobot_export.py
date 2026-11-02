@@ -166,7 +166,7 @@ Video(filename=str(quick_video_paths[0]), embed=True, width=QUICK_WIDTH)
 
 EPISODE_STEPS = 100 if TUTORIAL_FAST else 500
 TOTAL_FRAMES = 3 * EPISODE_STEPS
-WIDTH, HEIGHT = 320, 240
+WIDTH, HEIGHT = (320, 240) if TUTORIAL_FAST else (640, 480)
 REPO_ID = os.environ.get("TORCHRL_LEROBOT_REPO_ID", "local/microduck-walk")
 PRIVATE_DATASET = True
 OUTPUT_ROOT = (
