@@ -68,7 +68,7 @@ from heuristic_gait import MicroDuckGaitActor # noqa: E402
 ```
 
 ```
-/__w/_temp/lerobot-gallery-zU4UHV/repo/torchrl/_utils.py:132: DeprecationWarning: TorchRL support for torch<2.13 (found torch 2.11.0+cpu) is deprecated and will be removed in v0.17. torch 2.11 and 2.12 remain supported until then for stacks that pin them, such as Isaac Lab 3.0. Upgrade to torch>=2.13 to silence this warning.
+/__w/_temp/lerobot-gallery-T9wlbI/repo/torchrl/_utils.py:132: DeprecationWarning: TorchRL support for torch<2.13 (found torch 2.11.0+cpu) is deprecated and will be removed in v0.17. torch 2.11 and 2.12 remain supported until then for stacks that pin them, such as Isaac Lab 3.0. Upgrade to torch>=2.13 to silence this warning.
  warnings.warn(
 ```
 
@@ -82,7 +82,7 @@ the collector, replay buffer, and dataset adapter fit together.
 ```
 TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
 QUICK_STEPS = 100 if TUTORIAL_FAST else 250
-QUICK_WIDTH, QUICK_HEIGHT = (160, 120) if TUTORIAL_FAST else (320, 240)
+QUICK_WIDTH, QUICK_HEIGHT = 320, 240
 quick_policy = MicroDuckGaitActor()
 quick_base_env = MicroDuckEnv(
  download=True,
@@ -156,13 +156,13 @@ Video(filename=str(quick_video_paths[0]), embed=True, width=QUICK_WIDTH)
 ```
 
 ```
-2026-11-02 14:43:26,899 [torchrl][INFO] Downloading the MicroDuck assets from https://github.com/pollen-robotics/microduck_rl/archive/d424a0c899f6b33cbd3daeb279913134349c0b63.zip to /root/.cache/torchrl/microduck/microduck_rl-d424a0c899f6b33cbd3daeb279913134349c0b63 [END]
-/__w/_temp/lerobot-gallery-zU4UHV/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
+2026-11-02 21:09:39,653 [torchrl][INFO] Downloading the MicroDuck assets from https://github.com/pollen-robotics/microduck_rl/archive/d424a0c899f6b33cbd3daeb279913134349c0b63.zip to /root/.cache/torchrl/microduck/microduck_rl-d424a0c899f6b33cbd3daeb279913134349c0b63 [END]
+/__w/_temp/lerobot-gallery-T9wlbI/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
  return super().__call__(*args, **kwargs)
-2026-11-02 14:43:29,355 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([100]) shape [END]
+2026-11-02 21:09:42,936 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([250]) shape [END]
 
-Map: 0%| | 0/100 [00:00<?, ? examples/s]
-Map: 100%|██████████| 100/100 [00:00<00:00, 2430.71 examples/s]
+Map: 0%| | 0/250 [00:00<?, ? examples/s]
+Map: 100%|██████████| 250/250 [00:00<00:00, 2602.04 examples/s]
 ```
 
  Your browser does not support the video tag.
@@ -183,7 +183,7 @@ expects a new destination. To keep the result at a known location, set
 ```
 EPISODE_STEPS = 100 if TUTORIAL_FAST else 500
 TOTAL_FRAMES = 3 * EPISODE_STEPS
-WIDTH, HEIGHT = (160, 120) if TUTORIAL_FAST else (320, 240)
+WIDTH, HEIGHT = 320, 240
 REPO_ID = os.environ.get("TORCHRL_LEROBOT_REPO_ID", "local/microduck-walk")
 PRIVATE_DATASET = True
 OUTPUT_ROOT = (
@@ -279,7 +279,7 @@ first_batch = next(collector_iterator)
 ```
 
 ```
-/__w/_temp/lerobot-gallery-zU4UHV/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
+/__w/_temp/lerobot-gallery-T9wlbI/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
  return super().__call__(*args, **kwargs)
 ```
 
@@ -296,9 +296,9 @@ channel order.
 ```
 
 ```
-(torch.Size([1, 100]), _TensorDictKeysView(['task_id', 'command', 'frame', 'action', 'observation', 'fallen', 'pixels', 'episode', 'done', 'terminated', 'truncated', ('next', 'observation'), ('next', 'command'), ('next', 'task_id'), ('next', 'fallen'), ('next', 'pixels'), ('next', 'frame'), ('next', 'episode'), ('next', 'reward'), ('next', 'done'), ('next', 'terminated'), ('next', 'truncated'), ('collector', 'traj_ids')],
+(torch.Size([1, 500]), _TensorDictKeysView(['task_id', 'command', 'frame', 'action', 'observation', 'fallen', 'pixels', 'episode', 'done', 'terminated', 'truncated', ('next', 'observation'), ('next', 'command'), ('next', 'task_id'), ('next', 'fallen'), ('next', 'pixels'), ('next', 'frame'), ('next', 'episode'), ('next', 'reward'), ('next', 'done'), ('next', 'terminated'), ('next', 'truncated'), ('collector', 'traj_ids')],
  include_nested=True,
- leaves_only=True), torch.Size([1, 100, 120, 160, 3]))
+ leaves_only=True), torch.Size([1, 500, 240, 320, 3]))
 ```
 
 The replay buffer will store one row per transition. We select the fields we
@@ -326,9 +326,9 @@ transitions = first_batch.select(*transition_keys).reshape(-1)
 ```
 
 ```
-(torch.Size([100]), _TensorDictKeysView(['pixels', 'observation', 'action', 'episode', 'frame', ('next', 'reward'), ('next', 'done'), ('next', 'terminated'), ('next', 'truncated')],
+(torch.Size([500]), _TensorDictKeysView(['pixels', 'observation', 'action', 'episode', 'frame', ('next', 'reward'), ('next', 'done'), ('next', 'terminated'), ('next', 'truncated')],
  include_nested=True,
- leaves_only=True), torch.Size([100, 120, 160, 3]))
+ leaves_only=True), torch.Size([500, 240, 320, 3]))
 ```
 
 Add the prepared first batch, then prepare each later batch in the same way.
@@ -348,7 +348,7 @@ frames = replay[:]
 ```
 
 ```
-2026-11-02 14:43:31,799 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([300]) shape [END]
+2026-11-02 21:09:49,279 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([1500]) shape [END]
 ```
 
 During off-policy training, we would sample batches like this one to update a
@@ -380,8 +380,8 @@ episode_and_frame[max(0, next_episode - 2) : next_episode + 2]
 ```
 
 ```
-tensor([[ 0, 98],
- [ 0, 99],
+tensor([[ 0, 498],
+ [ 0, 499],
  [ 1, 0],
  [ 1, 1]])
 ```
@@ -401,7 +401,7 @@ recording_summary
 ```
 
 ```
-{'frames': 300, 'episodes': 3, 'fps': 50, 'mean_reward': 0.12265302985906601}
+{'frames': 1500, 'episodes': 3, 'fps': 50, 'mean_reward': 0.13270467519760132}
 ```
 
 ## Describing the dataset
@@ -414,7 +414,7 @@ frames.batch_size, frames["observation"].shape, frames["action"].shape
 ```
 
 ```
-(torch.Size([300]), torch.Size([300, 56]), torch.Size([300, 14]))
+(torch.Size([1500]), torch.Size([1500, 56]), torch.Size([1500, 14]))
 ```
 
 LeRobot's feature schema gives each saved field a name, shape and dtype. We
@@ -450,7 +450,7 @@ frames["pixels"].shape[-3:]
 ```
 
 ```
-torch.Size([120, 160, 3])
+torch.Size([240, 320, 3])
 ```
 
 ```
@@ -466,7 +466,7 @@ key_map = {
 ```
 
 ```
-({'dtype': 'video', 'shape': (3, 120, 160)}, {'observation.state': 'observation', 'observation.images.front': 'pixels'})
+({'dtype': 'video', 'shape': (3, 240, 320)}, {'observation.state': 'observation', 'observation.images.front': 'pixels'})
 ```
 
 The action field stores the controller's normalized action vector, not a
@@ -517,7 +517,7 @@ frames["episode"].unique(return_counts=True)
 ```
 
 ```
-(tensor([0, 1, 2]), tensor([100, 100, 100]))
+(tensor([0, 1, 2]), tensor([500, 500, 500]))
 ```
 
 `trajectory_key` tells the exporter which transitions belong together, and
@@ -541,15 +541,21 @@ assert loaded.num_frames == len(replay)
 ```
 
 ```
-Map: 0%| | 0/100 [00:00<?, ? examples/s]
-Map: 100%|██████████| 100/100 [00:00<00:00, 1791.32 examples/s]
+Map: 0%| | 0/500 [00:00<?, ? examples/s]
+Map: 39%|███▊ | 193/500 [00:00<00:00, 1904.42 examples/s]
+Map: 78%|███████▊ | 388/500 [00:00<00:00, 1927.29 examples/s]
+Map: 100%|██████████| 500/500 [00:00<00:00, 1863.87 examples/s]
 
-Map: 0%| | 0/100 [00:00<?, ? examples/s]
-Map: 100%|██████████| 100/100 [00:00<00:00, 1776.65 examples/s]
+Map: 0%| | 0/500 [00:00<?, ? examples/s]
+Map: 39%|███▉ | 195/500 [00:00<00:00, 1929.68 examples/s]
+Map: 79%|███████▊ | 393/500 [00:00<00:00, 1949.23 examples/s]
+Map: 100%|██████████| 500/500 [00:00<00:00, 1883.31 examples/s]
 
-Map: 0%| | 0/100 [00:00<?, ? examples/s]
-Map: 100%|██████████| 100/100 [00:00<00:00, 1779.93 examples/s]
-2026-11-02 14:43:34,890 [torchrl][INFO] Saved the LeRobot recording to /tmp/torchrl-microduck-lerobot-hcoabmb5/dataset [END]
+Map: 0%| | 0/500 [00:00<?, ? examples/s]
+Map: 39%|███▉ | 195/500 [00:00<00:00, 1929.55 examples/s]
+Map: 78%|███████▊ | 390/500 [00:00<00:00, 1937.66 examples/s]
+Map: 100%|██████████| 500/500 [00:00<00:00, 1875.90 examples/s]
+2026-11-02 21:10:09,368 [torchrl][INFO] Saved the LeRobot recording to /tmp/torchrl-microduck-lerobot-n8ywv4nu/dataset [END]
 ```
 
 ## Loading the data back into TorchRL
@@ -586,7 +592,7 @@ batch
 
 - image: 1 entry
 
-- front: f32[3,120,160]
+- front: f32[3,240,320]
 - state: f32[56]
 - task_index: i64[]
 - timestamp: f32[]
@@ -684,7 +690,7 @@ sampling from LeRobot datasets in TorchRL.
 - [LeRobot dataset v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3)
 and [visualization tools](https://huggingface.co/docs/lerobot/using_dataset_tools).
 
-**Total running time of the script:** (0 minutes 11.200 seconds)
+**Total running time of the script:** (0 minutes 32.959 seconds)
 
 [`Download Jupyter notebook: lerobot_export.ipynb`](../_downloads/61d38028156aeff4fa28fed78de648c2/lerobot_export.ipynb)
 
