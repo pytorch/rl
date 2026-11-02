@@ -177,9 +177,8 @@ jobs:
         # Reduced tutorial workloads in CI (fewer rollouts, smaller renders);
         # see the TUTORIAL_FAST blocks in tutorials/sphinx-tutorials/.
         export TORCHRL_TUTORIALS_FAST=1
-        # PR previews keep the LeRobot collection short. Docs published from
-        # main or release tags use the full recording; the Sphinx pass below
-        # reuses this generated gallery page while keeping other tutorials fast.
+        # Generate the LeRobot example in its compatible stable environment;
+        # the main nightly Sphinx pass reuses the resulting gallery page.
         if [[ "${GH_EVENT_NAME}" == "push" && ( "${GH_REF_TYPE}" == "tag" || ( "${GH_REF_TYPE}" == "branch" && "${GH_REF_NAME}" == "main" ) ) ]]; then
           TORCHRL_TUTORIALS_FAST=0 \
             bash .github/unittest/tutorials/scripts/build_lerobot_gallery.sh
