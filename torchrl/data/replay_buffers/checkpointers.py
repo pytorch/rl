@@ -600,7 +600,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
 
     def loads(self, storage, path):
         path = self._get_path(path)
-        data = PersistentTensorDict.from_h5(path)
+        data = PersistentTensorDict.from_h5(path, auto_batch_size=True)
         _len = data["_len"]
         if not _len:
             storage._len = 0
