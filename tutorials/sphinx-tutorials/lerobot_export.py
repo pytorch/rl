@@ -77,7 +77,7 @@ from heuristic_gait import MicroDuckGaitActor  # noqa: E402
 
 TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
 QUICK_STEPS = 100 if TUTORIAL_FAST else 250
-QUICK_WIDTH, QUICK_HEIGHT = (160, 120) if TUTORIAL_FAST else (320, 240)
+QUICK_WIDTH, QUICK_HEIGHT = 320, 240
 quick_policy = MicroDuckGaitActor()
 quick_base_env = MicroDuckEnv(
     download=True,
@@ -166,7 +166,7 @@ Video(filename=str(quick_video_paths[0]), embed=True, width=QUICK_WIDTH)
 
 EPISODE_STEPS = 100 if TUTORIAL_FAST else 500
 TOTAL_FRAMES = 3 * EPISODE_STEPS
-WIDTH, HEIGHT = (160, 120) if TUTORIAL_FAST else (320, 240)
+WIDTH, HEIGHT = 320, 240
 REPO_ID = os.environ.get("TORCHRL_LEROBOT_REPO_ID", "local/microduck-walk")
 PRIVATE_DATASET = True
 OUTPUT_ROOT = (
