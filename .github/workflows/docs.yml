@@ -177,10 +177,15 @@ jobs:
         # Reduced tutorial workloads in CI (fewer rollouts, smaller renders);
         # see the TUTORIAL_FAST blocks in tutorials/sphinx-tutorials/.
         export TORCHRL_TUTORIALS_FAST=1
+        # Generate the LeRobot example in its compatible stable environment;
+        # the main nightly Sphinx pass reuses the resulting gallery page.
+        bash .github/unittest/tutorials/scripts/build_lerobot_gallery.sh
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -v -j 4
+        # A passing docs build must retain the executed tutorial's video.
+        python -c 'from pathlib import Path; page = Path("_local_build/tutorials/lerobot_export.html").read_text(); assert "<video" in page and "data:video/mp4;base64," in page, "LeRobot tutorial video is missing from the built docs"'
         cd ..
 
         # 13. Per-example time budget: fail loudly when a tutorial regresses

@@ -21,6 +21,7 @@
 
 
 # -- Project information -----------------------------------------------------
+import importlib.util
 import os.path
 import sys
 import warnings
@@ -159,6 +160,18 @@ sphinx_gallery_conf = {
     # - llm_browser.py: Requires Playwright browser
     "ignore_pattern": r"llm_browser\.py",
 }
+
+# Keep the LeRobot example as a rendered tutorial when its optional writer is
+# unavailable. Its released torch pins cannot share the nightly docs environment;
+# execute it in a compatible environment using the command in the tutorial.
+if not all(
+    importlib.util.find_spec(package) is not None
+    for package in ("lerobot", "datasets", "pyarrow", "pandas", "av", "huggingface_hub")
+):
+    sphinx_gallery_conf[
+        "filename_pattern"
+    ] = r"reference/generated/tutorials/(?!lerobot_export\.py$)"
+
 
 napoleon_use_ivar = True
 napoleon_numpy_docstring = False
