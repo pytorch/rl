@@ -67,6 +67,93 @@ sys.path.insert(0, str(EXAMPLE_DIR))
 from heuristic_gait import MicroDuckGaitActor  # noqa: E402
 
 # %%
+# A complete example
+# -------------------
+#
+# Let's start by running the complete path once. This short example collects a
+# MicroDuck episode into a replay buffer, exports it as a LeRobot dataset, and
+# displays the recorded video. We will come back to each part below and see how
+# the collector, replay buffer, and dataset adapter fit together.
+
+QUICK_STEPS = 250
+QUICK_WIDTH, QUICK_HEIGHT = 320, 240
+quick_policy = MicroDuckGaitActor()
+quick_base_env = MicroDuckEnv(
+    download=True,
+    backend="mujoco",
+    tasks=MicroDuckEnv.tracking_task(0.03, **quick_policy.config.task_kwargs()),
+    action_scale=0.35,
+    from_pixels=True,
+    render_width=QUICK_WIDTH,
+    render_height=QUICK_HEIGHT,
+    camera_id=-1,
+    seed=0,
+)
+quick_env = TransformedEnv(
+    quick_base_env,
+    Compose(
+        StepCounter(max_steps=QUICK_STEPS, step_count_key="frame"),
+        TrajCounter(out_key="episode"),
+    ),
+)
+quick_collector = Collector(
+    quick_env,
+    quick_policy,
+    frames_per_batch=QUICK_STEPS,
+    total_frames=QUICK_STEPS,
+)
+try:
+    quick_batch = next(iter(quick_collector))
+finally:
+    quick_collector.shutdown()
+
+quick_replay = ReplayBuffer(storage=LazyTensorStorage(QUICK_STEPS), batch_size=8)
+quick_replay.extend(
+    quick_batch.select("pixels", "observation", "action", "episode", "frame").reshape(
+        -1
+    )
+)
+quick_features = {
+    "observation.state": {
+        "dtype": "float32",
+        "shape": (quick_batch["observation"].shape[-1],),
+    },
+    "action": {
+        "dtype": "float32",
+        "shape": (MicroDuckEnv.NUM_JOINTS,),
+        "names": list(MicroDuckEnv.JOINT_NAMES),
+    },
+    "observation.images.front": {
+        "dtype": "video",
+        "shape": (3, QUICK_HEIGHT, QUICK_WIDTH),
+    },
+}
+quick_adapter = LeRobotDatasetAdapter(
+    repo_id="local/microduck-quick-start",
+    root=Path(tempfile.mkdtemp(prefix="torchrl-microduck-quick-")) / "dataset",
+    fps=round(1 / quick_base_env.dt),
+    features=quick_features,
+    key_map={
+        "observation.state": "observation",
+        "observation.images.front": "pixels",
+    },
+    task="Walk forward slowly while keeping balance.",
+    robot_type="microduck",
+    batch_size=32,
+)
+quick_dataset = quick_replay.export(
+    quick_adapter, trajectory_key="episode", step_key="frame"
+)
+quick_video_paths = sorted(quick_dataset.root.rglob("*.mp4"))
+assert quick_video_paths
+Video(filename=str(quick_video_paths[0]), embed=True, width=QUICK_WIDTH)
+
+# %%
+# Now let's look at the same process one piece at a time. We will collect a
+# longer recording below so we can inspect how episode IDs, replay entries, and
+# the LeRobot schema are built.
+
+# %%
 # Setting up the collection
 # -------------------------
 #
