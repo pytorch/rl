@@ -158,14 +158,17 @@ Video(filename=str(quick_video_paths[0]), embed=True, width=QUICK_WIDTH)
 # Setting up the collection
 # -------------------------
 #
-# A normal run collects 1,500 frames, with at most 500 steps per episode. In
-# docs CI, ``TORCHRL_TUTORIALS_FAST=1`` shortens this to 300 frames across three
-# 100-step episodes. Each run writes a new dataset because the LeRobot writer
-# expects a new destination. To keep the result at a known location, set
+# A normal run collects 500 frames at 640 by 480, which makes a 10-second video
+# at 50 fps. With no falls, this gives two 250-step episodes. A fall can split
+# the same frame budget across more episodes. In docs CI,
+# ``TORCHRL_TUTORIALS_FAST=1`` collects 300 frames across three 100-step
+# episodes. Each run writes a new dataset because the LeRobot writer expects a
+# new destination. To keep the result at a known location, set
 # ``TORCHRL_LEROBOT_OUTPUT`` to a new directory before running the tutorial.
 
-EPISODE_STEPS = 100 if TUTORIAL_FAST else 500
-TOTAL_FRAMES = 3 * EPISODE_STEPS
+EPISODE_STEPS = 100 if TUTORIAL_FAST else 250
+NUM_EPISODES = 3 if TUTORIAL_FAST else 2
+TOTAL_FRAMES = NUM_EPISODES * EPISODE_STEPS
 WIDTH, HEIGHT = (320, 240) if TUTORIAL_FAST else (640, 480)
 REPO_ID = os.environ.get("TORCHRL_LEROBOT_REPO_ID", "local/microduck-walk")
 PRIVATE_DATASET = True
@@ -334,8 +337,8 @@ episode_and_frame[max(0, next_episode - 2) : next_episode + 2]
 
 # %%
 # We can also check how much data we collected. At the default settings, the
-# buffer has room for all 1,500 frames. A fall can create an extra episode, as
-# the collector resets the environment and continues until it has enough data.
+# buffer has room for all 500 frames. A fall can create an extra episode, but
+# the collector stops once it has filled that frame budget.
 
 recording_summary = {
     "frames": len(replay),
