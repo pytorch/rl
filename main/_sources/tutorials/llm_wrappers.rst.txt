@@ -209,7 +209,7 @@ The Transformers wrapper provides more flexibility and is great for research and
 
 
     Loading Transformers model...
-    Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]    Loading weights: 100%|██████████| 290/290 [00:00<00:00, 6819.74it/s]
+    Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]    Loading weights:   2%|▏         | 5/290 [00:00<00:12, 23.23it/s]    Loading weights:   4%|▍         | 12/290 [00:00<00:07, 37.13it/s]    Loading weights:   6%|▌         | 17/290 [00:00<00:07, 36.29it/s]    Loading weights:   7%|▋         | 21/290 [00:00<00:09, 27.33it/s]    Loading weights:   9%|▊         | 25/290 [00:01<00:16, 16.24it/s]    Loading weights:  11%|█▏        | 33/290 [00:01<00:12, 21.25it/s]    Loading weights:  12%|█▏        | 36/290 [00:01<00:12, 19.77it/s]    Loading weights:  14%|█▍        | 41/290 [00:02<00:15, 15.91it/s]    Loading weights:  18%|█▊        | 52/290 [00:02<00:10, 23.22it/s]    Loading weights:  20%|██        | 58/290 [00:02<00:10, 21.92it/s]    Loading weights:  24%|██▍       | 69/290 [00:02<00:08, 27.06it/s]    Loading weights:  26%|██▌       | 75/290 [00:03<00:07, 28.02it/s]    Loading weights:  28%|██▊       | 82/290 [00:03<00:08, 24.78it/s]    Loading weights:  32%|███▏      | 94/290 [00:03<00:07, 27.83it/s]    Loading weights:  34%|███▍      | 100/290 [00:04<00:08, 21.93it/s]    Loading weights:  41%|████      | 119/290 [00:04<00:05, 32.42it/s]    Loading weights:  43%|████▎     | 126/290 [00:04<00:04, 36.09it/s]    Loading weights:  45%|████▌     | 131/290 [00:05<00:05, 29.28it/s]    Loading weights:  49%|████▉     | 142/290 [00:05<00:04, 36.37it/s]    Loading weights:  51%|█████     | 147/290 [00:05<00:04, 33.61it/s]    Loading weights:  52%|█████▏    | 151/290 [00:05<00:04, 34.54it/s]    Loading weights:  53%|█████▎    | 155/290 [00:05<00:05, 24.19it/s]    Loading weights:  56%|█████▌    | 161/290 [00:05<00:04, 29.24it/s]    Loading weights:  57%|█████▋    | 165/290 [00:06<00:04, 27.10it/s]    Loading weights:  60%|██████    | 174/290 [00:06<00:04, 24.56it/s]    Loading weights:  64%|██████▍   | 186/290 [00:06<00:03, 31.02it/s]    Loading weights:  66%|██████▌   | 192/290 [00:06<00:02, 34.31it/s]    Loading weights:  70%|██████▉   | 202/290 [00:07<00:02, 34.65it/s]    Loading weights:  72%|███████▏  | 210/290 [00:07<00:02, 37.13it/s]    Loading weights:  74%|███████▍  | 215/290 [00:07<00:02, 32.88it/s]    Loading weights:  77%|███████▋  | 222/290 [00:08<00:02, 24.81it/s]    Loading weights:  81%|████████  | 234/290 [00:08<00:01, 30.74it/s]    Loading weights:  82%|████████▏ | 238/290 [00:08<00:01, 31.92it/s]    Loading weights:  86%|████████▌ | 250/290 [00:08<00:01, 28.29it/s]    Loading weights:  89%|████████▊ | 257/290 [00:09<00:01, 26.19it/s]    Loading weights:  94%|█████████▍| 273/290 [00:09<00:00, 31.18it/s]    Loading weights: 100%|██████████| 290/290 [00:09<00:00, 29.99it/s]
     Transformers wrapper input keys: [('history', 'prompt')]
     Transformers wrapper output keys: ['text', 'masks', 'tokens', 'log_probs', 'history']
     Transformers Results:
@@ -565,7 +565,7 @@ different LLM backends without changing your RL code.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.274 seconds)
+   **Total running time of the script:** (0 minutes 30.240 seconds)
 
 
 .. _sphx_glr_download_tutorials_llm_wrappers.py:
