@@ -393,6 +393,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: TorchRL contributors">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_lerobot_export_thumb.png
+    :alt:
+
+  :doc:`/tutorials/lerobot_export`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Exporting Rollout data to LeRobot</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and torchrl to train a parametric policy network to solve the Inverted Pendulum task from the OpenAI-Gym/Farama-Gymnasium control library.">
 
 .. only:: html
@@ -576,6 +593,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/multiagent_ppo
    /tutorials/torchrl_demo
    /tutorials/export
+   /tutorials/lerobot_export
    /tutorials/coding_ppo
    /tutorials/torchrl_envs
    /tutorials/llm_wrappers

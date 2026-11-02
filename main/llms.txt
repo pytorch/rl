@@ -1061,6 +1061,7 @@
 - [Get started with logging](tutorials/getting-started-4.md)
 - [Get started with your own first training loop](tutorials/getting-started-5.md)
 - [README Tutos](tutorials/index.md)
+- [Exporting Rollout data to LeRobot](tutorials/lerobot_export.md)
 - [LLM Wrappers in TorchRL](tutorials/llm_wrappers.md)
 - [Deploying low-level policies for high-level reinforcement learning](tutorials/low_level_controller.md)
 - [Memory-Efficient RL Training](tutorials/memory_efficient_rl.md)
