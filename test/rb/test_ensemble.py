@@ -15,7 +15,9 @@ import numpy as np
 import pytest
 import torch
 from _rb_common import _has_gym, _has_h5py, _has_tv
+from packaging import version
 from tensordict import (
+    __version__ as tensordict_version,
     assert_allclose_td,
     is_tensor_collection,
     tensorclass,
@@ -73,6 +75,12 @@ from torchrl.envs.transforms.transforms import (
 from torchrl.modules import RandomPolicy
 from torchrl.testing import CARTPOLE_VERSIONED, get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv
+
+
+def _make_checkpointer(checkpointer):
+    if checkpointer is H5StorageCheckpointer:
+        return checkpointer(auto_batch_size=True)
+    return checkpointer()
 
 
 class TestEnsemble:
@@ -1048,8 +1056,8 @@ class TestCheckpointers:
             with pytest.raises(ValueError, match="Unsupported torch version"):
                 checkpointer()
             return
-        rb.storage.checkpointer = checkpointer()
-        rb_test.storage.checkpointer = checkpointer()
+        rb.storage.checkpointer = _make_checkpointer(checkpointer)
+        rb_test.storage.checkpointer = _make_checkpointer(checkpointer)
         for data in collector:
             rb.extend(data)
             rb.dumps(tmpdir)
@@ -1087,8 +1095,8 @@ class TestCheckpointers:
             with pytest.raises(ValueError, match="Unsupported torch version"):
                 checkpointer()
             return
-        rb.storage.checkpointer = checkpointer()
-        rb_test.storage.checkpointer = checkpointer()
+        rb.storage.checkpointer = _make_checkpointer(checkpointer)
+        rb_test.storage.checkpointer = _make_checkpointer(checkpointer)
         for data in collector:
             rb.extend(data)
             assert rb.storage.max_size == 102
@@ -1145,8 +1153,8 @@ class TestCheckpointRoundTrip:
         """Rows emptied from the buffer do not reach a checkpoint, refilled or not."""
         rb = ReplayBuffer(storage=storage_type(102, ndim=2))
         rb_test = ReplayBuffer(storage=storage_type(102, ndim=2))
-        rb.storage.checkpointer = checkpointer()
-        rb_test.storage.checkpointer = checkpointer()
+        rb.storage.checkpointer = _make_checkpointer(checkpointer)
+        rb_test.storage.checkpointer = _make_checkpointer(checkpointer)
         rb.extend(self._ted_batch(34, done=True))
         rb.empty()
         if refill_steps:
@@ -1162,16 +1170,16 @@ class TestCheckpointRoundTrip:
     def test_resave_loaded_empty_checkpoint(self, storage_type, checkpointer, tmpdir):
         """A buffer loaded from an empty checkpoint can be saved and reloaded."""
         rb = ReplayBuffer(storage=storage_type(102, ndim=2))
-        rb.storage.checkpointer = checkpointer()
+        rb.storage.checkpointer = _make_checkpointer(checkpointer)
         rb.extend(self._ted_batch(34, done=True))
         rb.empty()
         rb.dumps(tmpdir / "first")
         rb_loaded = ReplayBuffer(storage=storage_type(102, ndim=2))
-        rb_loaded.storage.checkpointer = checkpointer()
+        rb_loaded.storage.checkpointer = _make_checkpointer(checkpointer)
         rb_loaded.loads(tmpdir / "first")
         rb_loaded.dumps(tmpdir / "second")
         rb_test = ReplayBuffer(storage=storage_type(102, ndim=2))
-        rb_test.storage.checkpointer = checkpointer()
+        rb_test.storage.checkpointer = _make_checkpointer(checkpointer)
         rb_test.loads(tmpdir / "second")
         assert len(rb_test) == 0
         batch = self._ted_batch(5, done=False, offset=100)
@@ -1181,15 +1189,15 @@ class TestCheckpointRoundTrip:
     def test_resave_loaded_partial_checkpoint(self, storage_type, checkpointer, tmpdir):
         """Saving a buffer loaded from a partial checkpoint keeps its done flags."""
         rb = ReplayBuffer(storage=storage_type(102, ndim=2))
-        rb.storage.checkpointer = checkpointer()
+        rb.storage.checkpointer = _make_checkpointer(checkpointer)
         rb.extend(self._ted_batch(7, done=True))
         rb.dumps(tmpdir / "first")
         rb_loaded = ReplayBuffer(storage=storage_type(102, ndim=2))
-        rb_loaded.storage.checkpointer = checkpointer()
+        rb_loaded.storage.checkpointer = _make_checkpointer(checkpointer)
         rb_loaded.loads(tmpdir / "first")
         rb_loaded.dumps(tmpdir / "second")
         rb_test = ReplayBuffer(storage=storage_type(102, ndim=2))
-        rb_test.storage.checkpointer = checkpointer()
+        rb_test.storage.checkpointer = _make_checkpointer(checkpointer)
         rb_test.loads(tmpdir / "second")
         assert rb_test[:]["next", "done"].all()
         assert_allclose_td(rb_test[:], rb[:])
@@ -1197,14 +1205,56 @@ class TestCheckpointRoundTrip:
     def test_full_storage_slice_cursor(self, storage_type, checkpointer, tmpdir):
         """A full buffer last written through a slice round-trips its transitions."""
         rb = ReplayBuffer(storage=storage_type(10))
-        rb.storage.checkpointer = checkpointer()
+        rb.storage.checkpointer = _make_checkpointer(checkpointer)
         rb.extend(self._ted_batch(10, done=False)[0])
         rb.storage.set(slice(0, 4), self._ted_batch(4, done=False, offset=10)[0])
         rb.dumps(tmpdir)
         rb_test = ReplayBuffer(storage=storage_type(10))
-        rb_test.storage.checkpointer = checkpointer()
+        rb_test.storage.checkpointer = _make_checkpointer(checkpointer)
         rb_test.loads(tmpdir)
         assert_allclose_td(rb_test[:], rb[:])
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py required")
+def test_h5_checkpointer_uses_tensordict_default(tmpdir):
+    n = 6
+    done = torch.zeros(n, 1, dtype=torch.bool)
+    data = TensorDict(
+        {
+            "observation": torch.arange(n, dtype=torch.float32),
+            "action": torch.zeros(n),
+            "done": done,
+            "terminated": done,
+            "next": {
+                "observation": torch.arange(n, dtype=torch.float32) + 1,
+                "done": done,
+                "terminated": done,
+                "reward": torch.ones(n, 1),
+            },
+        },
+        batch_size=[n],
+        names=["time"],
+    )
+    rb = ReplayBuffer(storage=LazyTensorStorage(10))
+    rb.storage.checkpointer = H5StorageCheckpointer(auto_batch_size=True)
+    rb.extend(data)
+    rb.dumps(tmpdir)
+
+    restored = ReplayBuffer(storage=LazyTensorStorage(10))
+    restored.storage.checkpointer = H5StorageCheckpointer()
+    if version.parse(tensordict_version).release < (0, 17):
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            restored.loads(tmpdir)
+    else:
+        restored.loads(tmpdir)
+    assert_allclose_td(restored[:], rb[:])
+
+    explicitly_inferred = ReplayBuffer(storage=LazyTensorStorage(10))
+    explicitly_inferred.storage.checkpointer = H5StorageCheckpointer(
+        auto_batch_size=True
+    )
+    explicitly_inferred.loads(tmpdir)
+    assert_allclose_td(explicitly_inferred[:], rb[:])
 
 
 @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
