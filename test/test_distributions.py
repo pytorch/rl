@@ -578,6 +578,57 @@ class TestIndependentNormal:
 
 
 class TestTruncatedNormal:
+    @pytest.mark.parametrize("scale_shape", [(), (2, 1), (3,)])
+    @pytest.mark.parametrize("tensor_bounds", [False, True])
+    @pytest.mark.parametrize("broadcast_loc", [False, True])
+    def test_truncnormal_broadcast_parameters(
+        self, scale_shape, tensor_bounds, broadcast_loc
+    ):
+        loc = torch.tensor([[0.2, 0.5, -0.1], [-0.3, 1.0, 0.4]], dtype=torch.float64)
+        if broadcast_loc:
+            loc = loc[:, :1]
+        scale = (
+            0.8 + 0.15 * torch.arange(math.prod(scale_shape), dtype=loc.dtype)
+        ).reshape(scale_shape)
+        if tensor_bounds:
+            low = torch.tensor([-1.0, -0.5, -2.0], dtype=loc.dtype)
+            high = torch.tensor([1.5, 2.0, 1.0], dtype=loc.dtype)
+        else:
+            low, high = -1.0, 1.5
+        dist = TruncatedNormal(loc, scale, low=low, high=high)
+
+        for update in (False, True):
+            if update:
+                loc, scale = loc + 0.1, scale * 1.1
+                dist.update(loc, scale)
+            means, log_probs = [], []
+            for row, sigmas, lower, upper in zip(
+                *torch.broadcast_tensors(
+                    loc, scale, torch.as_tensor(low), torch.as_tensor(high)
+                )
+            ):
+                row_means, row_log_probs = [], []
+                for mu, sigma, a, b in zip(
+                    row.tolist(), sigmas.tolist(), lower.tolist(), upper.tolist()
+                ):
+                    alpha, beta = (a - mu) / sigma, (b - mu) / sigma
+                    mass = (
+                        math.erf(beta / math.sqrt(2)) - math.erf(alpha / math.sqrt(2))
+                    ) / 2
+                    phi_alpha = math.exp(-(alpha**2) / 2) / math.sqrt(2 * math.pi)
+                    phi_beta = math.exp(-(beta**2) / 2) / math.sqrt(2 * math.pi)
+                    row_means.append(mu + sigma * (phi_alpha - phi_beta) / mass)
+                    row_log_probs.append(
+                        -math.log(sigma * math.sqrt(2 * math.pi) * mass)
+                    )
+                means.append(row_means)
+                log_probs.append(sum(row_log_probs))
+            torch.testing.assert_close(dist.mean, torch.tensor(means, dtype=loc.dtype))
+            torch.testing.assert_close(
+                dist.log_prob(loc.expand_as(dist.mean)),
+                torch.tensor(log_probs, dtype=loc.dtype),
+            )
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("dtype", [torch.float16, torch.float32, torch.float64])
     @pytest.mark.parametrize("tensor_bounds", [False, True])
