@@ -273,8 +273,8 @@ class TruncatedNormal(D.Independent):
         base_dist = _TruncatedNormal(
             loc,
             scale,
-            a=self.low.expand_as(loc),
-            b=self.high.expand_as(scale),
+            a=self.low,
+            b=self.high,
             device=self.device,
         )
         super().__init__(base_dist, 1, validate_args=False)
