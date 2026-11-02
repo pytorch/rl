@@ -1022,6 +1022,9 @@ class TestRBMultidim:
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym required")
+@pytest.mark.filterwarnings(
+    "error:This h5 file stores the batch sizes or the dim names:FutureWarning"
+)
 class TestCheckpointers:
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     @pytest.mark.parametrize(
