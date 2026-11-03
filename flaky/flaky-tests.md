@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-11-02
+# Flaky Test Report - 2026-11-03
 
 ## Summary
 
 - **Flaky tests**: 7
-- **Newly flaky** (last 7 days): 5
+- **Newly flaky** (last 7 days): 7
 - **Resolved**: 0
-- **Total tests analyzed**: 32893
+- **Total tests analyzed**: 32896
 - **CI runs analyzed**: 60
 
 ---
@@ -14,13 +14,13 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `.../test_examples.py::test_example[replay-buffer-checkpoint]` 🆕 | 40.0% (8/20) | 8 | 0.80 | 2026-11-02 |
-| `...tion.py::TestEGreedy::test_bounded_compile_fullgraph[0.0]` 🆕 | 9.1% (5/55) | 5 | 0.18 | 2026-11-01 |
-| `...tion.py::TestEGreedy::test_bounded_compile_fullgraph[1.0]` 🆕 | 9.1% (5/55) | 5 | 0.18 | 2026-11-01 |
-| `...ploration.py::TestEGreedy::test_bounded_compile_annealing` 🆕 | 9.1% (5/55) | 5 | 0.18 | 2026-11-01 |
-| `...stDreamerV3Components::test_discrete_actor[cuda-autocast]` | 8.0% (6/75) | 6 | 0.16 | 2026-10-31 |
-| `....py::TestHydraParsing::test_dqn_trainer_parsing_with_file` | 6.1% (10/165) | 10 | 0.12 | 2026-10-29 |
-| `....py::TestHydraParsing::test_iql_trainer_parsing_with_file` 🆕 | 6.1% (10/165) | 10 | 0.12 | 2026-10-30 |
+| `.../test_examples.py::test_example[replay-buffer-checkpoint]` 🆕 | 55.6% (10/18) | 10 | 0.89 | 2026-11-02 |
+| `...tion.py::TestEGreedy::test_bounded_compile_fullgraph[0.0]` 🆕 | 8.3% (10/120) | 10 | 0.17 | 2026-11-03 |
+| `...tion.py::TestEGreedy::test_bounded_compile_fullgraph[1.0]` 🆕 | 8.3% (10/120) | 10 | 0.17 | 2026-11-03 |
+| `...ploration.py::TestEGreedy::test_bounded_compile_annealing` 🆕 | 8.3% (10/120) | 10 | 0.17 | 2026-11-03 |
+| `...TestDataConfigs::test_complex_replay_buffer_configuration` 🆕 | 7.3% (12/164) | 12 | 0.15 | 2026-11-03 |
+| `...py::TestHydraParsing::test_ddpg_trainer_parsing_with_file` 🆕 | 6.1% (10/164) | 10 | 0.12 | 2026-11-03 |
+| `....py::TestHydraParsing::test_iql_trainer_parsing_with_file` 🆕 | 6.1% (10/164) | 10 | 0.12 | 2026-10-30 |
 
 
 ### Newly Flaky Tests
@@ -29,6 +29,8 @@
 - `test/test_exploration.py::TestEGreedy::test_bounded_compile_fullgraph[0.0]`
 - `test/test_exploration.py::TestEGreedy::test_bounded_compile_fullgraph[1.0]`
 - `test/test_exploration.py::TestEGreedy::test_bounded_compile_annealing`
+- `test/test_configs.py::TestDataConfigs::test_complex_replay_buffer_configuration`
+- `test/test_configs.py::TestHydraParsing::test_ddpg_trainer_parsing_with_file`
 - `test/test_configs.py::TestHydraParsing::test_iql_trainer_parsing_with_file`
 
 ---
@@ -42,4 +44,4 @@
 
 ---
 
-*Generated at 2026-11-02T06:26:23.999755+00:00*
+*Generated at 2026-11-03T06:21:14.826882+00:00*
