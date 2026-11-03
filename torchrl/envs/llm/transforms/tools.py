@@ -25,7 +25,8 @@ from tensordict import lazy_stack, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 
-from torchrl.envs import Transform
+from torchrl.envs import Compose, Transform, TransformedEnv
+from torchrl.envs.llm.transforms.tokenizer import IncrementalTokenizer
 from typing_extensions import TypedDict
 
 
@@ -231,7 +232,40 @@ class ToolTransformBase(Transform):
             raise RuntimeError(
                 f"{self.__class__.__name__} uses _call(), not _step(). Set use_step=False."
             )
-        return self._process_tensordict(next_tensordict)
+        num_messages = next_tensordict["history"].prompt.shape[-1]
+        next_tensordict = self._process_tensordict(next_tensordict)
+        # A ragged lazy stack reports -1 here, so only skip when the length is known.
+        if num_messages != -1 and (
+            next_tensordict["history"].prompt.shape[-1] == num_messages
+        ):
+            # No tool result was added, the tokens are still in sync.
+            return next_tensordict
+        return self._sync_tokens(tensordict, next_tensordict)
+
+    def _sync_tokens(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        """Re-run the IncrementalTokenizer transforms placed before this one.
+
+        ``ChatEnv(with_tokenizer=True)`` puts :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`
+        first, so it writes ``tokens.prompt`` before the tool results are added to
+        ``history.prompt``. Running it again keeps the two in sync.
+        """
+        # Collect the transforms layer by layer, outermost first, then replay them
+        # in execution order (innermost env first).
+        layers = []
+        env = self.parent
+        while isinstance(env, TransformedEnv):
+            transforms = env.transform
+            if not isinstance(transforms, Compose):
+                transforms = [transforms]
+            layers.append(transforms)
+            env = env.base_env
+        for transforms in reversed(layers):
+            for transform in transforms:
+                if isinstance(transform, IncrementalTokenizer):
+                    next_tensordict = transform._step(tensordict, next_tensordict)
+        return next_tensordict
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         """Handle call with tool processing.
