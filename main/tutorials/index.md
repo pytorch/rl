@@ -112,16 +112,16 @@ Introduction to TorchRL
 [Exporting TorchRL modules](export.html)
 
 Exporting TorchRL modules
-![](../_images/sphx_glr_lerobot_export_thumb.png)
-
-[Exporting Rollout data to LeRobot](lerobot_export.html)
-
-Exporting Rollout data to LeRobot
 ![](../_images/sphx_glr_coding_ppo_thumb.png)
 
 [Reinforcement Learning (PPO) with TorchRL Tutorial](coding_ppo.html)
 
 Reinforcement Learning (PPO) with TorchRL Tutorial
+![](../_images/sphx_glr_lerobot_export_thumb.png)
+
+[Exporting Rollout data to LeRobot](lerobot_export.html)
+
+Exporting Rollout data to LeRobot
 ![](../_images/sphx_glr_torchrl_envs_thumb.png)
 
 [TorchRL envs](torchrl_envs.html)

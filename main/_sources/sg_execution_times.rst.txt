@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**07:01.231** total execution time for 32 files **from all galleries**:
+**06:56.323** total execution time for 32 files **from all galleries**:
 
 .. container::
 
@@ -41,14 +41,14 @@ Computation times
    * - :ref:`sphx_glr_tutorials_llm_wrappers.py` (``reference/generated/tutorials/llm_wrappers.py``)
      - 00:39.085
      - 0.0
-   * - :ref:`sphx_glr_tutorials_lerobot_export.py` (``reference/generated/tutorials/lerobot_export.py``)
-     - 00:32.936
-     - 0.0
    * - :ref:`sphx_glr_tutorials_coding_ddpg.py` (``reference/generated/tutorials/coding_ddpg.py``)
      - 00:28.857
      - 0.0
    * - :ref:`sphx_glr_tutorials_multiagent_ppo.py` (``reference/generated/tutorials/multiagent_ppo.py``)
      - 00:28.420
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_lerobot_export.py` (``reference/generated/tutorials/lerobot_export.py``)
+     - 00:28.027
      - 0.0
    * - :ref:`sphx_glr_tutorials_multiagent_competitive_ddpg.py` (``reference/generated/tutorials/multiagent_competitive_ddpg.py``)
      - 00:27.518

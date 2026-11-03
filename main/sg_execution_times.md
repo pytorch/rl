@@ -1,15 +1,15 @@
 # Computation times
 
-**07:01.231** total execution time for 32 files **from all galleries**:
+**06:56.323** total execution time for 32 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
 | [TorchRL trainer: A DQN example](tutorials/coding_dqn.html#sphx-glr-tutorials-coding-dqn-py) (`reference/generated/tutorials/coding_dqn.py`) | 01:23.910 | 0.0 |
 | [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`reference/generated/tutorials/mujoco_cube_bowl_macros.py`) | 00:56.735 | 0.0 |
 | [LLM Wrappers in TorchRL](tutorials/llm_wrappers.html#sphx-glr-tutorials-llm-wrappers-py) (`reference/generated/tutorials/llm_wrappers.py`) | 00:39.085 | 0.0 |
-| [Exporting Rollout data to LeRobot](tutorials/lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`reference/generated/tutorials/lerobot_export.py`) | 00:32.936 | 0.0 |
 | [TorchRL objectives: Coding a DDPG loss](tutorials/coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`reference/generated/tutorials/coding_ddpg.py`) | 00:28.857 | 0.0 |
 | [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`reference/generated/tutorials/multiagent_ppo.py`) | 00:28.420 | 0.0 |
+| [Exporting Rollout data to LeRobot](tutorials/lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`reference/generated/tutorials/lerobot_export.py`) | 00:28.027 | 0.0 |
 | [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](tutorials/multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`reference/generated/tutorials/multiagent_competitive_ddpg.py`) | 00:27.518 | 0.0 |
 | [TorchRL envs](tutorials/torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`reference/generated/tutorials/torchrl_envs.py`) | 00:25.825 | 0.0 |
 | [Exporting TorchRL modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:23.611 | 0.0 |
