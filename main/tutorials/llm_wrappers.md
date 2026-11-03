@@ -156,56 +156,7 @@ except ImportError:
 Loading Transformers model...
 
 Loading weights: 0%| | 0/290 [00:00<?, ?it/s]
-Loading weights: 2%|▏ | 6/290 [00:00<00:06, 43.69it/s]
-Loading weights: 4%|▍ | 11/290 [00:00<00:08, 31.57it/s]
-Loading weights: 5%|▌ | 15/290 [00:00<00:18, 15.17it/s]
-Loading weights: 6%|▌ | 18/290 [00:01<00:18, 14.92it/s]
-Loading weights: 8%|▊ | 24/290 [00:01<00:14, 18.04it/s]
-Loading weights: 9%|▉ | 27/290 [00:01<00:13, 19.40it/s]
-Loading weights: 10%|█ | 30/290 [00:01<00:14, 17.78it/s]
-Loading weights: 12%|█▏ | 35/290 [00:01<00:14, 17.54it/s]
-Loading weights: 15%|█▍ | 43/290 [00:02<00:09, 26.54it/s]
-Loading weights: 18%|█▊ | 51/290 [00:02<00:07, 32.66it/s]
-Loading weights: 19%|█▉ | 55/290 [00:02<00:08, 27.73it/s]
-Loading weights: 21%|██▏ | 62/290 [00:02<00:06, 34.44it/s]
-Loading weights: 23%|██▎ | 67/290 [00:02<00:09, 24.34it/s]
-Loading weights: 26%|██▌ | 75/290 [00:02<00:06, 33.05it/s]
-Loading weights: 28%|██▊ | 80/290 [00:03<00:09, 23.19it/s]
-Loading weights: 32%|███▏ | 92/290 [00:03<00:08, 23.05it/s]
-Loading weights: 34%|███▍ | 100/290 [00:04<00:08, 22.89it/s]
-Loading weights: 36%|███▌ | 103/290 [00:04<00:09, 20.56it/s]
-Loading weights: 39%|███▊ | 112/290 [00:04<00:07, 23.62it/s]
-Loading weights: 40%|████ | 116/290 [00:04<00:07, 24.54it/s]
-Loading weights: 41%|████ | 119/290 [00:06<00:17, 9.95it/s]
-Loading weights: 42%|████▏ | 122/290 [00:06<00:15, 10.96it/s]
-Loading weights: 43%|████▎ | 124/290 [00:06<00:14, 11.18it/s]
-Loading weights: 43%|████▎ | 126/290 [00:06<00:14, 11.70it/s]
-Loading weights: 45%|████▌ | 131/290 [00:06<00:09, 16.00it/s]
-Loading weights: 47%|████▋ | 136/290 [00:06<00:09, 16.55it/s]
-Loading weights: 48%|████▊ | 140/290 [00:07<00:08, 17.21it/s]
-Loading weights: 54%|█████▍ | 156/290 [00:07<00:05, 26.03it/s]
-Loading weights: 55%|█████▍ | 159/290 [00:07<00:05, 24.67it/s]
-Loading weights: 56%|█████▌ | 162/290 [00:08<00:06, 19.40it/s]
-Loading weights: 57%|█████▋ | 165/290 [00:08<00:09, 13.39it/s]
-Loading weights: 60%|██████ | 174/290 [00:08<00:05, 20.84it/s]
-Loading weights: 61%|██████ | 177/290 [00:08<00:05, 19.13it/s]
-Loading weights: 64%|██████▍ | 185/290 [00:09<00:04, 22.78it/s]
-Loading weights: 65%|██████▍ | 188/290 [00:09<00:06, 15.30it/s]
-Loading weights: 66%|██████▌ | 191/290 [00:09<00:06, 14.65it/s]
-Loading weights: 69%|██████▉ | 200/290 [00:10<00:03, 22.67it/s]
-Loading weights: 70%|███████ | 204/290 [00:10<00:03, 23.93it/s]
-Loading weights: 72%|███████▏ | 208/290 [00:10<00:03, 20.68it/s]
-Loading weights: 78%|███████▊ | 225/290 [00:10<00:01, 35.76it/s]
-Loading weights: 79%|███████▉ | 229/290 [00:11<00:02, 27.84it/s]
-Loading weights: 82%|████████▏ | 237/290 [00:11<00:01, 28.34it/s]
-Loading weights: 83%|████████▎ | 241/290 [00:11<00:01, 24.93it/s]
-Loading weights: 84%|████████▍ | 244/290 [00:11<00:02, 22.26it/s]
-Loading weights: 86%|████████▌ | 248/290 [00:12<00:02, 18.90it/s]
-Loading weights: 87%|████████▋ | 251/290 [00:12<00:01, 20.24it/s]
-Loading weights: 93%|█████████▎| 269/290 [00:12<00:00, 42.11it/s]
-Loading weights: 94%|█████████▍| 274/290 [00:12<00:00, 34.34it/s]
-Loading weights: 96%|█████████▌| 278/290 [00:12<00:00, 31.67it/s]
-Loading weights: 100%|██████████| 290/290 [00:12<00:00, 22.57it/s]
+Loading weights: 100%|██████████| 290/290 [00:00<00:00, 3732.45it/s]
 Transformers wrapper input keys: [('history', 'prompt')]
 Transformers wrapper output keys: ['text', 'masks', 'tokens', 'log_probs', 'history']
 Transformers Results:
@@ -470,7 +421,7 @@ Tutorial completed successfully!
 ============================================================
 ```
 
-**Total running time of the script:** (0 minutes 39.085 seconds)
+**Total running time of the script:** (0 minutes 9.658 seconds)
 
 [`Download Jupyter notebook: llm_wrappers.ipynb`](../_downloads/193ac0d7b83cba60008d159b8e5c8771/llm_wrappers.ipynb)
 

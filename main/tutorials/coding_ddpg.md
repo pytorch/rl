@@ -1150,26 +1150,26 @@ except Exception:
 
 ```
 0%| | 0/10000 [00:00<?, ?it/s]
- 8%|▊ | 800/10000 [00:00<00:02, 3328.38it/s]
- 16%|█▌ | 1600/10000 [00:01<00:08, 936.36it/s]
- 24%|██▍ | 2400/10000 [00:01<00:05, 1341.79it/s]
- 32%|███▏ | 3200/10000 [00:02<00:03, 1725.72it/s]
- 40%|████ | 4000/10000 [00:02<00:02, 2088.31it/s]
- 48%|████▊ | 4800/10000 [00:02<00:02, 2395.41it/s]
- 56%|█████▌ | 5600/10000 [00:02<00:01, 2510.51it/s]
-reward: -1.92 (r0 = -2.17), reward eval: reward: 0.00, reward normalized=-2.18/6.25, grad norm= 36.45, loss_value= 349.95, loss_actor= 13.54, target value: -13.34: 56%|█████▌ | 5600/10000 [00:05<00:01, 2510.51it/s]
-reward: -1.92 (r0 = -2.17), reward eval: reward: 0.00, reward normalized=-2.18/6.25, grad norm= 36.45, loss_value= 349.95, loss_actor= 13.54, target value: -13.34: 64%|██████▍ | 6400/10000 [00:05<00:04, 763.80it/s]
-reward: -1.74 (r0 = -2.17), reward eval: reward: 0.00, reward normalized=-2.03/6.16, grad norm= 109.52, loss_value= 333.00, loss_actor= 13.56, target value: -12.92: 64%|██████▍ | 6400/10000 [00:07<00:04, 763.80it/s]
-reward: -1.74 (r0 = -2.17), reward eval: reward: 0.00, reward normalized=-2.03/6.16, grad norm= 109.52, loss_value= 333.00, loss_actor= 13.56, target value: -12.92: 72%|███████▏ | 7200/10000 [00:08<00:05, 518.30it/s]
-reward: -4.60 (r0 = -2.17), reward eval: reward: 0.00, reward normalized=-1.96/5.41, grad norm= 88.46, loss_value= 262.61, loss_actor= 15.84, target value: -12.12: 72%|███████▏ | 7200/10000 [00:10<00:05, 518.30it/s]
-reward: -4.60 (r0 = -2.17), reward eval: reward: 0.00, reward normalized=-1.96/5.41, grad norm= 88.46, loss_value= 262.61, loss_actor= 15.84, target value: -12.12: 80%|████████ | 8000/10000 [00:10<00:04, 427.38it/s]
-reward: -3.79 (r0 = -2.17), reward eval: reward: 0.00, reward normalized=-2.28/5.38, grad norm= 98.60, loss_value= 142.05, loss_actor= 14.93, target value: -15.43: 80%|████████ | 8000/10000 [00:12<00:04, 427.38it/s]
-reward: -3.79 (r0 = -2.17), reward eval: reward: 0.00, reward normalized=-2.28/5.38, grad norm= 98.60, loss_value= 142.05, loss_actor= 14.93, target value: -15.43: 88%|████████▊ | 8800/10000 [00:13<00:03, 383.18it/s]
-reward: -2.85 (r0 = -2.17), reward eval: reward: -3.01, reward normalized=-2.75/4.99, grad norm= 62.68, loss_value= 184.12, loss_actor= 16.40, target value: -18.62: 88%|████████▊ | 8800/10000 [00:16<00:03, 383.18it/s]
-reward: -2.85 (r0 = -2.17), reward eval: reward: -3.01, reward normalized=-2.75/4.99, grad norm= 62.68, loss_value= 184.12, loss_actor= 16.40, target value: -18.62: 96%|█████████▌| 9600/10000 [00:16<00:01, 314.48it/s]
-reward: -3.68 (r0 = -2.17), reward eval: reward: -3.01, reward normalized=-2.72/5.08, grad norm= 79.35, loss_value= 269.73, loss_actor= 18.78, target value: -19.16: 96%|█████████▌| 9600/10000 [00:19<00:01, 314.48it/s]
-reward: -3.68 (r0 = -2.17), reward eval: reward: -3.01, reward normalized=-2.72/5.08, grad norm= 79.35, loss_value= 269.73, loss_actor= 18.78, target value: -19.16: : 10400it [00:20, 272.95it/s]
-reward: -3.51 (r0 = -2.17), reward eval: reward: -3.01, reward normalized=-3.10/4.67, grad norm= 90.02, loss_value= 209.84, loss_actor= 21.36, target value: -21.86: : 10400it [00:22, 272.95it/s]
+ 8%|▊ | 800/10000 [00:00<00:03, 2787.08it/s]
+ 16%|█▌ | 1600/10000 [00:01<00:09, 890.97it/s]
+ 24%|██▍ | 2400/10000 [00:01<00:05, 1291.95it/s]
+ 32%|███▏ | 3200/10000 [00:02<00:04, 1662.60it/s]
+ 40%|████ | 4000/10000 [00:02<00:02, 2041.49it/s]
+ 48%|████▊ | 4800/10000 [00:02<00:02, 2369.74it/s]
+ 56%|█████▌ | 5600/10000 [00:02<00:01, 2619.26it/s]
+reward: -2.08 (r0 = -2.13), reward eval: reward: 0.01, reward normalized=-1.95/5.98, grad norm= 18.83, loss_value= 312.89, loss_actor= 11.98, target value: -12.26: 56%|█████▌ | 5600/10000 [00:05<00:01, 2619.26it/s]
+reward: -2.08 (r0 = -2.13), reward eval: reward: 0.01, reward normalized=-1.95/5.98, grad norm= 18.83, loss_value= 312.89, loss_actor= 11.98, target value: -12.26: 64%|██████▍ | 6400/10000 [00:05<00:04, 770.16it/s]
+reward: -1.67 (r0 = -2.13), reward eval: reward: 0.01, reward normalized=-1.85/6.05, grad norm= 52.16, loss_value= 255.71, loss_actor= 11.63, target value: -11.93: 64%|██████▍ | 6400/10000 [00:07<00:04, 770.16it/s]
+reward: -1.67 (r0 = -2.13), reward eval: reward: 0.01, reward normalized=-1.85/6.05, grad norm= 52.16, loss_value= 255.71, loss_actor= 11.63, target value: -11.93: 72%|███████▏ | 7200/10000 [00:08<00:05, 521.15it/s]
+reward: -4.43 (r0 = -2.13), reward eval: reward: 0.01, reward normalized=-1.68/5.03, grad norm= 137.06, loss_value= 162.69, loss_actor= 13.93, target value: -10.84: 72%|███████▏ | 7200/10000 [00:10<00:05, 521.15it/s]
+reward: -4.43 (r0 = -2.13), reward eval: reward: 0.01, reward normalized=-1.68/5.03, grad norm= 137.06, loss_value= 162.69, loss_actor= 13.93, target value: -10.84: 80%|████████ | 8000/10000 [00:10<00:04, 410.94it/s]
+reward: -4.27 (r0 = -2.13), reward eval: reward: 0.01, reward normalized=-2.07/5.19, grad norm= 77.47, loss_value= 174.17, loss_actor= 13.76, target value: -13.76: 80%|████████ | 8000/10000 [00:13<00:04, 410.94it/s]
+reward: -4.27 (r0 = -2.13), reward eval: reward: 0.01, reward normalized=-2.07/5.19, grad norm= 77.47, loss_value= 174.17, loss_actor= 13.76, target value: -13.76: 88%|████████▊ | 8800/10000 [00:13<00:03, 371.26it/s]
+reward: -3.86 (r0 = -2.13), reward eval: reward: -6.50, reward normalized=-2.03/5.09, grad norm= 167.04, loss_value= 196.16, loss_actor= 16.38, target value: -14.15: 88%|████████▊ | 8800/10000 [00:16<00:03, 371.26it/s]
+reward: -3.86 (r0 = -2.13), reward eval: reward: -6.50, reward normalized=-2.03/5.09, grad norm= 167.04, loss_value= 196.16, loss_actor= 16.38, target value: -14.15: 96%|█████████▌| 9600/10000 [00:17<00:01, 307.16it/s]
+reward: -6.40 (r0 = -2.13), reward eval: reward: -6.50, reward normalized=-2.94/4.94, grad norm= 160.50, loss_value= 199.22, loss_actor= 18.06, target value: -20.27: 96%|█████████▌| 9600/10000 [00:19<00:01, 307.16it/s]
+reward: -6.40 (r0 = -2.13), reward eval: reward: -6.50, reward normalized=-2.94/4.94, grad norm= 160.50, loss_value= 199.22, loss_actor= 18.06, target value: -20.27: : 10400it [00:20, 276.99it/s]
+reward: -4.54 (r0 = -2.13), reward eval: reward: -6.50, reward normalized=-2.92/4.79, grad norm= 44.77, loss_value= 158.51, loss_actor= 17.92, target value: -20.95: : 10400it [00:23, 276.99it/s]
 ```
 
 ## Experiment results
@@ -1215,7 +1215,7 @@ To iterate further on this loss module we might consider:
 - Using @dispatch (see [[Feature] Distpatch IQL loss module](https://github.com/pytorch/rl/pull/1230).)
 - Allowing flexible TensorDict keys.
 
-**Total running time of the script:** (0 minutes 28.857 seconds)
+**Total running time of the script:** (0 minutes 29.332 seconds)
 
 [`Download Jupyter notebook: coding_ddpg.ipynb`](../_downloads/7ef773e36507adbc389133424f663224/coding_ddpg.ipynb)
 
