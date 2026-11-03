@@ -578,6 +578,29 @@ class TestIndependentNormal:
 
 
 class TestTruncatedNormal:
+    def test_log_prob_fullgraph(self):
+        dist = TruncatedNormal(torch.zeros(3, 2), torch.ones(3, 2))
+        value = torch.tensor(
+            [[0.25, -0.5], [-1.25, 0.1], [0.4, 1.25]], requires_grad=True
+        )
+        eager = dist.log_prob(value)
+        compiled = torch.compile(dist.log_prob, backend="aot_eager", fullgraph=True)(
+            value
+        )
+
+        standard_normal = torch.distributions.Normal(0.0, 1.0)
+        normalizer = standard_normal.cdf(torch.tensor(1.0)) - standard_normal.cdf(
+            torch.tensor(-1.0)
+        )
+        expected = (standard_normal.log_prob(value[0]) - normalizer.log()).sum()
+        torch.testing.assert_close(compiled, eager)
+        torch.testing.assert_close(compiled[0], expected)
+        assert torch.isneginf(compiled[1:]).all()
+        grad = torch.autograd.grad(compiled[0], value)[0]
+        torch.testing.assert_close(
+            grad, torch.tensor([[-0.25, 0.5], [0.0, 0.0], [0.0, 0.0]])
+        )
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("dtype", [torch.float16, torch.float32, torch.float64])
     @pytest.mark.parametrize("tensor_bounds", [False, True])
