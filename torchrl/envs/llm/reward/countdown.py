@@ -275,23 +275,44 @@ class CountdownRewardParser(Transform):
     def validate_expression(expression: str, target: int, numbers: list[int]) -> bool:
         """Check that *expression* evaluates to *target* using only the given *numbers*.
 
-        Each source number may be used at most once.  Only ``+``, ``-``,
-        ``*``, ``/`` and parentheses are allowed.
+        The expression may contain only integer literals, whitespace,
+        parentheses and the operators ``+``, ``-``, ``*`` and ``/`` (true
+        division); ``+`` and ``-`` may also be used as unary signs. Decimal
+        points, ``**`` and ``//`` are rejected. Every integer literal must be
+        one of the source numbers, and each source number may be used at most
+        once. The expression is read as Python, so implicit multiplication
+        (``4(3)``) or a leading zero (``03``) makes it malformed. An
+        expression that is malformed or does not evaluate to a number returns
+        ``False`` rather than raising.
+
+        Args:
+            expression (str): the arithmetic expression to check.
+            target (int): the value the expression must evaluate to, within
+                an absolute tolerance of ``1e-9``.
+            numbers (list of int): the source numbers. A value listed ``k``
+                times may appear at most ``k`` times in the expression.
+
+        Returns:
+            bool: ``True`` if the expression is valid and evaluates to
+            ``target``, ``False`` otherwise.
         """
-        if not re.fullmatch(r"[\d\s\+\-\*/\(\)\.]+", expression):
+        if not re.fullmatch(r"[\d\s\+\-\*/\(\)]+", expression):
             return False
-        used = [int(n) for n in re.findall(r"\d+", expression)]
-        available = list(numbers)
-        for n in used:
-            if n in available:
-                available.remove(n)
-            else:
-                return False
+        if "**" in expression or "//" in expression:
+            return False
         try:
+            # int() raises on literals longer than sys.get_int_max_str_digits()
+            used = [int(n) for n in re.findall(r"\d+", expression)]
+            available = list(numbers)
+            for n in used:
+                if n in available:
+                    available.remove(n)
+                else:
+                    return False
             result = eval(expression)  # noqa: S307
+            return abs(result - target) < 1e-9
         except Exception:
             return False
-        return abs(result - target) < 1e-9
 
     # ------------------------------------------------------------------
     # parsing helpers
