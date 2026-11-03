@@ -50,21 +50,32 @@ shared-memory support, memmaps, lazy views, and `nn.Module` wrappers.
 [Examples](examples/) |
 [SOTA implementations](sota-implementations/)
 
-## Recent highlights
+## What's new in TorchRL 0.15
 
-TorchRL 0.13 and the preceding development cycle bring several user-visible
-improvements that are worth surfacing up front:
+**From robot simulation to offline RL and deployment, TorchRL 0.15 gives you
+more ways to turn experience into intelligent behavior.**
 
-- faster recurrent RL paths, including scan and Triton GRU/LSTM reset handling;
-- custom MuJoCo environments, satellite examples, and macro-control policies;
-- stronger multi-agent coverage through MAPPO, IPPO, `MultiAgentGAE`,
-  value-normalization utilities, and mixer configs;
-- better collector and replay-buffer ergonomics, including async prioritized
-  writes, ordered storage access, compact observations, HER, and optional CUDA
-  wheels for CUDA-based prioritized replay-buffer kernels;
-- new transforms and value-estimator improvements such as `ActionScaling`,
-  `FlattenAction`, `NextObservationDelta`, compact shifted estimators, and
-  chunked forwards.
+- **Bring robots to life.** Train and explore policies with MuJoCo Menagerie
+  robots and MicroDuck, compose low-level skills into high-level control, and
+  export TensorDict policies to ONNX. [Explore Menagerie](examples/menagerie/)
+  · [Low-level control tutorial](tutorials/sphinx-tutorials/low_level_controller.py)
+- **Train with powerful new algorithms.** Plan with **TD-MPC2**, learn from
+  offline data with **Flow Q-Learning**, and tackle goal-conditioned learning
+  with **Transitive RL**. Use the implementations or build with their modular
+  components. [TD-MPC2](sota-implementations/tdmpc2_trainer/) ·
+  [FQL](sota-implementations/fql/) ·
+  [Transitive RL](sota-implementations/transitive_rl/)
+- **Put your experience to work.** Collect trajectories with TorchRL, exchange
+  datasets with **LeRobot** and **Hugging Face**, and bring recorded data back
+  into your PyTorch workflows. [See the LeRobot tutorial](tutorials/sphinx-tutorials/lerobot_export.py)
+- **Run experiments with confidence.** Evaluate policies across environments,
+  schedule evaluation during training, and resume supported recipes from
+  checkpoints. [Evaluation](docs/source/reference/collectors_eval.rst) ·
+  [Checkpointing](docs/source/reference/checkpoint.rst)
+- **Go further with sequences and language.** Build Transformer-based policies
+  and train reward models from preference data for RLHF workflows.
+  [Transformer example](examples/agents/transformer_actor.py) ·
+  [Reward-model recipe](sota-implementations/reward_model_training/)
 
 ## A quick mental model
 
