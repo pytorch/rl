@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-11-03T06:21:14.826882+00:00",
+  "generated_at": "2026-11-04T06:23:01.456795+00:00",
   "analysis_period": {
-    "start": "2026-10-29",
+    "start": "2026-10-30",
     "end": "2026-11-03",
     "runs_analyzed": 60
   },
   "summary": {
     "total_tests": 32896,
-    "flaky_count": 7,
-    "new_flaky_count": 7,
+    "flaky_count": 5,
+    "new_flaky_count": 5,
     "resolved_count": 0
   },
   "flaky_tests": [
@@ -22,7 +22,7 @@
       "failed": 10,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 1.364,
+      "avg_duration": 1.385,
       "recent_failures": [
         "2026-10-31T22:10:19Z",
         "2026-11-01T03:20:18Z",
@@ -35,63 +35,63 @@
     },
     {
       "nodeid": "test/test_exploration.py::TestEGreedy::test_bounded_compile_fullgraph[0.0]",
-      "executions": 120,
-      "failures": 10,
-      "failure_rate": 0.0833,
-      "flaky_score": 0.1667,
-      "passed": 110,
-      "failed": 10,
+      "executions": 131,
+      "failures": 11,
+      "failure_rate": 0.084,
+      "flaky_score": 0.1679,
+      "passed": 120,
+      "failed": 11,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.585,
+      "avg_duration": 0.588,
       "recent_failures": [
-        "2026-11-02T14:31:32Z",
         "2026-11-02T20:06:19Z",
         "2026-11-02T22:23:44Z",
         "2026-11-03T00:11:02Z",
-        "2026-11-03T04:44:58Z"
+        "2026-11-03T04:44:58Z",
+        "2026-11-03T19:20:00Z"
       ],
       "first_seen_flaky": "2026-10-30T21:26:34Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_exploration.py::TestEGreedy::test_bounded_compile_fullgraph[1.0]",
-      "executions": 120,
-      "failures": 10,
-      "failure_rate": 0.0833,
-      "flaky_score": 0.1667,
-      "passed": 110,
-      "failed": 10,
+      "executions": 131,
+      "failures": 11,
+      "failure_rate": 0.084,
+      "flaky_score": 0.1679,
+      "passed": 120,
+      "failed": 11,
       "error": 0,
       "reruns": 0,
       "avg_duration": 0.002,
       "recent_failures": [
-        "2026-11-02T14:31:32Z",
         "2026-11-02T20:06:19Z",
         "2026-11-02T22:23:44Z",
         "2026-11-03T00:11:02Z",
-        "2026-11-03T04:44:58Z"
+        "2026-11-03T04:44:58Z",
+        "2026-11-03T19:20:00Z"
       ],
       "first_seen_flaky": "2026-10-30T21:26:34Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_exploration.py::TestEGreedy::test_bounded_compile_annealing",
-      "executions": 120,
-      "failures": 10,
-      "failure_rate": 0.0833,
-      "flaky_score": 0.1667,
-      "passed": 110,
-      "failed": 10,
+      "executions": 131,
+      "failures": 11,
+      "failure_rate": 0.084,
+      "flaky_score": 0.1679,
+      "passed": 120,
+      "failed": 11,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.262,
+      "avg_duration": 0.261,
       "recent_failures": [
-        "2026-11-02T14:31:32Z",
         "2026-11-02T20:06:19Z",
         "2026-11-02T22:23:44Z",
         "2026-11-03T00:11:02Z",
-        "2026-11-03T04:44:58Z"
+        "2026-11-03T04:44:58Z",
+        "2026-11-03T19:20:00Z"
       ],
       "first_seen_flaky": "2026-10-30T21:26:34Z",
       "is_new": true
@@ -115,48 +115,6 @@
         "2026-11-03T00:11:02Z"
       ],
       "first_seen_flaky": "2026-10-30T03:20:58Z",
-      "is_new": true
-    },
-    {
-      "nodeid": "test/test_configs.py::TestHydraParsing::test_ddpg_trainer_parsing_with_file",
-      "executions": 164,
-      "failures": 10,
-      "failure_rate": 0.061,
-      "flaky_score": 0.122,
-      "passed": 110,
-      "failed": 0,
-      "error": 10,
-      "reruns": 0,
-      "avg_duration": 24.632,
-      "recent_failures": [
-        "2026-10-29T00:04:26Z",
-        "2026-10-29T00:04:26Z",
-        "2026-10-29T00:04:26Z",
-        "2026-11-03T00:11:02Z",
-        "2026-11-03T00:11:02Z"
-      ],
-      "first_seen_flaky": "2026-10-29T00:04:26Z",
-      "is_new": true
-    },
-    {
-      "nodeid": "test/test_configs.py::TestHydraParsing::test_iql_trainer_parsing_with_file",
-      "executions": 164,
-      "failures": 10,
-      "failure_rate": 0.061,
-      "flaky_score": 0.122,
-      "passed": 110,
-      "failed": 0,
-      "error": 10,
-      "reruns": 0,
-      "avg_duration": 24.504,
-      "recent_failures": [
-        "2026-10-29T00:04:26Z",
-        "2026-10-29T00:04:26Z",
-        "2026-10-29T00:04:26Z",
-        "2026-10-30T21:26:34Z",
-        "2026-10-30T21:26:34Z"
-      ],
-      "first_seen_flaky": "2026-10-29T00:04:26Z",
       "is_new": true
     }
   ],
