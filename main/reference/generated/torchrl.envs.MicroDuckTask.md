@@ -139,6 +139,10 @@ Saves the tensordict to disk, and returns a memory-mapped copy of it.
 The tensordict is not changed. Read the files back with `load()`.
 See [Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving).
 
+An entry named `"shape"`, `"device"` or `"_type"`, at any depth,
+is not restored by `load()`, and saving it warns (see
+`memmap()`).
+
 Parameters:
 
 - **prefix** (*str**or**Path**,**optional*) - the directory where the tensordict
@@ -1717,8 +1721,12 @@ entries of a saved tensorclass as `obj.get(key)` does.
 Defaults to `None`, which loads the whole tensordict.
 - **mode** (*str**,**optional*) - how the files are mapped. With `"r"`, the
 mapping is copy-on-write: in-place writes into the leaves stay
-in memory, and the files do not change. With `"r+"`, in-place
-writes reach the files, and a file that the process cannot
+in the memory of this process, and the files do not change.
+For a directory, a pickled copy (a `multiprocessing`
+queue, a spawned worker) or a [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) of the result
+reads the files, without these writes: send or save
+`clone()` to keep them. With `"r+"`, in-place writes
+reach the files, and a file that the process cannot
 write raises a `PermissionError`. Defaults to `None`, which
 maps an archive as with `"r"`, and each file of a directory
 as with `"r+"` if the process can write it, and as with
@@ -2000,6 +2008,24 @@ but other hard links keep the old content.
 [`unpack_memmap()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap) convert between archives and
 directories.
 
+Note
+
+`meta.json` uses the names `"shape"`, `"device"` and
+`"_type"` for the batch size, the device and the type of each
+level, so `load_memmap()` does not restore an entry with
+one of these names, at any depth. Saving such an entry warns.
+For a directory, the tensordict returned here still holds the
+entry, but an archive, which is read back, does not. Rename the
+entry before saving to keep it.
+
+Note
+
+A view of a memory-mapped tensordict, such as `td[1:]` or a
+transpose, written back to the directory that it maps can leave
+wrong data in that directory, without an error. Pass
+`atomic=True` and `copy_existing=True`, which write a new
+directory first (not on Windows), or write to another directory.
+
 Examples
 
 ```
@@ -2032,6 +2058,16 @@ becomes `"cpu"`. See [Save and load tensordicts](https://docs.pytorch.org/tensor
 The tensordict is then locked (see [Locking and temporary changes](https://docs.pytorch.org/tensordict/stable/concepts/keys.html#keys-locking)): you can write
 into its leaves in place, but you cannot add, remove or replace an
 entry. Once it is unlocked, `is_memmap()` returns `False`.
+
+An entry named `"shape"`, `"device"` or `"_type"`, at any depth,
+is not restored by `load_memmap()`, and writing it to a
+directory warns (see `memmap()`).
+
+A view of a memory-mapped tensordict, such as a slice or a transpose,
+written back to the directory that it maps can leave wrong data in
+that directory, without an error. Pass `atomic=True` and
+`copy_existing=True`, which write a new directory first (not on
+Windows), or write to another directory (see `memmap()`).
 
 Parameters:
 
@@ -2353,6 +2389,10 @@ Saves the tensordict to disk, and returns a memory-mapped copy of it.
 `existsok=True`. `memmap()` documents the arguments in full.
 The tensordict is not changed. Read the files back with `load()`.
 See [Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.html#saving).
+
+An entry named `"shape"`, `"device"` or `"_type"`, at any depth,
+is not restored by `load()`, and saving it warns (see
+`memmap()`).
 
 Parameters:
 

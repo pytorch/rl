@@ -68,7 +68,7 @@ from heuristic_gait import MicroDuckGaitActor # noqa: E402
 ```
 
 ```
-/__w/_temp/lerobot-gallery-Xj0TwN/repo/torchrl/_utils.py:132: DeprecationWarning: TorchRL support for torch<2.13 (found torch 2.11.0+cpu) is deprecated and will be removed in v0.17. torch 2.11 and 2.12 remain supported until then for stacks that pin them, such as Isaac Lab 3.0. Upgrade to torch>=2.13 to silence this warning.
+/__w/_temp/lerobot-gallery-e5b8Sh/repo/torchrl/_utils.py:132: DeprecationWarning: TorchRL support for torch<2.13 (found torch 2.11.0+cpu) is deprecated and will be removed in v0.17. torch 2.11 and 2.12 remain supported until then for stacks that pin them, such as Isaac Lab 3.0. Upgrade to torch>=2.13 to silence this warning.
  warnings.warn(
 ```
 
@@ -156,13 +156,13 @@ Video(filename=str(quick_video_paths[0]), embed=True, width=QUICK_WIDTH)
 ```
 
 ```
-2026-11-03 19:42:51,075 [torchrl][INFO] Downloading the MicroDuck assets from https://github.com/pollen-robotics/microduck_rl/archive/d424a0c899f6b33cbd3daeb279913134349c0b63.zip to /root/.cache/torchrl/microduck/microduck_rl-d424a0c899f6b33cbd3daeb279913134349c0b63 [END]
-/__w/_temp/lerobot-gallery-Xj0TwN/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
+2026-11-04 20:50:27,598 [torchrl][INFO] Downloading the MicroDuck assets from https://github.com/pollen-robotics/microduck_rl/archive/d424a0c899f6b33cbd3daeb279913134349c0b63.zip to /root/.cache/torchrl/microduck/microduck_rl-d424a0c899f6b33cbd3daeb279913134349c0b63 [END]
+/__w/_temp/lerobot-gallery-e5b8Sh/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
  return super().__call__(*args, **kwargs)
-2026-11-03 19:42:54,838 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([250]) shape [END]
+2026-11-04 20:50:30,909 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([250]) shape [END]
 
 Map: 0%| | 0/250 [00:00<?, ? examples/s]
-Map: 100%|██████████| 250/250 [00:00<00:00, 2529.63 examples/s]
+Map: 100%|██████████| 250/250 [00:00<00:00, 2531.54 examples/s]
 ```
 
  Your browser does not support the video tag.
@@ -282,7 +282,7 @@ first_batch = next(collector_iterator)
 ```
 
 ```
-/__w/_temp/lerobot-gallery-Xj0TwN/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
+/__w/_temp/lerobot-gallery-e5b8Sh/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
  return super().__call__(*args, **kwargs)
 ```
 
@@ -351,7 +351,7 @@ frames = replay[:]
 ```
 
 ```
-2026-11-03 19:43:00,289 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([500]) shape [END]
+2026-11-04 20:50:36,461 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([500]) shape [END]
 ```
 
 During off-policy training, we would sample batches like this one to update a
@@ -545,13 +545,13 @@ assert loaded.num_frames == len(replay)
 
 ```
 Map: 0%| | 0/250 [00:00<?, ? examples/s]
-Map: 76%|███████▌ | 189/250 [00:00<00:00, 1866.69 examples/s]
-Map: 100%|██████████| 250/250 [00:00<00:00, 1793.09 examples/s]
+Map: 75%|███████▌ | 188/250 [00:00<00:00, 1859.69 examples/s]
+Map: 100%|██████████| 250/250 [00:00<00:00, 1793.95 examples/s]
 
 Map: 0%| | 0/250 [00:00<?, ? examples/s]
-Map: 75%|███████▌ | 188/250 [00:00<00:00, 1854.63 examples/s]
-Map: 100%|██████████| 250/250 [00:00<00:00, 1792.10 examples/s]
-2026-11-03 19:43:16,272 [torchrl][INFO] Saved the LeRobot recording to /tmp/torchrl-microduck-lerobot-c8x5a9ux/dataset [END]
+Map: 75%|███████▌ | 188/250 [00:00<00:00, 1854.27 examples/s]
+Map: 100%|██████████| 250/250 [00:00<00:00, 1796.20 examples/s]
+2026-11-04 20:50:52,495 [torchrl][INFO] Saved the LeRobot recording to /tmp/torchrl-microduck-lerobot-5p2qv43b/dataset [END]
 ```
 
 ## Loading the data back into TorchRL
@@ -686,7 +686,7 @@ sampling from LeRobot datasets in TorchRL.
 - [LeRobot dataset v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3)
 and [visualization tools](https://huggingface.co/docs/lerobot/using_dataset_tools).
 
-**Total running time of the script:** (0 minutes 28.724 seconds)
+**Total running time of the script:** (0 minutes 28.448 seconds)
 
 [`Download Jupyter notebook: lerobot_export.ipynb`](../_downloads/61d38028156aeff4fa28fed78de648c2/lerobot_export.ipynb)
 

@@ -1405,8 +1405,10 @@ module.
 Returns:
 
 `None` without `parameters`. Otherwise a new tensordict of
-tensors that share their storage with `parameters` and require
-gradients.
+tensors that share their storage with `parameters`. The
+floating-point and complex ones require gradients. A tensor that
+a custom `reset_parameters` assigns, instead of writing it in
+place, is returned as assigned.
 
 Raises:
 
