@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 from contextlib import contextmanager
 from typing import Literal
 from unittest.mock import patch
@@ -21,6 +22,8 @@ from torchrl.objectives.value import TDLambdaEstimator
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import MockBatchedUnLockedEnv
+
+_has_hydra = importlib.util.find_spec("hydra") is not None
 
 DIE_REWARD = 1.0
 LIVE_REWARD = 5.0
@@ -390,6 +393,7 @@ def _make_tdmpc2_td(batch_shape=(2,), *, is_init=True, previous_mean=None):
     )
 
 
+@pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestTdMpc2Planner:
     def test_output(self):
         planner = _make_tdmpc2_planner()
