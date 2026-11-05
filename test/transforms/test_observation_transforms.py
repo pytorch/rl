@@ -1766,7 +1766,7 @@ class TestObservationNorm(TransformBase):
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
     @pytest.mark.parametrize("standard_normal", [True, False])
     def test_python_number_loc_scale_on_cuda(self, standard_normal):
-        """Python-number loc and scale stay 0-dim CPU buffers and still apply to CUDA observations."""
+        """Python-number loc and scale apply to CUDA observations."""
         transform = ObservationNorm(
             loc=0.5, scale=2.0, in_keys=["obs"], standard_normal=standard_normal
         )

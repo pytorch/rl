@@ -655,6 +655,12 @@ class TorchDistributedTransport(RequestReplyTransport):
                 host = socket.gethostbyname(socket.gethostname())
             except socket.gaierror:
                 host = "127.0.0.1"
+                torchrl_logger.warning(
+                    f"Hostname {socket.gethostname()!r} does not resolve; the "
+                    "TorchDistributedTransport store listens on 127.0.0.1, so "
+                    "only clients on this machine can connect. Pass host= to "
+                    "reach clients on other machines."
+                )
         # Let TCPStore bind the ephemeral port itself. Probing with a temporary
         # socket and closing it before constructing the store leaves a race in
         # which another process can claim the advertised port.

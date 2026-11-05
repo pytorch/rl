@@ -26,14 +26,17 @@ def rmtree_with_retry(path, attempts=5, delay=1.0):
 
     Antivirus and indexing services can hold a directory handle for a moment
     after the files in it are written, which makes ``rmtree`` fail with
-    ``PermissionError`` (WinError 32) even though nothing in this script is
-    using the directory.
+    ``PermissionError`` (WinError 32), or with WinError 145 (directory not
+    empty) while a delete is still pending, even though nothing in this
+    script is using the directory.
     """
     for attempt in range(1, attempts + 1):
         try:
             shutil.rmtree(path)
             return
-        except PermissionError:
+        except FileNotFoundError:
+            raise
+        except OSError:
             if attempt == attempts:
                 raise
             print(f"{path} is still in use, retrying removal ({attempt}/{attempts})")
