@@ -179,14 +179,13 @@ class EGreedyModule(TensorDictModuleBase):
             if spec is not None:
                 if isinstance(spec, Composite):
                     spec = spec[self.action_key]
+                # In batched envs if the spec is passed unbatched, the rand() will not
+                # cover all batched dims
                 batch_shape = action.shape[: action.ndim - spec.ndim]
-                if spec.shape != action.shape:
-                    # In batched envs if the spec is passed unbatched, the rand() will not
-                    # cover all batched dims
-                    if spec.ndim and action.shape[-spec.ndim :] != spec.shape:
-                        raise ValueError(
-                            "Action spec shape does not match the action shape"
-                        )
+                if spec.ndim and action.shape[-spec.ndim :] != spec.shape:
+                    raise ValueError(
+                        "Action spec shape does not match the action shape"
+                    )
                 if self.action_mask_key is not None:
                     action_mask = tensordict.get(self.action_mask_key, None)
                     if action_mask is None:
