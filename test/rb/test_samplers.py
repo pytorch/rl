@@ -1821,6 +1821,39 @@ class TestSamplers:
         else:
             assert found_traj_0
 
+    def test_slice_sampler_prioritized_ndim2_wrapped_slices_stay_in_episode(self):
+        """Slices from a wrapped 2-D storage stay within one env column and one episode."""
+        torch.manual_seed(0)
+        num_envs, rows_per_env, slice_len, num_steps = 2, 20, 4, 45
+        episode_len = torch.tensor([7, 5])
+        step = torch.arange(num_steps).expand(num_envs, num_steps)
+        env = torch.arange(num_envs).unsqueeze(-1).expand(num_envs, num_steps)
+        episode = step // episode_len.unsqueeze(-1) + 1000 * env
+        data = TensorDict(
+            {"env": env, "step": step, "episode": episode}, [num_envs, num_steps]
+        )
+        capacity = num_envs * rows_per_env
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(capacity, ndim=2),
+            sampler=PrioritizedSliceSampler(
+                max_capacity=capacity,
+                alpha=0.7,
+                beta=0.5,
+                traj_key="episode",
+                slice_len=slice_len,
+            ),
+            batch_size=10 * slice_len,
+        )
+        for chunk in data.split(5, dim=1):
+            rb.extend(chunk)
+        assert rb.storage.shape == (rows_per_env, num_envs)
+
+        slices = torch.cat([rb.sample() for _ in range(50)]).reshape(-1, slice_len)
+        assert (slices["env"] == slices["env"][:, :1]).all()
+        assert (slices["episode"] == slices["episode"][:, :1]).all()
+        assert (slices["step"].diff(dim=-1) == 1).all()
+        assert (slices["step"] >= num_steps - rows_per_env).all()
+
     @pytest.mark.parametrize("max_priority_within_buffer", [True, False])
     @pytest.mark.parametrize("alpha", [1.0, 0.6])
     def test_prb_update_max_priority(self, max_priority_within_buffer, alpha):
