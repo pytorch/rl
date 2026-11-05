@@ -959,6 +959,14 @@ class TestActionScaling(TransformBase):
         # normalized -1 -> env-scale -2 (low)
         assert torch.allclose(base_env.last_action, torch.full((7,), -2.0))
 
+    def test_nested_key_tuple_in_keys_inv(self):
+        # Bare NestedKey tuple, not a list of keys.
+        t = ActionScaling(in_keys_inv=("agent", "action"))
+        assert t.in_keys_inv == [("agent", "action")]
+        assert t.out_keys_inv == [("agent", "action")]
+        assert t.in_keys == [("agent", "action")]
+        assert t.out_keys == [("agent", "action")]
+
     # dataset-statistics constructors (from_stats / from_metadata) and the
     # explicit-loc/scale env behavior
     def test_from_stats_mean_std(self):
@@ -3229,6 +3237,14 @@ class TestFlattenAction(TransformBase):
         assert base.last_action.shape == (3, 5)
         assert torch.allclose(base.last_action, torch.arange(15.0).reshape(3, 5))
         check_env_specs(env)
+
+    def test_nested_key_tuple_in_keys_inv(self):
+        # Bare NestedKey tuple, not a list of keys.
+        t = FlattenAction(first_dim=-2, last_dim=-1, in_keys_inv=("agent", "action"))
+        assert t.in_keys_inv == [("agent", "action")]
+        assert t.out_keys_inv == [("agent", "action")]
+        assert t.in_keys == [("agent", "action")]
+        assert t.out_keys == [("agent", "action")]
 
     def test_positive_dim_raises(self):
         with pytest.raises(ValueError, match="first_dim"):
