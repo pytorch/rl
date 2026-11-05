@@ -966,10 +966,13 @@ class TestIQL(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
-    def test_iql_priority_weights(self):
+    @pytest.mark.parametrize("masked", [False, True])
+    def test_iql_priority_weights(self, masked):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_iql(batch=8)
         weights = torch.arange(1.0, 9.0)
+        mask = torch.tensor([True, False, True, True, False, True, True, True])
+        effective_weights = weights * mask if masked else weights
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
         value = self._create_mock_value()
@@ -986,12 +989,16 @@ class TestIQL(LossModuleTestBase):
         SoftUpdate(per_sample_loss_fn, eps=0.5)
         SoftUpdate(weighted_loss_fn, eps=0.5)
         per_sample = per_sample_loss_fn(td.clone())
-        weighted = weighted_loss_fn(td.clone().set("priority_weight", weights))
+        weighted_td = td.clone().set("priority_weight", weights)
+        if masked:
+            weighted_td.set(("collector", "mask"), mask)
+        weighted = weighted_loss_fn(weighted_td)
 
         loss_keys = ["loss_actor", "loss_qvalue", "loss_value"]
         per_sample = per_sample.select(*loss_keys)
         expected = per_sample.apply(
-            lambda loss: (loss * weights).sum() / weights.sum(), batch_size=[]
+            lambda loss: (loss * effective_weights).sum() / effective_weights.sum(),
+            batch_size=[],
         )
         unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
         assert_allclose_td(weighted.select(*loss_keys), expected)

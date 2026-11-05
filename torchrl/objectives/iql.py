@@ -569,17 +569,16 @@ class IQLLoss(LossModule):
         return value_loss, {}
 
     def qvalue_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
-        weights = self._maybe_get_priority_weight(tensordict)
         obs_keys = self.actor_network.in_keys
-        tensordict = tensordict.select(
+        selected = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
         )
 
         target_value = self.value_estimator.value_estimate(
-            tensordict, target_params=self.target_value_network_params
+            selected, target_params=self.target_value_network_params
         ).squeeze(-1)
         tensordict_expand = self._vmap_qvalue_networkN0(
-            tensordict.select(*self.qvalue_network.in_keys, strict=False),
+            selected.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
         )
         pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
@@ -591,10 +590,14 @@ class IQLLoss(LossModule):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights)
+        loss_qval = self._reduce_loss(
+            loss_qval,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
-            tensordict,
+            selected,
             "actor_network_params",
             "qvalue_network_params",
             "value_network_params",
