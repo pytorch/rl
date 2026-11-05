@@ -194,12 +194,13 @@ def _geom_series_like(t, r, thr):
         if isinstance(r, torch.Tensor):
             r = r.item()
 
-        if r == 0.0:
-            return torch.zeros_like(t)
-        elif r >= 1.0:
+        if r >= 1.0:
             lim = t.numel()
+        elif r == 0.0:
+            lim = 1  # the series is [1, 0, 0, ...]
         else:
-            lim = int(math.log(thr) / math.log(r))
+            # r ** 0 is 1 whatever r, so the first element is always kept
+            lim = max(int(math.log(thr) / math.log(r)), 1)
 
         rs = torch.full_like(t[:lim], r)
     rs[0] = 1.0
