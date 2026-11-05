@@ -8,6 +8,7 @@ import math
 import warnings
 from dataclasses import dataclass
 from functools import wraps
+from typing import Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
@@ -97,6 +98,13 @@ class CrossQLoss(LossModule):
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        use_prioritized_weights (bool or ``"auto"``, optional): whether to weight
+            the per-sample losses by the importance-sampling weights that a
+            prioritized replay buffer writes under the ``priority_weight`` key
+            (see :meth:`~.set_keys`). With ``"auto"`` or ``True`` the weights are
+            applied whenever that entry is present in the input tensordict, and
+            the losses are computed unweighted otherwise; ``False`` always ignores
+            it. Defaults to ``"auto"``.
 
     Examples:
         >>> import torch
@@ -235,6 +243,9 @@ class CrossQLoss(LossModule):
                 Defaults to ``"terminated"``.
             log_prob (NestedKey): The input tensordict key where the log probability is expected.
                 Defaults to ``"_log_prob"``.
+            priority_weight (NestedKey): The input tensordict key where the
+                importance-sampling weights of a prioritized replay buffer are
+                read from. Defaults to ``"priority_weight"``.
         """
 
         action: NestedKey = "action"
@@ -244,6 +255,7 @@ class CrossQLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         log_prob: NestedKey = "_log_prob"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -277,12 +289,14 @@ class CrossQLoss(LossModule):
         reduction: str | None = None,
         deactivate_vmap: bool = False,
         scalar_output_mode: str | None = None,
+        use_prioritized_weights: bool | Literal["auto"] = "auto",
     ) -> None:
         self._in_keys = None
         self._out_keys = None
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.deactivate_vmap = deactivate_vmap
@@ -627,7 +641,8 @@ class CrossQLoss(LossModule):
                 f"Losses shape mismatch: {log_prob.shape} and {min_q.shape}"
             )
         actor_loss = self._alpha * log_prob - min_q
-        return self._reduce_loss(actor_loss, tensordict=tensordict), {
+        weights = self._maybe_get_priority_weight(tensordict)
+        return self._reduce_loss(actor_loss, tensordict=tensordict, weights=weights), {
             "log_prob": log_prob.detach()
         }
 
@@ -697,7 +712,11 @@ class CrossQLoss(LossModule):
             loss_function=self.loss_function,
         ).sum(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
-        return self._reduce_loss(loss_qval, tensordict=tensordict), metadata
+        weights = self._maybe_get_priority_weight(tensordict)
+        return (
+            self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights),
+            metadata,
+        )
 
     def alpha_loss(
         self, log_prob: Tensor, tensordict: TensorDictBase | None = None
@@ -708,7 +727,10 @@ class CrossQLoss(LossModule):
 
         Args:
             log_prob (torch.Tensor): a log-probability as computed by the :meth:`~.actor_loss` and returned in the `metadata`.
-            tensordict (TensorDictBase, optional): the input tensordict.
+            tensordict (TensorDictBase, optional): the input tensordict, read
+                for the loss mask and the prioritized-replay weights. Defaults
+                to ``None``, in which case the loss is reduced unmasked and
+                unweighted.
 
         Returns: a differentiable tensor with the entropy loss.
         """
@@ -718,7 +740,10 @@ class CrossQLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)
-        return self._reduce_loss(alpha_loss, tensordict=tensordict)
+        weights = (
+            None if tensordict is None else self._maybe_get_priority_weight(tensordict)
+        )
+        return self._reduce_loss(alpha_loss, tensordict=tensordict, weights=weights)
 
     @property
     def _alpha(self):

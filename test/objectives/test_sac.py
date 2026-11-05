@@ -3134,6 +3134,37 @@ class TestCrossQ(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    def test_crossq_priority_weights(self):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_crossq(batch=8)
+        weights = torch.arange(1.0, 9.0)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        torch.manual_seed(self.seed)
+        per_sample_loss_fn = CrossQLoss(
+            actor,
+            qvalue,
+            alpha_init=0.5,
+            reduction="none",
+            scalar_output_mode="exclude",
+        )
+        torch.manual_seed(self.seed)
+        weighted_loss_fn = CrossQLoss(actor, qvalue, alpha_init=0.5)
+        torch.manual_seed(self.seed)
+        per_sample = per_sample_loss_fn(td.clone())
+        torch.manual_seed(self.seed)
+        weighted = weighted_loss_fn(td.clone().set("priority_weight", weights))
+
+        loss_keys = ["loss_actor", "loss_qvalue", "loss_alpha"]
+        per_sample = per_sample.select(*loss_keys)
+        expected = per_sample.apply(
+            lambda loss: (loss * weights).sum() / weights.sum(), batch_size=[]
+        )
+        unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
+        assert_allclose_td(weighted.select(*loss_keys), expected)
+        for key in loss_keys:
+            assert not torch.isclose(expected[key], unweighted[key])
+
 
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
@@ -4137,6 +4168,38 @@ class TestREDQ(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    def test_redq_priority_weights(self):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_redq(batch=8)
+        weights = torch.arange(1.0, 9.0)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        torch.manual_seed(self.seed)
+        per_sample_loss_fn = REDQLoss(
+            actor,
+            qvalue,
+            delay_qvalue=False,
+            reduction="none",
+            scalar_output_mode="exclude",
+        )
+        torch.manual_seed(self.seed)
+        weighted_loss_fn = REDQLoss(actor, qvalue, delay_qvalue=False)
+        torch.manual_seed(self.seed)
+        per_sample = per_sample_loss_fn(td.clone())
+        torch.manual_seed(self.seed)
+        weighted = weighted_loss_fn(td.clone().set("priority_weight", weights))
+
+        loss_keys = ["loss_actor", "loss_qvalue", "loss_alpha"]
+        per_sample = per_sample.select(*loss_keys)
+        expected = per_sample.apply(
+            lambda loss: ((loss * weights).sum(-1) / weights.sum()).mean(),
+            batch_size=[],
+        )
+        unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
+        assert_allclose_td(weighted.select(*loss_keys), expected)
+        for key in loss_keys:
+            assert not torch.isclose(expected[key], unweighted[key])
 
 
 class TestDiscreteSACActionValueSelectionRegression:

@@ -361,13 +361,13 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 if tensordict_mask is not None:
                     tensordict_mask = self._expand_loss_mask(tensordict_mask, loss)
                     mask = tensordict_mask if mask is None else mask & tensordict_mask
+        if weights is not None and weights.shape != loss.shape:
+            weights = self._expand_loss_mask(weights, loss)
         if mask is not None:
             # Select rather than multiply: masked positions may hold non-finite
             # values, and ``nan * 0`` is ``nan`` in both the forward and the
             # backward pass.
             loss = torch.where(mask, loss, torch.zeros_like(loss))
-            if weights is not None and weights.shape != loss.shape:
-                weights = self._expand_loss_mask(weights, loss)
             if reduction == "none" and not caller_mask:
                 return loss if weights is None else loss * weights
             if weights is None and reduction == "mean":
@@ -674,13 +674,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         Returns:
             torch.Tensor | None: The priority weights if available and enabled, None otherwise.
         """
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-        return weights
+        if self.use_prioritized_weights not in (True, "auto"):
+            return None
+        return tensordict.get(self.tensor_keys.priority_weight, default=None)
 
     def _reset_module_parameters(self, module_name, module):
         params_name = f"{module_name}_params"

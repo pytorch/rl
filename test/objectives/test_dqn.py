@@ -1693,6 +1693,31 @@ class TestQMixer(LossModuleTestBase):
             "this indicates gather is not indexing by the action argument."
         )
 
+    @pytest.mark.parametrize(
+        "priority_weight_key", ["priority_weight", ("sampler", "weight")]
+    )
+    def test_qmixer_priority_weights(self, priority_weight_key):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_spec_type="one_hot")
+        mixer = self._create_mock_mixer()
+        td = self._create_mock_data_dqn(action_spec_type="one_hot", batch=(4,))
+        weights = torch.arange(1.0, 5.0)
+        loss_fn = QMixerLoss(actor, mixer, delay_value=False)
+        loss_fn.set_keys(priority_weight=priority_weight_key)
+        per_sample = torch.stack([loss_fn(td[i : i + 1])["loss"] for i in range(4)])
+        weighted_td = td.clone().set(priority_weight_key, weights)
+        expected = (per_sample * weights).sum() / weights.sum()
+        assert not torch.isclose(expected, per_sample.mean())
+        torch.testing.assert_close(loss_fn(weighted_td.clone())["loss"], expected)
+
+        ignoring_loss_fn = QMixerLoss(
+            actor, mixer, delay_value=False, use_prioritized_weights=False
+        )
+        ignoring_loss_fn.set_keys(priority_weight=priority_weight_key)
+        torch.testing.assert_close(
+            ignoring_loss_fn(weighted_td.clone())["loss"], per_sample.mean()
+        )
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

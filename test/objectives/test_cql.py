@@ -725,6 +725,49 @@ class TestCQL(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    def test_cql_priority_weights(self):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql(batch=8)
+        weights = torch.arange(1.0, 9.0)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        torch.manual_seed(self.seed)
+        per_sample_loss_fn = CQLLoss(
+            actor,
+            qvalue,
+            alpha_init=0.5,
+            delay_qvalue=False,
+            reduction="none",
+            scalar_output_mode="exclude",
+        )
+        torch.manual_seed(self.seed)
+        weighted_loss_fn = CQLLoss(
+            actor, qvalue, alpha_init=0.5, delay_qvalue=False, with_lagrange=True
+        )
+        torch.manual_seed(self.seed)
+        per_sample = per_sample_loss_fn(td.clone())
+        torch.manual_seed(self.seed)
+        weighted = weighted_loss_fn(td.clone().set("priority_weight", weights))
+
+        loss_keys = [
+            "loss_qvalue",
+            "loss_cql",
+            "loss_actor",
+            "loss_actor_bc",
+            "loss_alpha",
+        ]
+        per_sample = per_sample.select(*loss_keys)
+        expected = per_sample.apply(
+            lambda loss: (loss * weights).sum() / weights.sum(), batch_size=[]
+        )
+        unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
+        assert_allclose_td(weighted.select(*loss_keys), expected)
+        for key in loss_keys:
+            assert not torch.isclose(expected[key], unweighted[key])
+        torch.testing.assert_close(
+            weighted["loss_alpha_prime"], -0.5 * expected["loss_cql"]
+        )
+
 
 class TestDiscreteCQL(LossModuleTestBase):
     seed = 0
@@ -1140,3 +1183,27 @@ class TestDiscreteCQL(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    def test_dcql_priority_weights(self):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_spec_type="one_hot")
+        td = self._create_mock_data_dcql(action_spec_type="one_hot", batch=8)
+        weights = torch.arange(1.0, 9.0)
+        per_sample_loss_fn = DiscreteCQLLoss(actor, delay_value=False, reduction="none")
+        weighted_loss_fn = DiscreteCQLLoss(actor, delay_value=False)
+        per_sample = per_sample_loss_fn(td.clone())
+        weighted = weighted_loss_fn(td.clone().set("priority_weight", weights))
+
+        loss_keys = ["loss_qvalue", "loss_cql"]
+        per_sample = per_sample.select(*loss_keys)
+        expected = per_sample.apply(
+            lambda loss: (loss * weights).sum() / weights.sum(), batch_size=[]
+        )
+        unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
+        assert_allclose_td(weighted.select(*loss_keys), expected)
+        for key in loss_keys:
+            assert not torch.isclose(expected[key], unweighted[key])
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

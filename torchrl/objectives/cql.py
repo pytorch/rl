@@ -8,6 +8,7 @@ import math
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import torch
@@ -95,6 +96,13 @@ class CQLLoss(LossModule):
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        use_prioritized_weights (bool or ``"auto"``, optional): whether to weight
+            the per-sample losses by the importance-sampling weights that a
+            prioritized replay buffer writes under the ``priority_weight`` key
+            (see :meth:`~.set_keys`). With ``"auto"`` or ``True`` the weights are
+            applied whenever that entry is present in the input tensordict, and
+            the losses are computed unweighted otherwise; ``False`` always ignores
+            it. Defaults to ``"auto"``.
 
     Examples:
         >>> import torch
@@ -243,6 +251,9 @@ class CQLLoss(LossModule):
                 Defaults to ``"done"``.
             terminated (NestedKey): The input tensordict key where the terminated flag is expected.
                 Defaults to ``"terminated"``.
+            priority_weight (NestedKey): The input tensordict key where the
+                importance-sampling weights of a prioritized replay buffer are
+                read from. Defaults to ``"priority_weight"``.
         """
 
         action: NestedKey = "action"
@@ -258,6 +269,7 @@ class CQLLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -298,11 +310,13 @@ class CQLLoss(LossModule):
         reduction: str | None = None,
         deactivate_vmap: bool = False,
         scalar_output_mode: str | None = None,
+        use_prioritized_weights: bool | Literal["auto"] = "auto",
     ) -> None:
         self._out_keys = None
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
 
         # Actor
         self.delay_actor = delay_actor
@@ -597,7 +611,11 @@ class CQLLoss(LossModule):
         bc_log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
 
         bc_actor_loss = self._alpha * log_prob - bc_log_prob
-        bc_actor_loss = self._reduce_loss(bc_actor_loss, tensordict=tensordict)
+        bc_actor_loss = self._reduce_loss(
+            bc_actor_loss,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
         self._clear_weakrefs(
             tensordict,
@@ -639,7 +657,11 @@ class CQLLoss(LossModule):
         metadata = {}
         metadata[self.tensor_keys.log_prob] = log_prob.detach()
         actor_loss = self._alpha * log_prob - min_q_logprob
-        actor_loss = self._reduce_loss(actor_loss, tensordict=tensordict)
+        actor_loss = self._reduce_loss(
+            actor_loss,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -761,7 +783,11 @@ class CQLLoss(LossModule):
             target_value.expand_as(q_pred),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict)
+        loss_qval = self._reduce_loss(
+            loss_qval,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         td_error = (q_pred - target_value).pow(2)
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
@@ -904,15 +930,22 @@ class CQLLoss(LossModule):
         )
 
         # Subtract the log likelihood of data
-        cql_q1_loss = min_qf1_loss.flatten() - pred_q1 * self.min_q_weight
-        cql_q2_loss = min_qf2_loss.flatten() - pred_q2 * self.min_q_weight
+        per_state_shape = (*tensordict.shape, self.num_random)
+        min_qf1_loss = min_qf1_loss.reshape(per_state_shape).mean(-1)
+        min_qf2_loss = min_qf2_loss.reshape(per_state_shape).mean(-1)
+        cql_q1_loss = min_qf1_loss - pred_q1.squeeze(-1) * self.min_q_weight
+        cql_q2_loss = min_qf2_loss - pred_q2.squeeze(-1) * self.min_q_weight
 
         # write cql losses in tensordict for alpha prime loss
         tensordict.set(self.tensor_keys.cql_q1_loss, cql_q1_loss)
         tensordict.set(self.tensor_keys.cql_q2_loss, cql_q2_loss)
 
-        cql_q_loss = (cql_q1_loss + cql_q2_loss).mean(-1)
-        cql_q_loss = self._reduce_loss(cql_q_loss, tensordict=tensordict)
+        cql_q_loss = cql_q1_loss + cql_q2_loss
+        cql_q_loss = self._reduce_loss(
+            cql_q_loss,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
 
         self._clear_weakrefs(
             tensordict,
@@ -939,11 +972,12 @@ class CQLLoss(LossModule):
             )
 
         alpha_prime = torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
+        weights = self._maybe_get_priority_weight(tensordict)
         cql_q1_loss = self._reduce_loss(
-            cql_q1_loss, tensordict=tensordict, reduction="mean"
+            cql_q1_loss, tensordict=tensordict, reduction="mean", weights=weights
         )
         cql_q2_loss = self._reduce_loss(
-            cql_q2_loss, tensordict=tensordict, reduction="mean"
+            cql_q2_loss, tensordict=tensordict, reduction="mean", weights=weights
         )
 
         min_qf1_loss = alpha_prime * (cql_q1_loss - self.target_action_gap)
@@ -973,7 +1007,14 @@ class CQLLoss(LossModule):
             alpha_loss = torch.zeros_like(log_pi)
         if mask_tensordict is None and isinstance(tensordict, TensorDictBase):
             mask_tensordict = tensordict
-        alpha_loss = self._reduce_loss(alpha_loss, tensordict=mask_tensordict)
+        weights = (
+            None
+            if mask_tensordict is None
+            else self._maybe_get_priority_weight(mask_tensordict)
+        )
+        alpha_loss = self._reduce_loss(
+            alpha_loss, tensordict=mask_tensordict, weights=weights
+        )
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -1012,6 +1053,13 @@ class DiscreteCQLLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        use_prioritized_weights (bool or ``"auto"``, optional): whether to weight
+            the per-sample losses by the importance-sampling weights that a
+            prioritized replay buffer writes under the ``priority_weight`` key
+            (see :meth:`~.set_keys`). With ``"auto"`` or ``True`` the weights are
+            applied whenever that entry is present in the input tensordict, and
+            the losses are computed unweighted otherwise; ``False`` always ignores
+            it. Defaults to ``"auto"``.
 
     Examples:
         >>> from torchrl.modules import MLP, QValueActor
@@ -1104,6 +1152,9 @@ class DiscreteCQLLoss(LossModule):
             pred_val (NestedKey): The key where the predicted value will be written
                 in the input tensordict. This value is subsequently used by cql_loss.
                 Defaults to ``"pred_val"``.
+            priority_weight (NestedKey): The input tensordict key where the
+                importance-sampling weights of a prioritized replay buffer are
+                read from. Defaults to ``"priority_weight"``.
 
         """
 
@@ -1116,6 +1167,7 @@ class DiscreteCQLLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         pred_val: NestedKey = "pred_val"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -1138,11 +1190,13 @@ class DiscreteCQLLoss(LossModule):
         gamma: float | None = None,
         action_space=None,
         reduction: str | None = None,
+        use_prioritized_weights: bool | Literal["auto"] = "auto",
     ) -> None:
         self._in_keys = None
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
             module=value_network,
@@ -1283,7 +1337,11 @@ class DiscreteCQLLoss(LossModule):
             inplace=True,
         )
         loss = 0.5 * distance_loss(pred_val_index, target_value, self.loss_function)
-        loss = self._reduce_loss(loss, tensordict=tensordict)
+        loss = self._reduce_loss(
+            loss,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
 
         metadata = {
             "td_error": td_error.mean(0).detach(),
@@ -1343,5 +1401,9 @@ class DiscreteCQLLoss(LossModule):
         )
 
         loss_cql = (logsumexp - q_a).squeeze(-1)
-        loss_cql = self._reduce_loss(loss_cql, tensordict=tensordict)
+        loss_cql = self._reduce_loss(
+            loss_cql,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         return loss_cql, {}

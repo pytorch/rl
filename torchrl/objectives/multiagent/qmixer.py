@@ -8,6 +8,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
@@ -67,6 +68,13 @@ class QMixerLoss(LossModule):
             The key at which priority is assumed to be stored within TensorDicts added
             to this ReplayBuffer.  This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
+        use_prioritized_weights (bool or ``"auto"``, optional): whether to weight
+            the per-sample loss by the importance-sampling weights that a
+            prioritized replay buffer writes under the ``priority_weight`` key
+            (see :meth:`~.set_keys`). With ``"auto"`` or ``True`` the weights are
+            applied whenever that entry is present in the input tensordict, and
+            the loss is an unweighted mean otherwise; ``False`` always ignores
+            it. Defaults to ``"auto"``.
 
     Examples:
         >>> import torch
@@ -161,6 +169,9 @@ class QMixerLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+            priority_weight (NestedKey): The input tensordict key where the
+                importance-sampling weights of a prioritized replay buffer are
+                read from. Defaults to ``"priority_weight"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -173,6 +184,7 @@ class QMixerLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -196,8 +208,10 @@ class QMixerLoss(LossModule):
         gamma: float | None = None,
         action_space: str | TensorSpec = None,
         priority_key: str | None = None,
+        use_prioritized_weights: bool | Literal["auto"] = "auto",
     ) -> None:
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.delay_value = delay_value
@@ -362,7 +376,12 @@ class QMixerLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        return TensorDict({"loss": loss.mean()}, [])
+        loss = self._reduce_loss(
+            loss,
+            reduction="mean",
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
+        return TensorDict({"loss": loss}, [])
 
     @property
     @_cache_values

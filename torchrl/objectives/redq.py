@@ -8,6 +8,7 @@ import math
 import warnings
 from dataclasses import dataclass
 from numbers import Number
+from typing import Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
@@ -90,6 +91,13 @@ class REDQLoss(LossModule):
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        use_prioritized_weights (bool or ``"auto"``, optional): whether to weight
+            the per-sample losses by the importance-sampling weights that a
+            prioritized replay buffer writes under the ``priority_weight`` key
+            (see :meth:`~.set_keys`). With ``"auto"`` or ``True`` the weights are
+            applied whenever that entry is present in the input tensordict, and
+            the losses are computed unweighted otherwise; ``False`` always ignores
+            it. Defaults to ``"auto"``.
 
     Examples:
         >>> import torch
@@ -223,6 +231,9 @@ class REDQLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+            priority_weight (NestedKey): The input tensordict key where the
+                importance-sampling weights of a prioritized replay buffer are
+                read from. Defaults to ``"priority_weight"``.
         """
 
         action: NestedKey = "action"
@@ -233,6 +244,7 @@ class REDQLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
         def __post_init__(self):
             if self.sample_log_prob is None:
@@ -289,10 +301,12 @@ class REDQLoss(LossModule):
         reduction: str | None = None,
         deactivate_vmap: bool = False,
         scalar_output_mode: str | None = None,
+        use_prioritized_weights: bool | Literal["auto"] = "auto",
     ):
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -634,8 +648,11 @@ class REDQLoss(LossModule):
             }
         td_out = TensorDict(out, [])
         loss_tensordict = tensordict.unsqueeze(0)
+        weights = self._maybe_get_priority_weight(loss_tensordict)
         td_out = td_out.named_apply(
-            lambda name, value: self._reduce_loss(value, loss_tensordict)
+            lambda name, value: self._reduce_loss(
+                value, loss_tensordict, weights=weights
+            )
             if name.startswith("loss_")
             else value,
         )
