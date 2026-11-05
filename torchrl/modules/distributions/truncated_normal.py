@@ -13,6 +13,8 @@ import torch
 from torch.distributions import constraints, Distribution
 from torch.distributions.utils import broadcast_all
 
+from torchrl._utils import is_compiling
+
 CONST_SQRT_2 = math.sqrt(2)
 CONST_INV_SQRT_2PI = 1 / math.sqrt(2 * math.pi)
 CONST_INV_SQRT_2 = 1 / math.sqrt(2)
@@ -24,6 +26,14 @@ class TruncatedStandardNormal(Distribution):
     """Truncated Standard Normal distribution.
 
     Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+
+    .. note::
+        Compiled bounds validation synchronizes accelerator tensors with the
+        host and is incompatible with CUDA graph capture. For the Inductor
+        backend, setting ``torch._inductor.config.scalar_asserts = False``
+        disables the compiled bounds check. Scalar extraction can cause graph
+        breaks with the default :func:`torch.compile` settings; use
+        ``fullgraph=True`` to capture it.
     """
 
     arg_constraints = {
@@ -45,7 +55,12 @@ class TruncatedStandardNormal(Distribution):
         super().__init__(batch_shape, validate_args=validate_args)
         if self.a.dtype != self.b.dtype:
             raise ValueError("Truncation bounds types are different")
-        if any(
+        if is_compiling():
+            # A host-side check keeps invalid bounds recoverable on CUDA.
+            torch.ops.aten._assert_scalar.default(
+                (~(self.a >= self.b)).all().item(), "Incorrect truncation range"
+            )
+        elif any(
             (self.a >= self.b)
             .view(
                 -1,
