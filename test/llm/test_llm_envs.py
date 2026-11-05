@@ -605,6 +605,11 @@ class TestCountdownRewardParser:
     def test_validate_expression_invalid_chars(self):
         assert not CountdownRewardParser.validate_expression("import os", 0, [1, 2])
 
+    def test_validate_expression_rejects_exponentiation(self):
+        assert not CountdownRewardParser.validate_expression(
+            "50**25**7", 10, [50, 25, 7]
+        )
+
     def test_parse_ground_truth(self):
         target, numbers = CountdownRewardParser._parse_ground_truth(
             "target=42, numbers=10,20,5,7"
