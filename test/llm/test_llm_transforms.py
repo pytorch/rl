@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import torch
-from tensordict import set_list_to_stack, TensorDict
+from tensordict import lazy_stack, set_list_to_stack, TensorDict
 from torch import nn
 
 from torchrl.data.llm import History
@@ -26,6 +26,7 @@ from torchrl.envs.llm.transforms import (
     KLRewardTransform,
     PolicyVersion,
     RetrieveLogProb,
+    SimpleToolTransform,
     Tokenizer,
     ToolCall,
     ToolRegistry,
@@ -36,6 +37,7 @@ from torchrl.envs.transforms import (
     Tokenizer as EnvTokenizer,
     TransformedEnv,
 )
+from torchrl.modules.llm.policies import ChatHistory
 from torchrl.testing.mocking_classes import CountingEnv
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -624,6 +626,94 @@ class TestIncrementalTokenizer:
             f"Assistant response '{assistant_response}' not found in new tokens after step. "
             f"Got: '{new_decoded}'"
         )
+
+    @pytest.mark.parametrize(
+        "order, stale",
+        [
+            ("appended", False),
+            ("tool_first", False),
+            ("nested", False),
+            ("appended", True),
+        ],
+    )
+    def test_step_tokens_include_tool_results(self, tokenizer, order, stale):
+        """tokens.prompt matches history.prompt after a tool adds its result (#4633)."""
+        tool = SimpleToolTransform(tools={"add": lambda a, b: a + b})
+        if order == "tool_first":
+            env = TransformedEnv(ChatEnv(batch_size=(1,), tokenizer=tokenizer), tool)
+            env.append_transform(IncrementalTokenizer(tokenizer))
+        elif order == "nested":
+            env = ChatEnv.with_tokenizer(tokenizer=tokenizer, batch_size=(1,))
+            env = TransformedEnv(env, tool, auto_unwrap=False)
+        else:
+            env = ChatEnv.with_tokenizer(tokenizer=tokenizer, batch_size=(1,))
+            env.append_transform(tool)
+        td = env.reset(TensorDict({"query": "What is 2 + 3?"}, batch_size=(1,)))
+
+        # What an LLM wrapper returns for one reply: history.full, and tokens.full
+        # made of the prompt tokens followed by the generated tokens. Stale
+        # tokens.full does not match history.full and must not be reused.
+        reply = '<tool>add\n{"a": 2, "b": 3}</tool>'
+        reply_tokens = torch.tensor(
+            tokenizer("Bye" if stale else reply, add_special_tokens=False)["input_ids"]
+        )
+        tokens_full = torch.cat([td["tokens", "prompt"][0], reply_tokens])
+        response = History(role="assistant", content=reply, batch_size=1).unsqueeze(0)
+        td.set(
+            ("history", "full"),
+            td["history"].prompt.extend(response, inplace=False, dim=-1),
+        )
+        td.set(("tokens", "full"), torch.nested.as_nested_tensor([tokens_full]))
+
+        next_td = env.step(td)["next"]
+        expected = next_td["history"].prompt.apply_chat_template(
+            tokenizer=tokenizer, add_generation_prompt=True
+        )[0]
+        assert "Tool add executed successfully" in expected
+        tokens = next_td["tokens", "prompt"][0]
+        assert tokenizer.decode(tokens) == expected
+        if stale:
+            retokenized = tokenizer(expected, add_special_tokens=False)["input_ids"]
+            assert tokens.tolist() == retokenized
+        else:
+            # The generated tokens are reused as is, not re-tokenized.
+            assert torch.equal(tokens[: tokens_full.numel()], tokens_full)
+
+    def test_2d_batch_raises(self, tokenizer):
+        """A 2-D batch raises instead of returning tokens that miss the tool result.
+
+        tokens.prompt is a nested tensor, which has a single ragged dimension, so it
+        cannot be written back for a 2-D batch. Reusing tokens.full instead would
+        hand the wrapper a prompt without the tool result or the generation prompt.
+        """
+        tool = SimpleToolTransform(tools={"add": lambda a, b: a + b})
+        env = ChatEnv.with_tokenizer(tokenizer=tokenizer, batch_size=(2, 2))
+        env.append_transform(tool)
+
+        # A step whose history already carries the message a tool added. The
+        # tokenizer runs before the tool here, so it has to refuse the batch before
+        # it reads tokens.full, whose ids are arbitrary for that reason.
+        reply = '<tool>add\n{"a": 2, "b": 3}</tool>'
+        chat = History(
+            role=["user", "assistant", "tool"],
+            content=["What is 2 + 3?", reply, "Tool add executed successfully: 5"],
+            batch_size=3,
+        )
+        history = lazy_stack([lazy_stack([chat, chat]), lazy_stack([chat, chat])])
+        tokens_full = torch.arange(24).reshape(2, 2, 6)
+        td = TensorDict({("tokens", "full"): tokens_full}, batch_size=(2, 2))
+        next_td = TensorDict(
+            {"history": ChatHistory(prompt=history, batch_size=(2, 2))},
+            batch_size=(2, 2),
+        )
+        with pytest.raises(ValueError, match="exactly one batch dimension"):
+            env.transform._step(td, next_td)
+
+        # Same on reset, so the two entry points agree.
+        with pytest.raises(ValueError, match="exactly one batch dimension"):
+            env.reset(
+                TensorDict({"query": [["a", "b"], ["c", "d"]]}, batch_size=(2, 2))
+            )
 
     def test_with_tokenizer_constructor_arg(self, tokenizer):
         """Test that ChatEnv(with_tokenizer=True) creates a TransformedEnv with IncrementalTokenizer."""
