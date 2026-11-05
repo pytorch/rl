@@ -1507,7 +1507,9 @@ def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
 
     Returns:
         The softmax-weighted expectation with the trailing category dimension
-        removed, preserving the dtype and device of ``logits``. Mirrored bins are
+        removed, preserving the dtype and device of ``logits``. Half-precision
+        logits are upcast to float32 before any arithmetic and the result is cast
+        back, so the dtype of the return value is unchanged. Mirrored bins are
         paired through the difference of their unnormalized probabilities, and
         the sum is divided by the normalizer once, so an antisymmetric support
         such as the default symexp grid decodes mirror-symmetric logits to
@@ -1526,15 +1528,19 @@ def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
         raise ValueError(
             "The trailing logits dimension must match the one-dimensional support."
         )
-    # At least float32, so the unnormalized sum cannot overflow a half dtype.
+    # Upcast to at least float32 before any arithmetic, so that no step runs in a
+    # half dtype: subtracting the shift in bfloat16 would round the exponent
+    # argument to 8 significant bits, and the unnormalized sum could overflow.
+    # This is a no-op for float32 and float64 logits.
     dtype = torch.promote_types(logits.dtype, torch.float32)
-    bins = bins.to(device=logits.device, dtype=dtype)
+    wide = logits.to(dtype)
+    bins = bins.to(device=wide.device, dtype=dtype)
     # Pair before normalizing: a compiler may fuse a per-bin normalizing multiply
     # into the difference, whose rounding error the large bins then amplify.
     # The shift cancels in the ratio, so it is detached: its gradient is zero in
     # exact arithmetic, and computing it would add rounding noise times the bins.
-    shift = logits.detach().amax(-1, keepdim=True)
-    weights = (logits - shift).to(dtype).exp()
+    shift = wide.detach().amax(-1, keepdim=True)
+    weights = (wide - shift).exp()
     size = logits.shape[-1]
     midpoint = size // 2
     lower = weights[..., :midpoint].flip(-1)
