@@ -3527,6 +3527,34 @@ class TestFindStartStopTraj:
         assert third[0].data_ptr() != first[0].data_ptr()
         assert third[1].squeeze(-1).tolist() == [9]
 
+    @pytest.mark.parametrize("static_arg", ["ends", "trajectories"])
+    @pytest.mark.parametrize(
+        "sampler_type", [SliceSampler, SliceSamplerWithoutReplacement]
+    )
+    @pytest.mark.parametrize("pickled", [False, True])
+    def test_slice_sampler_static_boundaries_survive_writes(
+        self, static_arg, sampler_type, pickled
+    ):
+        # Boundaries passed as ends/trajectories must not be dropped when the
+        # buffer is filled with extend() or when the sampler is pickled.
+        traj = torch.tensor([0] * 5 + [1] * 5 + [2] * 10)
+        done = torch.zeros(20, dtype=torch.bool)
+        done[[4, 9, 19]] = True
+        kwargs = {"ends": done} if static_arg == "ends" else {"trajectories": traj}
+        if sampler_type is SliceSampler:
+            kwargs["cache_values"] = True
+        sampler = sampler_type(slice_len=3, **kwargs)
+        if pickled:
+            sampler = pickle.loads(pickle.dumps(sampler))
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20), sampler=sampler, batch_size=6
+        )
+        rb.extend(TensorDict({"traj": traj, "done": done}, [20]))
+        sample_traj = rb.sample()["traj"].view(2, 3)
+        assert (
+            sample_traj == sample_traj[:, :1]
+        ).all(), "each slice must stay within one trajectory"
+
     def test_boundary_distance_kernel_fullgraph(self):
         start = torch.tensor([8, 3, 5])
         stop = torch.tensor([2, 4, 7])
