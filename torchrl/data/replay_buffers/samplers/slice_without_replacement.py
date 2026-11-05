@@ -300,9 +300,19 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
                 f"{storage.ndim}-dimensional. Got a {start_idx.shape[1]} tensor "
                 "instead."
             )
-        self._storage_len_buffer = len(start_idx)
         # first get indices of the trajectories we want to retrieve
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
+        # With strict_length, draw only from trajectories long enough for a
+        # slice: drawing short ones would shrink the batch, or leave it empty
+        # once only short trajectories remain in the epoch.
+        eligible = None
+        if self.strict_length:
+            eligible = (lengths >= seq_length).nonzero().squeeze(-1)
+            if not eligible.numel():
+                eligible = None
+        self._storage_len_buffer = (
+            len(start_idx) if eligible is None else eligible.numel()
+        )
         indices, _ = SamplerWithoutReplacement.sample(self, storage, num_slices)
         storage_length = storage.shape[0]
 
@@ -322,7 +332,11 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             seq_length,
             num_slices,
             storage_length,
-            traj_idx=tuple_to_tensor(indices),
+            traj_idx=(
+                tuple_to_tensor(indices)
+                if eligible is None
+                else eligible[tuple_to_tensor(indices)]
+            ),
             storage=storage,
         )
         self._warn_if_short_batch(idx, batch_size)
