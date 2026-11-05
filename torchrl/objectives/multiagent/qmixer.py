@@ -55,7 +55,7 @@ class QMixerLoss(LossModule):
             Defaults to "l2".
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
-            create a double DQN. Default is ``False``.
+            create a double DQN. Default is ``True``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
             or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
