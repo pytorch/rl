@@ -11,6 +11,13 @@ from ._primitive import (
     MacroPrimitiveTransform,
     TargetMacroAction,
 )
+from ._sim2real import (
+    ActionDelay,
+    ActuatorModel,
+    ObservationDelay,
+    ObservationNoise,
+    SymmetryAugmentation,
+)
 from .gym_transforms import EndOfLifeTransform
 from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
@@ -134,10 +141,12 @@ def __getattr__(name: str):
 
 __all__ = [
     "ActionChunkTransform",
+    "ActionDelay",
     "ActionDiscretizer",
     "ActionMask",
     "ActionScaling",
     "ActionTokenizerTransform",
+    "ActuatorModel",
     "AutoResetEnv",
     "AutoResetTransform",
     "BatchSizeTransform",
@@ -189,6 +198,8 @@ __all__ = [
     "PolicyAgeFilter",
     "PolicyVersion",
     "NoopResetEnv",
+    "ObservationDelay",
+    "ObservationNoise",
     "ObservationNorm",
     "ObservationTransform",
     "PermuteTransform",
@@ -212,6 +223,7 @@ __all__ = [
     "Stack",
     "StepCounter",
     "SuccessReward",
+    "SymmetryAugmentation",
     "TargetReturn",
     "TensorDictPrimer",
     "TerminateTransform",
