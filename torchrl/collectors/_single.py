@@ -1851,7 +1851,8 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
-                tensordict_out = self._postproc(tensordict_out)
+                with self._weight_update_lock:
+                    tensordict_out = self._postproc(tensordict_out)
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.

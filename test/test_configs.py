@@ -2183,7 +2183,13 @@ class TestCollectorsConfig:
             frames_per_batch=10,
             total_frames=10,
         )
-        collector_instance = instantiate(cfg)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="SharedMemWeightSyncScheme was created without",
+                category=FutureWarning,
+            )
+            collector_instance = instantiate(cfg)
         try:
             assert next(iter(collector_instance)).numel() == 10
         finally:
@@ -2251,7 +2257,13 @@ class TestCollectorsConfig:
         else:
             assert not cfg.policy._partial_
 
-        collector_instance = instantiate(cfg)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="SharedMemWeightSyncScheme was created without",
+                category=FutureWarning,
+            )
+            collector_instance = instantiate(cfg)
         try:
             if collector == "async":
                 assert isinstance(collector_instance, AsyncCollector)
@@ -2337,7 +2349,13 @@ class TestCollectorsConfig:
         else:
             cfg = cfg_cls(policy=exploratory_policy_cfg, **kwargs)
 
-        collector_instance = instantiate(cfg)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="SharedMemWeightSyncScheme was created without",
+                category=FutureWarning,
+            )
+            collector_instance = instantiate(cfg)
 
         try:
             assert isinstance(collector_instance, expected_cls)

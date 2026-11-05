@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -79,14 +80,14 @@ class SharedMemTransport:
     updates shared memory tensors directly for subsequent weight updates.
 
     Initialization flow:
-    - Shared memory staging buffers are created and sent to workers via per-worker queues
-    - Workers receive the buffer reference and copy it into their own parameters
-    - Subsequent updates write the staging buffers in place; workers copy them
-      into their parameters when instructed, between two policy calls
+    - Shared memory buffers are created and sent to workers via per-worker queues
+    - Workers receive the buffer reference and apply it to their models
+    - Subsequent updates write the buffers in place
 
-    The staging buffers never alias the sender's model parameters nor the
-    workers' parameters, so neither an optimizer step on the sender nor a
-    weight update can change a parameter while a worker's policy is reading it.
+    By default the buffers are the sender's own weights, so workers that bind
+    them as their parameters see every in-place change on the sender. With
+    ``copy=True`` in :meth:`register_weights`, the buffers are staging copies
+    that alias neither the sender's model nor the workers' parameters.
 
     Both CPU and CUDA tensors maintain shared references when sent through mp.Queue.
 
@@ -121,6 +122,7 @@ class SharedMemTransport:
         params_map: dict[int, TensorDictBase],
         init_queues: dict[int, mp.Queue],
         per_worker: bool = False,
+        copy: bool = False,
     ) -> None:
         """Initialize per-worker queues for shared memory buffer distribution.
 
@@ -130,10 +132,11 @@ class SharedMemTransport:
             per_worker: If True, each worker gets its own independent weight copy
                 (for distinct policy factories). If False, workers on the same
                 device share the same weight buffer (device-based deduplication).
-
-        Each unique entry of ``params_map`` is copied into a new shared memory
-        staging buffer, so that writes to the tensors passed here (for instance
-        an optimizer step on the sender's model) never reach the workers.
+            copy: If True, each unique entry of ``params_map`` is copied into a
+                new shared memory staging buffer, so that writes to the tensors
+                passed here (for instance an optimizer step on the sender's
+                model) never reach the workers. If False (default), the buffers
+                share storage with ``params_map``.
         """
         from torchrl.collectors.utils import _cast
 
@@ -146,8 +149,12 @@ class SharedMemTransport:
             source = worker_idx if per_worker else id(weights)
             if source not in source_to_idx:
                 source_to_idx[source] = len(self._unique_weights)
-                staging = weights.data.clone().apply(_cast, weights)
-                self._unique_weights.append(staging.share_memory_())
+                if copy:
+                    buffer = weights.data.clone().apply(_cast, weights)
+                    buffer.share_memory_()
+                else:
+                    buffer = weights.data.apply(_cast, weights)
+                self._unique_weights.append(buffer)
             self._worker_to_weights_idx[worker_idx] = source_to_idx[source]
 
     def setup_connection_and_weights_on_sender(self) -> None:
@@ -269,8 +276,8 @@ class SharedMemTransport:
                     )
                     buffer.update_(weights_to_update, non_blocking=True)
 
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
+        for buffer in self._unique_weights:
+            _synchronize_cuda(buffer)
 
     def _update_single_worker(self, worker_idx: int, weights: TensorDictBase) -> None:
         """Update weights for a single worker in per-worker mode.
@@ -344,36 +351,71 @@ class SharedMemTransport:
 class SharedMemWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization using shared memory.
 
-    This scheme uses shared memory staging buffers for weight updates, so no
-    weights are pickled or sent through a pipe. On ``send()``, the sender copies
-    the new weights into one staging buffer per device.
+    This scheme uses shared memory buffers for weight updates, so no weights
+    are pickled or sent through a pipe. A background thread on the receiver
+    side listens for "receive" instructions from the sender. When an
+    instruction arrives, the thread applies the shared buffer to the model and
+    sends an acknowledgment.
 
-    A background thread on the receiver side listens for "receive" instructions
-    from the sender. When an instruction arrives, the thread copies the staging
-    buffer into the model's own parameters and sends an acknowledgment. The copy
-    happens while holding the lock that the receiving collector holds around
-    each policy call, so a policy call never reads a mix of two weight versions.
+    Two modes are available, selected by ``atomic``:
 
-    The staging buffers alias neither the sender's model nor the workers'
-    models: training the sender's model does not change the workers' weights
-    until the next ``send()``. Each worker holds one copy of the weights, and
-    the sender holds one staging buffer per device.
+    - ``atomic=False`` (the current default): the shared buffers are the
+      sender's own weights, and each worker binds them as its parameters. The
+      workers see every in-place change on the sender, including an optimizer
+      step, without any ``send()`` call. Because those writes land while a
+      worker's policy is running, a policy call can read a mix of two weight
+      versions.
+    - ``atomic=True``: the sender copies the weights into one shared staging
+      buffer per device on ``send()``, and each worker copies that buffer into
+      its own private parameters while holding the lock that the receiving
+      collector (or :class:`~torchrl.modules.InferenceServer`) holds around
+      each policy call. A policy call therefore always reads a single, complete
+      version of the weights, and workers only see new weights after
+      ``send()`` (for instance through ``update_policy_weights_()``). Memory
+      grows by one copy of the weights per worker plus one staging buffer per
+      device, and each update costs one extra copy on the sender and on every
+      worker.
+
+    The default changes to ``atomic=True`` in v0.16. Code that trains the
+    sender's policy and relies on the workers seeing the change without calling
+    ``update_policy_weights_()`` must then pass ``atomic=False`` or call
+    ``update_policy_weights_()`` after each update.
 
     Args:
-        strategy: The weight transmission strategy (default: "tensordict").
-        sync: If True (default), send() blocks until receiver acknowledges.
-            If False, send() returns immediately; the next send() then waits
-            for the acknowledgments of the previous one before overwriting the
-            staging buffers.
-        per_worker_weights: If True, each worker maintains independent weights
-            (for distinct policy factories). If False (default), workers on the
-            same device share the same weight buffer. This flag is auto-set to
-            True when distinct policy factories are detected.
+        strategy (str, optional): The weight transmission strategy,
+            ``"tensordict"`` or ``"state_dict"``. Defaults to ``"tensordict"``.
+        sync (bool, optional): If ``True``, ``send()`` blocks until every
+            receiver acknowledges. If ``False``, ``send()`` returns immediately;
+            with ``atomic=True`` the next ``send()`` first waits (up to
+            ``WEIGHT_SYNC_TIMEOUT`` seconds per worker) for the previous
+            acknowledgments, so that a staging buffer is never overwritten
+            while a worker copies it. Defaults to ``True``.
+        per_worker_weights (bool, optional): If ``True``, each worker
+            maintains independent weights (for distinct policy factories). If
+            ``False``, workers on the same device share the same weight buffer.
+            This flag is auto-set to ``True`` when distinct policy factories are
+            detected. Defaults to ``False``.
+        atomic (bool, optional): If ``True``, workers keep a private copy of the
+            weights and apply each update between two policy calls, as
+            described above. If ``False``, workers read the sender's weights in
+            place. ``None`` behaves like ``False`` and emits a
+            :class:`FutureWarning` when the scheme is initialized on the sender,
+            since the default becomes ``True`` in v0.16. Defaults to ``None``.
 
     Example:
-        >>> # Basic usage
-        >>> scheme = SharedMemWeightSyncScheme()
-        >>> # Weights are initialized via init_on_sender()
+        >>> from torchrl.weight_update import SharedMemWeightSyncScheme
+        >>> scheme = SharedMemWeightSyncScheme(atomic=True)
+        >>> scheme.atomic
+        True
+        >>> # Pass it to a multiprocess collector, then push each new set of
+        >>> # weights to the workers explicitly:
+        >>> # collector = MultiSyncCollector(
+        >>> #     [make_env] * 2, policy, frames_per_batch=64, total_frames=-1,
+        >>> #     weight_sync_schemes={"policy": scheme},
+        >>> # )
+        >>> # for data in collector:
+        >>> #     ...  # optimizer step on policy
+        >>> #     collector.update_policy_weights_()
     """
 
     def __init__(
@@ -381,10 +423,13 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         strategy: str = "tensordict",
         sync: bool = True,
         per_worker_weights: bool = False,
+        atomic: bool | None = None,
     ):
         super().__init__(strategy)
         self.sync = sync
         self.per_worker_weights = per_worker_weights
+        self._warn_atomic_default = atomic is None
+        self.atomic = bool(atomic)
         # Create a single shared transport for all workers
         self.shared_transport = SharedMemTransport()
 
@@ -519,9 +564,27 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             if worker_idx not in self._ack_queues:
                 self._ack_queues[worker_idx] = ctx.Queue()
 
+        if self._warn_atomic_default:
+            warnings.warn(
+                "SharedMemWeightSyncScheme was created without `atomic`. Workers "
+                "currently read the sender's weights in place, so they see every "
+                "in-place update (such as an optimizer step) without "
+                "update_policy_weights_(), and a policy call can read a mix of two "
+                "weight versions. In torchrl v0.16 the default changes to "
+                "atomic=True: workers keep a private copy and only see new weights "
+                "after update_policy_weights_(). Pass "
+                "weight_sync_schemes={'policy': SharedMemWeightSyncScheme(atomic=True)} "
+                "to opt in now, or atomic=False to keep the current behavior.",
+                FutureWarning,
+                stacklevel=3,
+            )
+
         # Set worker info in transport
         self.shared_transport.register_weights(
-            params_map, self._weight_init_queues, per_worker=self.per_worker_weights
+            params_map,
+            self._weight_init_queues,
+            per_worker=self.per_worker_weights,
+            copy=self.atomic,
         )
 
         # Store model_id and context on scheme
@@ -939,12 +1002,12 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         """Send weights via shared memory (in-place update).
 
         For SharedMemWeightSyncScheme:
-        1. Waits until every worker has finished copying the previous update
-           (only relevant when ``sync=False``), so that a staging buffer is
-           never written while a worker reads it
-        2. Updates the shared memory staging buffer(s) in-place
-        3. _send_instruction() tells workers to copy the new weights into their
-           parameters, which they do between two policy calls
+        1. With ``atomic=True`` and ``sync=False``, waits until every worker
+           has finished copying the previous update, so that a staging buffer
+           is never written while a worker reads it
+        2. Updates the shared memory buffer(s) in-place
+        3. _send_instruction() tells workers to apply the new weights (with
+           ``atomic=True``, between two policy calls)
         4. If sync=True, waits for acknowledgments from all workers
 
         Args:
@@ -995,6 +1058,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # Wait for acknowledgments if in synchronous mode
         if self.sync:
             self._wait_for_ack(worker_ids=target_workers)
+        elif not self.atomic:
+            return
         elif target_workers is None:
             self._unacknowledged_workers.update(self._instruction_queues)
         elif isinstance(target_workers, int):
@@ -1006,13 +1071,15 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         """Collect the acknowledgments that ``send(sync=False)`` left pending.
 
         A worker acknowledges once it has copied the staging buffer into its
-        parameters. Until then the buffer must not be overwritten.
+        parameters. Until then the buffer must not be overwritten. Each worker
+        gets ``WEIGHT_SYNC_TIMEOUT`` seconds, so a worker that died does not
+        block the sender forever; a timeout is logged as a warning.
         """
         if not self._unacknowledged_workers:
             return
         worker_ids = sorted(self._unacknowledged_workers)
         self._unacknowledged_workers.clear()
-        self._wait_for_ack(worker_ids=worker_ids)
+        self._wait_for_ack(worker_ids=worker_ids, timeout=WEIGHT_SYNC_TIMEOUT)
 
     @property
     def weights(self) -> Any | None:
@@ -1082,7 +1149,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self._receiver_shared_weights = weights
 
         if weights is not None and self.model is not None:
-            self._strategy.apply_weights(self.model, weights.clone(), inplace=False)
+            if self.atomic:
+                weights = weights.clone()
+            self._strategy.apply_weights(self.model, weights, inplace=False)
 
         # Start background receiver thread that listens for instructions
         self._start_background_receiver()
@@ -1118,35 +1187,52 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                         f"SharedMemWeightSyncScheme: Background receiver error: {e}"
                     )
 
+    def receive(self, timeout: float | None = None) -> TensorDictBase | None:
+        """Apply the shared buffer to the model, as the background thread does.
+
+        The application holds the receiving context's weight-update lock, so a
+        manual call cannot race with a policy call or with the background
+        receiver thread.
+        """
+        with self._weight_update_lock():
+            return super().receive(timeout=timeout)
+
     def _weight_update_lock(self) -> contextlib.AbstractContextManager:
-        """Return the lock that the receiving collector holds around policy calls.
+        """Return the lock that the receiving context holds around policy calls.
 
         Copying the staging buffer into the model while holding it guarantees
         that a policy call reads either the previous or the new weights, never a
-        mix of both. Receivers without a collector context get a no-op context.
+        mix of both. Collectors and :class:`~torchrl.modules.InferenceServer`
+        expose this lock as ``_weight_update_lock``; receivers without such a
+        context get a no-op context.
         """
         return getattr(self.context, "_weight_update_lock", contextlib.nullcontext())
 
     def _apply_shared_weights(self) -> None:
-        """Copy the staging buffer into the model and cascade the update.
+        """Apply the shared buffer to the model and cascade the update.
 
         The update is then cascaded through the context's
         ``update_policy_weights_``, which also bumps the PolicyVersion transform
-        of a leaf Collector. The cascade reads the model's freshly copied
-        parameters rather than the staging buffer, so a context whose policy is
-        the model itself does not copy the weights a second time.
+        of a leaf Collector. With ``atomic=True``, the cascade reads the
+        model's freshly copied parameters rather than the staging buffer, so a
+        context whose policy is the model itself does not copy the weights a
+        second time.
 
-        Every copy is complete, on every stream, before this returns: the sender
-        may overwrite the staging buffer as soon as it is acknowledged, and the
-        next policy call may run on another CUDA stream.
+        With ``atomic=True``, every copy is complete, on every stream, before
+        this returns: the sender may overwrite the staging buffer as soon as it
+        is acknowledged, and the next policy call may run on another CUDA
+        stream.
         """
         weights = self._receiver_shared_weights
         model = self.model
         if weights is not None and model is not None:
-            destination = TensorDict.from_module(model)
-            _synchronize_cuda(destination)
-            self._strategy.apply_weights(model, weights, inplace=True)
-            weights = destination
+            if not self.atomic:
+                self._strategy.apply_weights(model, weights, inplace=True)
+            else:
+                destination = TensorDict.from_module(model)
+                _synchronize_cuda(destination)
+                self._strategy.apply_weights(model, weights, inplace=True)
+                weights = destination
 
         model_id = self._model_id or "policy"
         if self.context is not None and hasattr(self.context, "update_policy_weights_"):
@@ -1154,7 +1240,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                 model_id=model_id,
                 policy_or_weights=weights,
             )
-        if weights is not None:
+        if self.atomic and weights is not None:
             _synchronize_cuda(weights)
 
     def __getstate__(self):

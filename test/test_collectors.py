@@ -27,6 +27,7 @@ import torch
 import torchrl.collectors._multi_base
 import torchrl.collectors._runner
 import torchrl.collectors.distributed.generic as distributed_generic
+import torchrl.weight_update._shared
 from packaging import version
 from pyvers import implement_for
 from tensordict import (
@@ -2683,7 +2684,15 @@ if __name__ == "__main__":
     )
     @pytest.mark.parametrize(
         "weight_sync_scheme",
-        [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+        [
+            None,
+            MultiProcessWeightSyncScheme,
+            SharedMemWeightSyncScheme,
+            pytest.param(
+                functools.partial(SharedMemWeightSyncScheme, atomic=True),
+                id="SharedMemWeightSyncScheme-atomic",
+            ),
+        ],
     )
     # @pytest.mark.skipif(not torch.cuda.is_available() and not torch.mps.is_available(), reason="no cuda/mps device found")
     def test_update_weights(self, use_async, cudagraph, weight_sync_scheme):
@@ -2698,8 +2707,10 @@ if __name__ == "__main__":
 
         collector_class = MultiSyncCollector if not use_async else MultiAsyncCollector
         kwargs = {}
+        scheme = None
         if weight_sync_scheme is not None:
-            kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
+            scheme = weight_sync_scheme()
+            kwargs["weight_sync_schemes"] = {"policy": scheme}
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         collector = collector_class(
             [create_env] * 3,
@@ -2733,9 +2744,8 @@ if __name__ == "__main__":
             state_dict = collector.state_dict()
             policy_state_dict = policy.state_dict()
             # check they don't match
-            workers_see_unsent_weights = (
-                weight_sync_scheme is MultiProcessWeightSyncScheme
-                and not torch.cuda.is_available()
+            workers_see_unsent_weights = not torch.cuda.is_available() and not (
+                scheme is not None and scheme.atomic
             )
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
@@ -4796,7 +4806,7 @@ class TestUpdateParams:
             policy,
             frames_per_batch=4,
             total_frames=-1,
-            weight_sync_schemes={"policy": SharedMemWeightSyncScheme()},
+            weight_sync_schemes={"policy": SharedMemWeightSyncScheme(atomic=True)},
         )
         num_updates = 15
         torn_calls = 0
@@ -4813,6 +4823,49 @@ class TestUpdateParams:
             col.shutdown()
         assert torn_calls == 0
         assert (data["first"] > 0).all()
+
+    @pytest.mark.parametrize("atomic", [None, False, True])
+    def test_shared_mem_atomic_default_warns(self, atomic):
+        scheme = SharedMemWeightSyncScheme(atomic=atomic)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            scheme.init_on_sender(
+                model=nn.Linear(2, 2),
+                devices=[torch.device("cpu")],
+            )
+        warned = [
+            w
+            for w in record
+            if issubclass(w.category, FutureWarning) and "v0.16" in str(w.message)
+        ]
+        assert len(warned) == (atomic is None)
+
+    def test_shared_mem_async_send_survives_dead_worker(self, monkeypatch):
+        monkeypatch.setattr(torchrl.weight_update._shared, "WEIGHT_SYNC_TIMEOUT", 1.0)
+        policy = TensorDictModule(
+            TestUpdateParams.SlowTwoReadModule(),
+            in_keys=["state"],
+            out_keys=["action", "first", "second"],
+        )
+        env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device="cpu"))
+        col = MultiAsyncCollector(
+            [env, env],
+            policy,
+            frames_per_batch=4,
+            total_frames=-1,
+            weight_sync_schemes={
+                "policy": SharedMemWeightSyncScheme(atomic=True, sync=False)
+            },
+        )
+        try:
+            col.procs[0].kill()
+            col.procs[0].join()
+            start = time.monotonic()
+            col.update_policy_weights_()
+            col.update_policy_weights_()
+            assert time.monotonic() - start < 30
+        finally:
+            col.shutdown()
 
     @pytest.mark.parametrize(
         "collector",

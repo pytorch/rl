@@ -199,12 +199,23 @@ Scheme-Specific Behavior
 SharedMemWeightSyncScheme
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Uses shared memory staging buffers for weight updates: nothing is pickled or sent through a pipe.
-The sender copies the new weights into one staging buffer per device, and each worker copies that
-buffer into its own parameters. The worker does this copy between two policy calls (the collector
-holds a lock around each call), so a policy call always reads a single, complete version of the
-weights. The staging buffers never alias the sender's model, so training the sender's model does not
-change the workers' weights until the next ``send()``.
+Uses shared memory buffers for weight updates: nothing is pickled or sent through a pipe. The
+``atomic`` argument selects how workers read them:
+
+- ``atomic=False`` (the current default): the shared buffers are the sender's own weights and the
+  workers bind them as their parameters (zero-copy). Workers see every in-place change on the
+  sender, including an optimizer step, without any ``send()`` call, and a policy call can read a
+  mix of two weight versions while the sender writes.
+- ``atomic=True``: the sender copies the new weights into one staging buffer per device on
+  ``send()``, and each worker copies that buffer into its own parameters between two policy calls
+  (the collector, or the :class:`~torchrl.modules.InferenceServer`, holds a lock around each call).
+  A policy call always reads a single, complete version of the weights, and training the sender's
+  model does not change the workers' weights until the next ``send()``.
+
+Creating the scheme without ``atomic`` emits a :class:`FutureWarning`: the default becomes
+``atomic=True`` in v0.16. Code that trains the policy and never calls ``update_policy_weights_()``
+relies on ``atomic=False`` and should either pass it explicitly or start calling
+``update_policy_weights_()``.
 
 .. list-table::
    :header-rows: 1
@@ -219,11 +230,12 @@ change the workers' weights until the next ``send()``.
      - None
    * - ``connect``
      - Sends buffer references + initial weights
-     - Receives buffers, copies them into its parameters, starts background thread
+     - Receives buffers, binds them (``atomic=False``) or a private copy (``atomic=True``) as its
+       parameters, starts background thread
      - mp.Queue (blocking)
    * - ``send``
-     - Updates the staging buffers, sends instruction
-     - Background thread copies the staging buffer into the parameters between two policy calls
+     - Updates the shared buffers, sends instruction
+     - Background thread applies the shared buffer (with ``atomic=True``, between two policy calls)
      - Shared memory + mp.Queue
 
 MultiProcessWeightSyncScheme
@@ -479,7 +491,7 @@ two-phase pattern: initialize first (no communication), then connect (blocking r
 
     # === MAIN PROCESS (Sender) ===
     policy = nn.Linear(4, 2)
-    scheme = SharedMemWeightSyncScheme()
+    scheme = SharedMemWeightSyncScheme(atomic=True)
 
     # PHASE 1: Initialize on sender (no communication yet)
     scheme.init_on_sender(
@@ -508,12 +520,13 @@ two-phase pattern: initialize first (no communication), then connect (blocking r
         w.join()
 
 .. note::
-    With ``SharedMemWeightSyncScheme``, weight updates never go through a pipe: the sender writes a
-    shared memory staging buffer and background threads copy it into the workers' parameters when
-    instructed by the sender. Each worker keeps its own copy of the parameters, so memory grows by one
-    copy of the weights per worker plus one staging buffer per device. With ``sync=False``, ``send()``
-    returns immediately and the next ``send()`` waits for the workers to finish the previous copy
-    before overwriting the staging buffer.
+    With ``SharedMemWeightSyncScheme``, weight updates never go through a pipe. With
+    ``atomic=True``, the sender writes a shared memory staging buffer and background threads copy it
+    into the workers' parameters when instructed by the sender. Each worker keeps its own copy of the
+    parameters, so memory grows by one copy of the weights per worker plus one staging buffer per
+    device. With ``sync=False``, ``send()`` returns immediately and the next ``send()`` waits (up to
+    ``WEIGHT_SYNC_TIMEOUT`` seconds per worker) for the workers to finish the previous copy before
+    overwriting the staging buffer.
 
 .. note::
     The ``strategy`` parameter determines the weight format: ``"state_dict"`` uses PyTorch's native state
