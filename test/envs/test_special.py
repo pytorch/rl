@@ -125,6 +125,46 @@ def _counting_env_with_affinity_report(env_index, reports):
     return CountingEnv()
 
 
+def _wait_and_rebuild_blocking_env_maker(release_file):
+    # Poll a file rather than wait on a multiprocessing.Event: the parent may
+    # terminate this worker while it waits, which would leave the lock of the
+    # event held.
+    for _ in range(600):
+        if os.path.exists(release_file):
+            break
+        threading.Event().wait(0.1)
+    return _BlockingEnvMaker(release_file)
+
+
+class _BlockingEnvMaker:
+    """Makes a CountingEnv. The worker process that receives it blocks until ``release_file`` exists."""
+
+    def __init__(self, release_file):
+        self.release_file = release_file
+
+    def __reduce__(self):
+        # Runs in the worker when it unpickles its arguments, before it sets its
+        # CPU affinity.
+        return _wait_and_rebuild_blocking_env_maker, (self.release_file,)
+
+    def __call__(self):
+        return CountingEnv()
+
+
+def _release_after_other_workers_exit(env, num_workers, release_file):
+    for _ in range(600):
+        processes = getattr(env, "threads", [])
+        if len(processes) == num_workers and all(
+            process.exitcode is not None for process in processes[1:]
+        ):
+            # Leave the parent several liveness checks (one every 0.1 s) to see
+            # the exits before worker 0 posts its status.
+            threading.Event().wait(0.5)
+            break
+        threading.Event().wait(0.1)
+    open(release_file, "w").close()
+
+
 class _ManyKeysCountingEnv(CountingEnv):
     """A CountingEnv with many observation keys.
 
@@ -1060,15 +1100,28 @@ class TestAsyncEnvPool:
     )
     @pytest.mark.parametrize("envs_per_worker", [1, 3])
     def test_worker_affinity_error_shuts_down_workers(
-        self, make_envs, monkeypatch, envs_per_worker
+        self, make_envs, monkeypatch, tmp_path, envs_per_worker
     ):
         available_cpu = next(iter(os.sched_getaffinity(0)))
         unavailable_cpu = max(os.sched_getaffinity(0)) + 1
+        num_workers = (len(make_envs) + envs_per_worker - 1) // envs_per_worker
         processes = []
+        watchers = []
         setup = ProcessorAsyncEnvPool._setup
+        # Worker 0 posts its affinity error only after every other worker has
+        # posted its own and exited: the error of worker 0 must still be raised.
+        release_file = str(tmp_path / "release")
+        make_envs = [_BlockingEnvMaker(release_file), *make_envs[1:]]
 
         def setup_with_invalid_affinity(env):
             env._worker_affinity = [(unavailable_cpu,)] * env.num_envs
+            watcher = threading.Thread(
+                target=_release_after_other_workers_exit,
+                args=(env, num_workers, release_file),
+                daemon=True,
+            )
+            watcher.start()
+            watchers.append(watcher)
             try:
                 setup(env)
             finally:
@@ -1078,15 +1131,20 @@ class TestAsyncEnvPool:
             ProcessorAsyncEnvPool, "_setup", setup_with_invalid_affinity
         )
 
-        with pytest.raises(RuntimeError, match="failed to set its CPU affinity"):
-            AsyncEnvPool(
-                make_envs,
-                backend="multiprocessing",
-                exchange="queue",
-                worker_affinity=[(available_cpu,)]
-                * ((len(make_envs) + envs_per_worker - 1) // envs_per_worker),
-                envs_per_worker=envs_per_worker,
-            )
+        try:
+            with pytest.raises(
+                RuntimeError, match="worker 0 failed to set its CPU affinity"
+            ):
+                AsyncEnvPool(
+                    make_envs,
+                    backend="multiprocessing",
+                    exchange="queue",
+                    worker_affinity=[(available_cpu,)] * num_workers,
+                    envs_per_worker=envs_per_worker,
+                )
+        finally:
+            for watcher in watchers:
+                watcher.join()
 
         assert processes
         assert all(process.exitcode is not None for process in processes)
