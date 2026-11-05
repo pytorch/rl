@@ -24,7 +24,7 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictSequential
 from torchrl import logger as torchrl_logger, trainers as trainers_module
 from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import (
@@ -33,6 +33,7 @@ from torchrl.collectors import (
     MultiAsyncCollector,
     MultiSyncCollector,
 )
+from torchrl.data import Bounded
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
     ReplayBufferEnsemble,
@@ -69,10 +70,12 @@ from torchrl.modules import (
     DreamerV3DiscreteActor,
     DreamerV3MLP,
     MLP,
+    ProbabilisticActor,
     RSSMPosteriorV3,
     RSSMPriorV3,
     RSSMStateEstimatorV3,
     TanhModule,
+    TanhNormal,
     TdMpc2QEnsemble,
     ValueOperator,
 )
@@ -3796,6 +3799,106 @@ class TestTrainerConfigs:
 
         torch.testing.assert_close(trainer.loss_module.min_action, torch.tensor(-1.0))
         torch.testing.assert_close(trainer.loss_module.max_action, torch.tensor(1.0))
+
+    @staticmethod
+    def _tanh_normal_actor():
+        return ProbabilisticActor(
+            TensorDictModule(
+                torch.nn.Sequential(torch.nn.Linear(3, 2), NormalParamExtractor()),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+        )
+
+    @staticmethod
+    def _mock_collector():
+        collector = MagicMock(spec=AsyncCollector)
+        collector.total_frames = 16
+        collector._weight_sync_schemes = None
+        return collector
+
+    @pytest.mark.parametrize("with_critic", [True, False])
+    def test_ppo_trainer_networks_with_partial_loss(self, with_critic):
+        from hydra.utils import instantiate
+        from torchrl.objectives import ClipPPOLoss
+        from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig
+
+        actor = self._tanh_normal_actor()
+        critic = (
+            ValueOperator(torch.nn.Linear(3, 1), in_keys=["observation"])
+            if with_critic
+            else None
+        )
+        cfg = PPOTrainerConfig(
+            collector=self._mock_collector,
+            total_frames=16,
+            optim_steps_per_batch=1,
+            loss_module=partial(ClipPPOLoss),
+            optimizer=partial(torch.optim.Adam, lr=1e-3),
+            actor_network=actor,
+            critic_network=critic,
+            replay_buffer=None,
+            logger=None,
+            save_trainer_file=None,
+            progress_bar=False,
+        )
+
+        with warnings.catch_warnings():
+            # experimental-trainer and deprecated-hook warnings
+            warnings.simplefilter("ignore")
+            trainer = instantiate(cfg)
+
+        assert trainer.loss_module.actor_network is actor
+        assert trainer.loss_module.critic_network is critic
+
+    @pytest.mark.parametrize("trainer_name", ["iql", "cql"])
+    def test_offline_trainer_networks_as_modules(self, trainer_name):
+        from hydra.utils import instantiate
+        from torchrl.objectives import CQLLoss, IQLLoss, SoftUpdate
+        from torchrl.trainers.algorithms.configs.trainers import (
+            CQLTrainerConfig,
+            IQLTrainerConfig,
+        )
+
+        networks = {
+            "actor_network": self._tanh_normal_actor(),
+            "qvalue_network": ValueOperator(
+                torch.nn.Linear(4, 1), in_keys=["observation", "action"]
+            ),
+        }
+        if trainer_name == "iql":
+            config_cls, loss = IQLTrainerConfig, partial(IQLLoss)
+            networks["value_network"] = ValueOperator(
+                torch.nn.Linear(3, 1), in_keys=["observation"]
+            )
+        else:
+            # The mocked collector has no action spec for CQL's target entropy.
+            config_cls = CQLTrainerConfig
+            loss = partial(CQLLoss, action_spec=Bounded(-1.0, 1.0, (1,)))
+        cfg = config_cls(
+            collector=self._mock_collector,
+            total_frames=16,
+            optim_steps_per_batch=1,
+            loss_module=loss,
+            optimizer=partial(torch.optim.Adam, lr=1e-3),
+            target_net_updater=partial(SoftUpdate, eps=0.99),
+            replay_buffer=None,
+            logger=None,
+            save_trainer_file=None,
+            progress_bar=False,
+            **networks,
+        )
+
+        with warnings.catch_warnings():
+            # experimental-trainer and deprecated-hook warnings
+            warnings.simplefilter("ignore")
+            trainer = instantiate(cfg)
+
+        assert trainer.loss_module.actor_network is networks["actor_network"]
+        if trainer_name == "iql":
+            assert trainer.loss_module.value_network is networks["value_network"]
 
 
 _DQN_TRAINER_YAML = """
