@@ -13,6 +13,7 @@ import multiprocessing as mp
 import os
 import pickle
 import queue
+import socket
 import threading
 import time
 import warnings
@@ -135,6 +136,10 @@ class _MockTransport(InferenceTransport):
 
     def resolve_exception(self, callback, exc):
         callback.set_exception(exc)
+
+
+def _raise_gaierror(hostname):
+    raise socket.gaierror(socket.EAI_NONAME, f"{hostname} does not resolve")
 
 
 def _make_policy():
@@ -2913,7 +2918,12 @@ class TestProcessInferenceServer:
         finally:
             server.shutdown()
 
-    def test_process_server_with_distributed_gloo_transport(self):
+    @pytest.mark.parametrize("unresolvable_hostname", [False, True])
+    def test_process_server_with_distributed_gloo_transport(
+        self, unresolvable_hostname, monkeypatch
+    ):
+        if unresolvable_hostname:
+            monkeypatch.setattr(socket, "gethostbyname", _raise_gaierror)
         request_spec = TensorDict({"observation": torch.zeros(4)}, batch_size=[])
         response_spec = TensorDict(
             {
