@@ -35,11 +35,25 @@ class CSVExperiment:
         self.files = {}
 
     def add_scalar(self, name: str, value: float, global_step: int | None = None):
+        """Logs a scalar value to a CSV file.
+
+        Args:
+            name (str): The name of the scalar. Path separators (``/`` and
+                backslash) in ``name`` are replaced with ``_`` in the filename
+                so that ``"train/reward"`` is written to
+                ``scalars/train_reward.csv``. The original name is kept as the
+                in-memory key in ``self.scalars``.
+            value (float): The value of the scalar.
+            global_step (int, optional): The step at which the scalar is
+                logged. Defaults to ``None``, in which case the step is the
+                number of values already stored under ``name``.
+        """
         if global_step is None:
             global_step = len(self.scalars[name])
         value = float(value)
         self.scalars[name].append((global_step, value))
-        filepath = os.path.join(self.log_dir, "scalars", "".join([name, ".csv"]))
+        filename = name.replace("/", "_").replace("\\", "_")
+        filepath = os.path.join(self.log_dir, "scalars", "".join([filename, ".csv"]))
         if not os.path.isfile(filepath):
             os.makedirs(Path(filepath).parent, exist_ok=True)
         if filepath not in self.files:
