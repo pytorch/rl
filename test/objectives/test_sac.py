@@ -4169,22 +4169,22 @@ class TestREDQ(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
-    def test_redq_priority_weights(self):
+    @pytest.mark.parametrize("loss_cls", [REDQLoss, REDQLoss_deprecated])
+    def test_redq_priority_weights(self, loss_cls):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(batch=8)
         weights = torch.arange(1.0, 9.0)
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
+        per_sample_kwargs = {"reduction": "none"}
+        if loss_cls is REDQLoss:
+            per_sample_kwargs["scalar_output_mode"] = "exclude"
         torch.manual_seed(self.seed)
-        per_sample_loss_fn = REDQLoss(
-            actor,
-            qvalue,
-            delay_qvalue=False,
-            reduction="none",
-            scalar_output_mode="exclude",
+        per_sample_loss_fn = loss_cls(
+            actor, qvalue, delay_qvalue=False, **per_sample_kwargs
         )
         torch.manual_seed(self.seed)
-        weighted_loss_fn = REDQLoss(actor, qvalue, delay_qvalue=False)
+        weighted_loss_fn = loss_cls(actor, qvalue, delay_qvalue=False)
         torch.manual_seed(self.seed)
         per_sample = per_sample_loss_fn(td.clone())
         torch.manual_seed(self.seed)

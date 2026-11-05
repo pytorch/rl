@@ -327,7 +327,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             mask = mask.squeeze(-1)
         if mask.ndim > loss.ndim:
             raise ValueError(
-                f"A mask of shape {tuple(mask.shape)} cannot be applied to a "
+                f"A mask or weight of shape {tuple(mask.shape)} cannot be applied to a "
                 f"loss of shape {tuple(loss.shape)}: the mask has more "
                 "non-singleton dimensions than the loss. Per-element masking "
                 "requires an elementwise loss, not one whose event dimensions "

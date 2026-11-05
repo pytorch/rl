@@ -966,13 +966,16 @@ class TestIQL(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
-    @pytest.mark.parametrize("masked", [False, True])
-    def test_iql_priority_weights(self, masked):
+    @pytest.mark.parametrize("mask", [None, "partial", "all_invalid"])
+    def test_iql_priority_weights(self, mask):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_iql(batch=8)
         weights = torch.arange(1.0, 9.0)
-        mask = torch.tensor([True, False, True, True, False, True, True, True])
-        effective_weights = weights * mask if masked else weights
+        if mask == "partial":
+            mask = torch.tensor([True, False, True, True, False, True, True, True])
+        elif mask == "all_invalid":
+            mask = torch.zeros(8, dtype=torch.bool)
+        effective_weights = weights if mask is None else weights * mask
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
         value = self._create_mock_value()
@@ -990,16 +993,21 @@ class TestIQL(LossModuleTestBase):
         SoftUpdate(weighted_loss_fn, eps=0.5)
         per_sample = per_sample_loss_fn(td.clone())
         weighted_td = td.clone().set("priority_weight", weights)
-        if masked:
+        if mask is not None:
             weighted_td.set(("collector", "mask"), mask)
         weighted = weighted_loss_fn(weighted_td)
 
         loss_keys = ["loss_actor", "loss_qvalue", "loss_value"]
         per_sample = per_sample.select(*loss_keys)
-        expected = per_sample.apply(
-            lambda loss: (loss * effective_weights).sum() / effective_weights.sum(),
-            batch_size=[],
-        )
+        if effective_weights.any():
+            expected = per_sample.apply(
+                lambda loss: (loss * effective_weights).sum() / effective_weights.sum(),
+                batch_size=[],
+            )
+        else:
+            expected = per_sample.apply(
+                lambda loss: torch.zeros((), dtype=loss.dtype), batch_size=[]
+            )
         unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
         assert_allclose_td(weighted.select(*loss_keys), expected)
         for key in loss_keys:

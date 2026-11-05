@@ -728,16 +728,22 @@ class TestCQL(LossModuleTestBase):
 
     @pytest.mark.parametrize("num_random", [1, 4])
     def test_cql_regularizer_matches_cql_h(self, num_random):
-        """The conservative term is one logsumexp over all 3N sampled actions of the current state."""
+        """The conservative term is one logsumexp over all 3N sampled actions of the current state.
+
+        The policy's spread depends on the observation, so the log-densities
+        of the current-state and next-state policy actions differ: the
+        next-state actions must carry the next-state log-probability while
+        being scored by the Q-function at the current state.
+        """
         obs_dim, action_dim, temperature, min_q_weight = 3, 4, 2.0, 0.5
 
         class UniformParams(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.half_width = nn.Parameter(torch.ones(action_dim))
+                self.log_half_width = nn.Linear(obs_dim, action_dim)
 
             def forward(self, obs):
-                high = self.half_width.expand(*obs.shape[:-1], action_dim)
+                high = self.log_half_width(obs).exp()
                 return -high, high
 
         def uniform(low, high):
@@ -753,9 +759,10 @@ class TestCQL(LossModuleTestBase):
             def forward(self, obs, act):
                 return self.linear(obs)
 
+        uniform_params = UniformParams()
         actor = ProbabilisticActor(
             TensorDictModule(
-                UniformParams(), in_keys=["observation"], out_keys=["low", "high"]
+                uniform_params, in_keys=["observation"], out_keys=["low", "high"]
             ),
             in_keys=["low", "high"],
             spec=Bounded(-torch.ones(action_dim), torch.ones(action_dim)),
@@ -776,10 +783,23 @@ class TestCQL(LossModuleTestBase):
         td = self._create_mock_data_cql(batch=8, obs_dim=obs_dim, action_dim=action_dim)
         loss = loss_fn(td)
 
-        log_density = action_dim * math.log(2.0)
-        regularizer = log_density + temperature * math.log(3 * num_random)
-        expected = torch.full((8,), 2 * min_q_weight * regularizer)
-        torch.testing.assert_close(loss["loss_cql"], expected)
+        with torch.no_grad():
+            random_term = torch.full((8,), action_dim * math.log(2.0))
+            curr_term = random_term + uniform_params.log_half_width(
+                td["observation"]
+            ).sum(-1)
+            next_term = random_term + uniform_params.log_half_width(
+                td["next", "observation"]
+            ).sum(-1)
+            per_head = temperature * torch.log(
+                num_random
+                * (
+                    (random_term / temperature).exp()
+                    + (curr_term / temperature).exp()
+                    + (next_term / temperature).exp()
+                )
+            )
+        torch.testing.assert_close(loss["loss_cql"], 2 * min_q_weight * per_head)
 
     def test_cql_priority_weights(self):
         torch.manual_seed(self.seed)

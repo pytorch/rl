@@ -1072,7 +1072,10 @@ def _reduce(
                     )
                 mask = mask.to(dtype=weights.dtype)
                 masked_weight = weights * mask
-                result = (tensor * masked_weight).sum() / masked_weight.sum()
+                normalizer = masked_weight.sum().clamp_min(
+                    torch.finfo(masked_weight.dtype).tiny
+                )
+                result = (tensor * masked_weight).sum() / normalizer
             else:
                 if tensor.shape != weights.shape:
                     raise ValueError(
