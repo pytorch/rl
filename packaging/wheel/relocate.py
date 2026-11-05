@@ -13,11 +13,31 @@ import os
 import os.path as osp
 import shutil
 import sys
+import time
 import zipfile
 from base64 import urlsafe_b64encode
 
 HERE = osp.dirname(osp.abspath(__file__))
 PACKAGE_ROOT = osp.dirname(osp.dirname(HERE))
+
+
+def rmtree_with_retry(path, attempts=5, delay=1.0):
+    """Remove ``path``, waiting out handles that Windows briefly keeps open.
+
+    Antivirus and indexing services can hold a directory handle for a moment
+    after the files in it are written, which makes ``rmtree`` fail with
+    ``PermissionError`` (WinError 32) even though nothing in this script is
+    using the directory.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError:
+            if attempt == attempts:
+                raise
+            print(f"{path} is still in use, retrying removal ({attempt}/{attempts})")
+            time.sleep(delay * attempt)
 
 
 def rehash(path, blocksize=1 << 20):
@@ -95,7 +115,7 @@ def compress_wheel(output_dir, wheel, wheel_dir, wheel_name):
     shutil.make_archive(base_wheel_name, "zip", output_dir)
     os.remove(wheel)
     shutil.move(f"{base_wheel_name}.zip", wheel)
-    shutil.rmtree(output_dir)
+    rmtree_with_retry(output_dir)
 
 
 def patch_win():
@@ -114,7 +134,7 @@ def patch_win():
     for wheel in wheels:
         print(f"processing {wheel}")
         if osp.exists(output_dir):
-            shutil.rmtree(output_dir)
+            rmtree_with_retry(output_dir)
         print(f"creating output directory {output_dir}")
         os.makedirs(output_dir)
 
