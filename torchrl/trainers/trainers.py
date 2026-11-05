@@ -2042,7 +2042,9 @@ class Trainer:
             optim_steps_per_batch = self.optim_steps_per_batch
         if num_epochs is _OPTIM_STEPS_UNSET:
             num_epochs = self.num_epochs
-        j = -1
+        loop_started = False
+        # Optimization steps run in this call, across all epochs.
+        num_steps = 0
 
         for _ in range(num_epochs):
             # LOGGING POINT 3: Pre-epoch logging (e.g., epoch-specific metrics)
@@ -2055,14 +2057,18 @@ class Trainer:
             else:
                 prog = range(optim_steps_per_batch)
 
-            for j in prog:
-                self._optim_count += 1
+            for _ in prog:
+                loop_started = True
                 try:
                     sub_batch = self._process_optim_batch_hook(batch_processed)
                 except StopIteration:
                     break
                 if sub_batch is None:
                     break
+                # Count the step only once we know it will run: an exhausted
+                # sampler ends the epoch without an optimization step.
+                self._optim_count += 1
+                num_steps += 1
 
                 if self.optimization_stepper is not None:
                     losses_detached = self.optimization_stepper.step(self, sub_batch)
@@ -2085,7 +2091,10 @@ class Trainer:
                 else:
                     for key, item in losses_detached.items():
                         val = average_losses.get(key)
-                        average_losses.set(key, val * j / (j + 1) + item / (j + 1))
+                        average_losses.set(
+                            key,
+                            val * (num_steps - 1) / num_steps + item / num_steps,
+                        )
                 del sub_batch, losses_detached
 
             # LOGGING POINT 5: Post-epoch logging (e.g., epoch completion metrics)
@@ -2093,7 +2102,7 @@ class Trainer:
             # Regular post-epoch operations (e.g., epoch cleanup)
             self._post_epoch_hook()
 
-        if j >= 0:
+        if loop_started:
             # LOGGING POINT 6: After all optimization for this batch (e.g., logging average_losses)
             self._post_optim_complete_log_hook(self._optim_count, average_losses)
 

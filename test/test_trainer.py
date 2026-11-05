@@ -2127,6 +2127,14 @@ class _CountingStepper(OptimizationStepper):
         self.calls = state_dict["calls"]
 
 
+class _IncreasingLossStepper(_CountingStepper):
+    """Returns 1.0, 2.0, 3.0, ... as the loss of successive steps."""
+
+    def step(self, trainer: Trainer, sub_batch: TensorDict) -> TensorDict:
+        self.calls += 1
+        return TensorDict({"loss": torch.tensor(float(self.calls))}, [])
+
+
 class TestOptimizationStepper:
     def _make_trainer(self, loss_module, optimization_stepper=None, optimizer=None):
         trainer = Trainer(
@@ -2286,6 +2294,54 @@ class TestPostOptimCompleteLog:
         # but the trainer doesn't auto-log them
         assert "optim_steps" not in trainer._log_dict
         assert "loss" not in trainer._log_dict
+
+    def test_average_losses_span_all_epochs(self):
+        captured = {}
+
+        def capture_hook(optim_steps, average_losses):
+            captured["average_losses"] = average_losses.clone()
+
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=_IncreasingLossStepper(),
+        )
+        trainer.register_op("post_optim_complete_log", capture_hook)
+        td = TensorDict({"x": torch.randn(3)}, [])
+        # 3 epochs x 2 steps: losses 1, 2, ..., 6
+        trainer.optim_steps(td, optim_steps_per_batch=2, num_epochs=3)
+
+        torch.testing.assert_close(
+            captured["average_losses"]["loss"], torch.tensor(3.5)
+        )
+
+    def test_exhausted_sampler_does_not_count_a_step(self):
+        # PPO-style schedule: each epoch iterates the buffer until the sampler
+        # is exhausted (optim_steps_per_batch=None).
+        captured = {}
+
+        def capture_hook(optim_steps, average_losses):
+            captured["optim_steps"] = optim_steps
+
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+        )
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(4),
+            sampler=SamplerWithoutReplacement(),
+            batch_size=2,
+        )
+        rb_trainer = ReplayBufferTrainer(replay_buffer, iterate=True)
+        trainer.register_op("pre_epoch", rb_trainer.extend)
+        trainer.register_op("process_optim_batch", rb_trainer.sample)
+        trainer.register_op("post_optim_complete_log", capture_hook)
+        td = TensorDict({"x": torch.randn(4, 3)}, [4])
+        # 3 epochs x (4 items / batch of 2) = 6 optimizer steps
+        trainer.optim_steps(td, optim_steps_per_batch=None, num_epochs=3)
+
+        assert stepper.calls == 6
+        assert captured["optim_steps"] == 6
 
     @pytest.mark.parametrize(
         "trainer_cls",
