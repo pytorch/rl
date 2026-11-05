@@ -416,8 +416,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             diff = stop_idx.unsqueeze(1) - starts_tensor.unsqueeze(0)
             # filter out all items that don't belong to the same dim in the storage
             mask = (diff[:, :, 1:] != 0).any(-1)
-            # Distance forward along the circular time dimension, so a start
-            # past the wrap point finds the stop of its own trajectory.
             diff = diff[:, :, 0] % storage._len_along_dim0
             diff[mask] = diff.max() + 1
             # Take the arg min along dim 0 (thereby reducing dim M)
