@@ -2462,8 +2462,21 @@ class TestTo:
         shape1,
         device,
     ):
-        spec = Categorical(n=4, shape=shape1, device="cpu", dtype=torch.long)
-        assert spec.to(device).device == device
+        mask = torch.zeros(4, dtype=torch.bool)
+        mask[2] = True
+        spec = Categorical(n=4, shape=shape1, device="cpu", dtype=torch.long, mask=mask)
+        spec = spec.to(device)
+        assert spec.device == device
+        torch.testing.assert_close(spec.mask, mask.to(device).expand_as(spec.mask))
+
+        converted = spec.to(torch.int32)
+        assert converted.dtype == torch.int32
+        torch.testing.assert_close(
+            converted.mask, mask.to(device).expand_as(converted.mask)
+        )
+        sample = converted.rand()
+        expected = torch.full(shape1, 2, dtype=torch.int32, device=device)
+        torch.testing.assert_close(sample, expected)
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_multidiscrete(self, shape1, device):
@@ -4128,6 +4141,31 @@ class TestSpecMasking:
             assert (sp.sum(-1) == 2).all()
         else:
             assert (sp != s).all()
+
+    def test_reshape(self, shape, device, spectype, rand_shape, n=5):
+        shape = torch.Size(shape)
+        rand_shape = torch.Size(rand_shape)
+        spec = (
+            self._one_hot_spec(shape, device, n=n)
+            if spectype == "one_hot"
+            else self._discrete_spec(shape, device, n=n)
+            if spectype == "categorical"
+            else self._mult_one_hot_spec(shape, device, n=n)
+            if spectype == "mult_one_hot"
+            else self._mult_discrete_spec(shape, device, n=n)
+            if spectype == "mult_discrete"
+            else None
+        )
+        reshaped = [spec.reshape(1, *spec.shape)]
+        if spec.ndim:
+            reshaped.append(spec.unflatten(0, (1, spec.shape[0])))
+        for spec_reshaped in reshaped:
+            assert spec_reshaped.shape == (1, *spec.shape)
+            torch.testing.assert_close(spec_reshaped.mask, spec.mask.unsqueeze(0))
+            s = spec_reshaped.rand(rand_shape)
+            assert spec.is_in(s.reshape(rand_shape + spec.shape))
+            if spec.ndim:
+                assert spec_reshaped.reshape(spec.shape) == spec
 
 
 class TestDynamicSpec:
