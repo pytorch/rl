@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import contextlib
+import math
 
 import numpy as np
 import pytest
@@ -724,6 +725,61 @@ class TestCQL(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    @pytest.mark.parametrize("num_random", [1, 4])
+    def test_cql_regularizer_matches_cql_h(self, num_random):
+        """The conservative term is one logsumexp over all 3N sampled actions of the current state."""
+        obs_dim, action_dim, temperature, min_q_weight = 3, 4, 2.0, 0.5
+
+        class UniformParams(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.half_width = nn.Parameter(torch.ones(action_dim))
+
+            def forward(self, obs):
+                high = self.half_width.expand(*obs.shape[:-1], action_dim)
+                return -high, high
+
+        def uniform(low, high):
+            return torch.distributions.Independent(
+                torch.distributions.Uniform(low, high, validate_args=False), 1
+            )
+
+        class StateValue(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim, 1)
+
+            def forward(self, obs, act):
+                return self.linear(obs)
+
+        actor = ProbabilisticActor(
+            TensorDictModule(
+                UniformParams(), in_keys=["observation"], out_keys=["low", "high"]
+            ),
+            in_keys=["low", "high"],
+            spec=Bounded(-torch.ones(action_dim), torch.ones(action_dim)),
+            distribution_class=uniform,
+        )
+        qvalue = ValueOperator(StateValue(), in_keys=["observation", "action"])
+        loss_fn = CQLLoss(
+            actor,
+            qvalue,
+            num_random=num_random,
+            temperature=temperature,
+            min_q_weight=min_q_weight,
+            delay_qvalue=False,
+            reduction="none",
+            scalar_output_mode="exclude",
+        )
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql(batch=8, obs_dim=obs_dim, action_dim=action_dim)
+        loss = loss_fn(td)
+
+        log_density = action_dim * math.log(2.0)
+        regularizer = log_density + temperature * math.log(3 * num_random)
+        expected = torch.full((8,), 2 * min_q_weight * regularizer)
+        torch.testing.assert_close(loss["loss_cql"], expected)
 
     def test_cql_priority_weights(self):
         torch.manual_seed(self.seed)

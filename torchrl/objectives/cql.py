@@ -822,10 +822,13 @@ class CQLLoss(LossModule):
             self.actor_network_params,
             num_actions=self.num_random,
         )
-        new_curr_actions_td, new_log_pis = self._get_policy_actions(
+        next_actions_td, new_log_pis = self._get_policy_actions(
             tensordict.get("next").copy(),
             self.actor_network_params,
             num_actions=self.num_random,
+        )
+        new_curr_actions_td = curr_actions_td.clone(False).set(
+            self.tensor_keys.action, next_actions_td.get(self.tensor_keys.action)
         )
 
         # process all in one forward pass
@@ -897,38 +900,23 @@ class CQLLoss(LossModule):
         random_density = np.log(
             0.5 ** curr_actions_td[self.tensor_keys.action].shape[-1]
         )
-        cat_q1 = torch.cat(
+        per_state_shape = (self.num_qvalue_nets, *tensordict.shape, self.num_random)
+        sampled_q = torch.cat(
             [
-                q_random[0] - random_density,
-                q_new[0] - new_log_pis.detach().unsqueeze(-1),
-                q_curr[0] - curr_log_pis.detach().unsqueeze(-1),
+                (q_random.squeeze(-1) - random_density).reshape(per_state_shape),
+                (q_new.squeeze(-1) - new_log_pis.detach()).reshape(per_state_shape),
+                (q_curr.squeeze(-1) - curr_log_pis.detach()).reshape(per_state_shape),
             ],
             -1,
         )
-        cat_q2 = torch.cat(
-            [
-                q_random[1] - random_density,
-                q_new[1] - new_log_pis.detach().unsqueeze(-1),
-                q_curr[1] - curr_log_pis.detach().unsqueeze(-1),
-            ],
-            -1,
-        )
-
-        min_qf1_loss = (
-            torch.logsumexp(cat_q1 / self.temperature, dim=-1)
+        min_qf_loss = (
+            torch.logsumexp(sampled_q / self.temperature, dim=-1)
             * self.min_q_weight
             * self.temperature
         )
-        min_qf2_loss = (
-            torch.logsumexp(cat_q2 / self.temperature, dim=-1)
-            * self.min_q_weight
-            * self.temperature
-        )
+        min_qf1_loss, min_qf2_loss = min_qf_loss[0], min_qf_loss[1]
 
         # Subtract the log likelihood of data
-        per_state_shape = (*tensordict.shape, self.num_random)
-        min_qf1_loss = min_qf1_loss.reshape(per_state_shape).mean(-1)
-        min_qf2_loss = min_qf2_loss.reshape(per_state_shape).mean(-1)
         cql_q1_loss = min_qf1_loss - pred_q1.squeeze(-1) * self.min_q_weight
         cql_q2_loss = min_qf2_loss - pred_q2.squeeze(-1) * self.min_q_weight
 
