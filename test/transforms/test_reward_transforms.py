@@ -844,6 +844,28 @@ class TestRewardSum(TransformBase):
             else:
                 t._reset(td, td.empty())
 
+    def test_nested_out_key_tuple_is_one_key(self):
+        transform = RewardSum(
+            in_keys=("agent", "reward"),
+            out_keys=("agent", "episode_reward"),
+        )
+        assert transform.in_keys == [("agent", "reward")]
+        assert transform.out_keys == [("agent", "episode_reward")]
+
+        with pytest.raises(
+            ValueError,
+            match="RewardSum expects the same number of input and output keys",
+        ):
+            RewardSum(
+                in_keys=("agent", "reward"),
+                out_keys=[("agent", "episode_reward"), ("agent", "other")],
+            )
+        with pytest.raises(
+            ValueError,
+            match="RewardSum expects the same number of input and output keys",
+        ):
+            RewardSum(in_keys=["reward"], out_keys=["episode_reward", "other"])
+
 
 class TestReward2Go(TransformBase):
     @pytest.mark.parametrize("device", get_default_devices())

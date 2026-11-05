@@ -758,6 +758,13 @@ class TestVecNormV2:
 
         env.close()
 
+    def test_nested_in_key_tuple_is_one_key(self):
+        transform = VecNormV2(in_keys=("agent", "observation"))
+        assert len(transform.in_keys) == 1
+        assert len(transform.out_keys) == 1
+        assert transform.in_keys[0] == ("agent", "observation")
+        assert transform.out_keys[0] == ("agent", "observation")
+
 
 class TestVecNorm:
     SEED = -1

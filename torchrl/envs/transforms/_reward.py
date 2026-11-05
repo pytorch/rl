@@ -144,6 +144,10 @@ class TargetReturn(Transform):
 
     @in_keys.setter
     def in_keys(self, value):
+        if value is not None:
+            if isinstance(value, NestedKey):
+                value = [value]
+            value = [unravel_key(val) for val in value]
         self._in_keys = value
 
     @property
@@ -454,13 +458,13 @@ class RewardSum(Transform):
     def out_keys(self, value):
         # we must access the private attribute because this check occurs before
         # the parent env is defined
-        if value is not None and len(self._in_keys) != len(value):
-            raise ValueError(
-                "RewardSum expects the same number of input and output keys"
-            )
         if value is not None:
-            if isinstance(value, (str, tuple)):
+            if isinstance(value, NestedKey):
                 value = [value]
+            if len(self._in_keys) != len(value):
+                raise ValueError(
+                    "RewardSum expects the same number of input and output keys"
+                )
             value = [unravel_key(val) for val in value]
         self._out_keys = value
 
