@@ -11,13 +11,22 @@ ensures KV cache consistency across multi-turn conversations.
 **How it works:**
 
 - **On reset**: Tokenizes `history.prompt` and stores in `tokens.prompt`.
-- **On step**: Reuses `tokens.full` from the LLM wrapper output as the new
-`tokens.prompt`. Since `ChatEnv` sets `next.history.prompt = history.full`,
-and the LLM wrapper already produced `tokens.full` (tokenized `history.full`),
-no re-tokenization is needed - we simply copy `tokens.full` to `next.tokens.prompt`.
+- **On step**: Reuses `tokens.full` from the LLM wrapper output as the start of
+the new `tokens.prompt`. `ChatEnv` sets `next.history.prompt = history.full`,
+but other transforms (e.g. tool transforms) may append messages to it. If the
+decoded `tokens.full` is a prefix of the rendered `next.history.prompt`, only
+the remaining text (appended messages and generation prompt) is tokenized and
+appended. Otherwise `next.history.prompt` is tokenized from scratch.
 
-This approach is both efficient (avoids redundant tokenization) and ensures perfect
-token consistency (the exact same tokens are reused).
+This approach is both efficient (avoids redundant tokenization) and keeps the
+tokens produced by the LLM unchanged in the next prompt.
+
+The batch must have a single dimension: `tokens.prompt` holds one
+variable-length sequence per batch element and is stored as a nested tensor,
+which has a single ragged dimension. Whenever a history is found, any other
+number of batch dimensions raises a `ValueError`, on reset and on step
+alike, rather than leaving `tokens.prompt` out of sync with
+`history.prompt`.
 
 Parameters:
 
@@ -58,11 +67,12 @@ Note
 This transform is automatically added by [`ChatEnv`](torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv)
 when `with_tokenizer=True` is passed to the constructor.
 
-Warning
+Note
 
-**TODO**: Add validation that tokens match history (hash or length check).
-For now, we trust that tokens are kept in sync. If you manually modify the
-history, clear the tokens field to trigger re-tokenization.
+Transforms that edit `next.history.prompt` should be placed before this
+transform. Tool transforms (subclasses of
+`ToolTransformBase`) placed after it
+re-run it once their results are added to the history.
 
 See also
 

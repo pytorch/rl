@@ -194,7 +194,7 @@ dictionary:
 
  .. code-block:: none
 
-    tensor([-1.4620])
+    tensor([-1.5331])
 
 
 
