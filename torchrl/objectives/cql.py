@@ -96,13 +96,9 @@ class CQLLoss(LossModule):
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
-        use_prioritized_weights (bool or ``"auto"``, optional): whether to weight
-            the per-sample losses by the importance-sampling weights that a
-            prioritized replay buffer writes under the ``priority_weight`` key
-            (see :meth:`~.set_keys`). With ``"auto"`` or ``True`` the weights are
-            applied whenever that entry is present in the input tensordict, and
-            the losses are computed unweighted otherwise; ``False`` always ignores
-            it. Defaults to ``"auto"``.
+        use_prioritized_weights (bool or ``"auto"``, optional): weight the
+            per-sample losses by the ``priority_weight`` entry of a prioritized
+            replay buffer when it is present; ``False`` ignores it. Defaults to ``"auto"``.
 
     Examples:
         >>> import torch
@@ -1053,13 +1049,9 @@ class DiscreteCQLLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        use_prioritized_weights (bool or ``"auto"``, optional): whether to weight
-            the per-sample losses by the importance-sampling weights that a
-            prioritized replay buffer writes under the ``priority_weight`` key
-            (see :meth:`~.set_keys`). With ``"auto"`` or ``True`` the weights are
-            applied whenever that entry is present in the input tensordict, and
-            the losses are computed unweighted otherwise; ``False`` always ignores
-            it. Defaults to ``"auto"``.
+        use_prioritized_weights (bool or ``"auto"``, optional): weight the
+            per-sample losses by the ``priority_weight`` entry of a prioritized
+            replay buffer when it is present; ``False`` ignores it. Defaults to ``"auto"``.
 
     Examples:
         >>> from torchrl.modules import MLP, QValueActor

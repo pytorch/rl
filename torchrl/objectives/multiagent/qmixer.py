@@ -68,13 +68,9 @@ class QMixerLoss(LossModule):
             The key at which priority is assumed to be stored within TensorDicts added
             to this ReplayBuffer.  This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
-        use_prioritized_weights (bool or ``"auto"``, optional): whether to weight
-            the per-sample loss by the importance-sampling weights that a
-            prioritized replay buffer writes under the ``priority_weight`` key
-            (see :meth:`~.set_keys`). With ``"auto"`` or ``True`` the weights are
-            applied whenever that entry is present in the input tensordict, and
-            the loss is an unweighted mean otherwise; ``False`` always ignores
-            it. Defaults to ``"auto"``.
+        use_prioritized_weights (bool or ``"auto"``, optional): weight the
+            per-sample losses by the ``priority_weight`` entry of a prioritized
+            replay buffer when it is present; ``False`` ignores it. Defaults to ``"auto"``.
 
     Examples:
         >>> import torch
