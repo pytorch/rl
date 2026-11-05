@@ -28,6 +28,7 @@ import warnings
 
 import pytorch_sphinx_theme2
 import torchrl
+from tensordict import TensorDict
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -327,3 +328,26 @@ generate_tutorial_references("../../tutorials/media/", "media")
 import builtins
 
 builtins.__sphinx_build__ = True
+
+
+def _skip_forwarded_tensordict_method(app, what, name, obj, skip, options):
+    # A tensorclass forwards most methods to TensorDict, and the forwarding
+    # wrapper carries the docstring of TensorDict.<name>. Do not list these
+    # wrappers on the tensorclass pages (:inherited-members:). Keep the
+    # functions that are TensorDict's own under the same name (copies, or
+    # functools.wraps), which have the same docstring too.
+    if skip or what != "class":
+        return None
+    td_member = getattr(TensorDict, name, None)
+    doc = getattr(obj, "__doc__", None)
+    if (
+        doc
+        and doc == getattr(td_member, "__doc__", None)
+        and getattr(obj, "__name__", None) != getattr(td_member, "__name__", None)
+    ):
+        return True
+    return None
+
+
+def setup(app):
+    app.connect("autodoc-skip-member", _skip_forwarded_tensordict_method)
