@@ -5,5 +5,6 @@
 
 from .mappo import IPPOLoss, MAPPOLoss
 from .qmixer import QMixerLoss
+from .coma import COMALoss
 
-__all__ = ["IPPOLoss", "MAPPOLoss", "QMixerLoss"]
+__all__ = ["IPPOLoss", "MAPPOLoss", "QMixerLoss", "COMALoss"]
