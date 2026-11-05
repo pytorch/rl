@@ -37,6 +37,7 @@ from torchrl.envs.transforms import (
     Tokenizer as EnvTokenizer,
     TransformedEnv,
 )
+from torchrl.modules.llm.policies import ChatHistory
 from torchrl.testing.mocking_classes import CountingEnv
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -678,17 +679,41 @@ class TestIncrementalTokenizer:
             # The generated tokens are reused as is, not re-tokenized.
             assert torch.equal(tokens[: tokens_full.numel()], tokens_full)
 
-    def test_step_2d_batch_keeps_tokens_full(self, tokenizer):
-        """Nested tensors hold one batch dim: a 2-D batch reuses tokens.full as is."""
+    def test_2d_batch_raises(self, tokenizer):
+        """A 2-D batch raises instead of returning tokens that miss the tool result.
+
+        tokens.prompt is a nested tensor, which has a single ragged dimension, so it
+        cannot be written back for a 2-D batch. Reusing tokens.full instead would
+        hand the wrapper a prompt without the tool result or the generation prompt.
+        """
+        tool = SimpleToolTransform(tools={"add": lambda a, b: a + b})
+        env = ChatEnv.with_tokenizer(tokenizer=tokenizer, batch_size=(2, 2))
+        env.append_transform(tool)
+
+        # A step whose history already carries the message a tool added. The
+        # tokenizer runs before the tool here, so it has to refuse the batch before
+        # it reads tokens.full, whose ids are arbitrary for that reason.
+        reply = '<tool>add\n{"a": 2, "b": 3}</tool>'
         chat = History(
-            role=["user", "assistant"], content=["Hi", "Hello"], batch_size=2
+            role=["user", "assistant", "tool"],
+            content=["What is 2 + 3?", reply, "Tool add executed successfully: 5"],
+            batch_size=3,
         )
         history = lazy_stack([lazy_stack([chat, chat]), lazy_stack([chat, chat])])
         tokens_full = torch.arange(24).reshape(2, 2, 6)
         td = TensorDict({("tokens", "full"): tokens_full}, batch_size=(2, 2))
-        next_td = TensorDict({("history", "prompt"): history}, batch_size=(2, 2))
-        out = IncrementalTokenizer(tokenizer)._step(td, next_td)
-        assert torch.equal(out["tokens", "prompt"], tokens_full)
+        next_td = TensorDict(
+            {"history": ChatHistory(prompt=history, batch_size=(2, 2))},
+            batch_size=(2, 2),
+        )
+        with pytest.raises(ValueError, match="exactly one batch dimension"):
+            env.transform._step(td, next_td)
+
+        # Same on reset, so the two entry points agree.
+        with pytest.raises(ValueError, match="exactly one batch dimension"):
+            env.reset(
+                TensorDict({"query": [["a", "b"], ["c", "d"]]}, batch_size=(2, 2))
+            )
 
     def test_with_tokenizer_constructor_arg(self, tokenizer):
         """Test that ChatEnv(with_tokenizer=True) creates a TransformedEnv with IncrementalTokenizer."""

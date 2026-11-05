@@ -364,6 +364,13 @@ class IncrementalTokenizer(Transform):
     This approach is both efficient (avoids redundant tokenization) and keeps the
     tokens produced by the LLM unchanged in the next prompt.
 
+    The batch must have a single dimension: ``tokens.prompt`` holds one
+    variable-length sequence per batch element and is stored as a nested tensor,
+    which has a single ragged dimension. Whenever a history is found, any other
+    number of batch dimensions raises a :class:`ValueError`, on reset and on step
+    alike, rather than leaving ``tokens.prompt`` out of sync with
+    ``history.prompt``.
+
     Args:
         tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for encoding.
 
@@ -492,6 +499,34 @@ class IncrementalTokenizer(Transform):
             tokens_list.append(prefix.new_tensor(tokens))
         return tokens_list
 
+    def _check_batch_dims(self, tensordict: TensorDictBase) -> None:
+        """Raise unless the batch has exactly one dimension.
+
+        ``tokens.prompt`` holds one variable-length token sequence per batch element
+        and is stored as a nested tensor, which has a single ragged dimension. Under
+        more than one batch dimension that ragged dimension is the outer one, so the
+        token lengths would have to agree within each row of the batch, which prompt
+        lengths do not in general. Tokenizing a flattened batch and restoring the
+        shape afterwards does not work either: a nested tensor cannot gain a batch
+        dimension, since :meth:`~torch.Tensor.reshape`, :meth:`~torch.Tensor.view`,
+        :meth:`~torch.Tensor.unflatten` and :meth:`~torch.Tensor.unsqueeze` all
+        refuse to touch its implicit batch dimension, and a tensordict refuses a
+        flattened nested tensor under a multi-dimensional batch size.
+
+        So the tokens cannot be written back for ``batch_dims != 1``, and writing the
+        previous ``tokens.full`` instead would hand the LLM wrapper a prompt without
+        the messages and the generation prompt that the history gained in between.
+        """
+        if tensordict.batch_dims != 1:
+            raise ValueError(
+                f"{type(self).__name__} requires exactly one batch dimension, got "
+                f"batch_size={tuple(tensordict.batch_size)}. tokens.prompt is stored "
+                "as a nested tensor, which has a single ragged dimension, so the "
+                "tokens cannot be kept in sync with the history for any other number "
+                "of dimensions. Flatten the batch to one dimension before appending "
+                "this transform."
+            )
+
     def _get_history(self, tensordict: TensorDictBase) -> Any | None:
         """Get history from tensordict, handling both nested keys and tensorclass access."""
         history_key = self.history_key
@@ -507,11 +542,18 @@ class IncrementalTokenizer(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        """Tokenize full history on reset."""
+        """Tokenize full history on reset.
+
+        Raises:
+            ValueError: if a history is found and the batch does not have exactly one
+                dimension. See :meth:`_check_batch_dims`.
+        """
         history = self._get_history(tensordict_reset)
         if history is None:
             # No history to tokenize
             return tensordict_reset
+
+        self._check_batch_dims(tensordict_reset)
 
         # Tokenize full history
         tokens_list = self._tokenize_history(history)
@@ -532,6 +574,11 @@ class IncrementalTokenizer(Transform):
         matches the rendered next.history.prompt, and the rest is tokenized.
 
         Falls back to tokenizing next.history.prompt if tokens.full is not available.
+
+        Raises:
+            ValueError: if a history is found and the batch does not have exactly one
+                dimension, since the tokens cannot be kept in sync with the history
+                in that case. See :meth:`_check_batch_dims`.
         """
         # Replace the last NestedKey component with "full":
         #   "tokens" -> ("tokens", "full")
@@ -545,13 +592,13 @@ class IncrementalTokenizer(Transform):
         existing_tokens_full = tensordict.get(tokens_full_key, None)
         history = self._get_history(next_tensordict)
 
-        # Nested tensors hold a single batch dim, so batch_dims > 1 keeps tokens.full.
-        if history is None or (
-            existing_tokens_full is not None and next_tensordict.batch_dims != 1
-        ):
+        if history is None:
+            # Nothing to synchronize against: pass tokens.full through when present.
             if existing_tokens_full is not None:
                 next_tensordict.set(self.tokens_key, existing_tokens_full)
             return next_tensordict
+
+        self._check_batch_dims(next_tensordict)
 
         if existing_tokens_full is None:
             tokens_list = self._tokenize_history(history)
