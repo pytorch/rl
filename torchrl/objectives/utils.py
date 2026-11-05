@@ -672,7 +672,7 @@ class HardUpdate(TargetNetUpdater):
         self,
         loss_module: LossModule,
         *,
-        value_network_update_interval: float = 1000,
+        value_network_update_interval: int = 1000,
     ):
         super().__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
