@@ -179,15 +179,11 @@ class EGreedyModule(TensorDictModuleBase):
             if spec is not None:
                 if isinstance(spec, Composite):
                     spec = spec[self.action_key]
+                batch_shape = action.shape[: action.ndim - spec.ndim]
                 if spec.shape != action.shape:
                     # In batched envs if the spec is passed unbatched, the rand() will not
                     # cover all batched dims
-                    if (
-                        not len(spec.shape)
-                        or action.shape[-len(spec.shape) :] == spec.shape
-                    ):
-                        spec = spec.expand(action.shape)
-                    else:
+                    if spec.ndim and action.shape[-spec.ndim :] != spec.shape:
                         raise ValueError(
                             "Action spec shape does not match the action shape"
                         )
@@ -197,8 +193,11 @@ class EGreedyModule(TensorDictModuleBase):
                         raise KeyError(
                             f"Action mask key {self.action_mask_key} not found in {tensordict}."
                         )
+                    if batch_shape:
+                        spec = spec.expand(action.shape)
+                        batch_shape = ()
                     spec.update_mask(action_mask)
-                r = spec.rand()
+                r = spec.rand(batch_shape)
                 if r.device != device:
                     r = r.to(device)
                 action = torch.where(cond, r, action)
