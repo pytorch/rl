@@ -1514,7 +1514,8 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                             cudagraph_mark_step_begin()
                         except NotImplementedError:
                             pass
-                    policy_output = self._wrapped_policy(policy_input)
+                    with self._weight_update_lock:
+                        policy_output = self._wrapped_policy(policy_input)
                 policy_output_keys = set(policy_output.keys(True, True))
                 missing_out_keys = [
                     key for key in missing_out_keys if key in policy_output_keys
@@ -1579,7 +1580,8 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                         cudagraph_mark_step_begin()
                     except NotImplementedError:
                         pass
-                policy_output = self._wrapped_policy(policy_input)
+                with self._weight_update_lock:
+                    policy_output = self._wrapped_policy(policy_input)
 
                 # check that we don't have exclusive keys, because they don't appear in keys
                 def check_exclusive(val):

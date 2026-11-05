@@ -1500,7 +1500,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if not hasattr(self, "_receiver_schemes"):
             self._receiver_schemes = {}
         if isinstance(self._weight_update_lock, contextlib.nullcontext):
-            self._weight_update_lock = threading.Lock()
+            self._weight_update_lock = threading.RLock()
 
         # Initialize each scheme on the receiver side
         for model_id, scheme in weight_recv_schemes.items():
