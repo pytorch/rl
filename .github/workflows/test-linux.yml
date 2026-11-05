@@ -252,7 +252,9 @@ jobs:
         bash .github/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
         bash .github/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
 
-  # Full optional-dependencies suite (~2h serial). Not run on PRs by
+  # Full optional-dependencies suite (~2h serial, past 120 min once all
+  # ~32k tests collect, hence the 180 min budget; run_all.sh's watchdog
+  # still kills a silent hang after 20 min). Not run on PRs by
   # default: PRs get tests-optdeps-smoke below; add the ci/optdeps label
   # when a change touches optional-dependency integrations (see CLAUDE.md
   # section 7b). Labels do not retrigger the workflow -- label, then push
@@ -272,7 +274,7 @@ jobs:
       docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda13.0.3-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 120
+      timeout: 180
       upload-artifact: test-results-optdeps
       script: |
         # Set env vars from matrix
