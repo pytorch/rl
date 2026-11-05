@@ -123,6 +123,76 @@ print(env.done_spec)
 # (e.g. Brax) this should also include a representation of the previous state,
 # or any other input to the environment (including inputs at reset time).
 #
+# .. _env_spec_shapes:
+#
+# Spec shapes and batch size
+# ------------------------------
+#
+# When you write a custom environment, the composite spec has the shape of
+# the environment batch size (it can be empty) and the leaves have that size
+# plus their feature size. Feature dimensions -- an image, a board of shape
+# ``[8, 8, 13]``, a vector -- belong on the leaf, not on the composite.
+# ``GymEnv`` and ``ParallelEnv`` follow the same rule; the snippets below
+# construct the specs a custom env would assign, without a new env class.
+# The spec API is documented in :ref:`ref_specs`, and how env specs relate
+# to ``batch_size`` in :ref:`Environment-spec-shapes`.
+#
+# Unbatched env, image observation: ``observation_spec`` has shape ``[]``.
+# Its leaf has the shape of the feature (for example ``[3, 64, 64]`` for an
+# image of 64 pixels width/height). The ``GymEnv`` created above is also
+# unbatched: its composite matches ``env.batch_size`` and the observation
+# leaf is just the 3-vector Pendulum returns.
+
+from torchrl.data import Bounded, Composite, Unbounded
+
+assert env.observation_spec.shape == env.batch_size == torch.Size([])
+assert env.observation_spec["observation"].shape == torch.Size([3])
+
+observation_spec = Composite(
+    pixels=Bounded(low=0, high=255, shape=(3, 64, 64), dtype=torch.uint8),
+    shape=(),
+)
+assert observation_spec.shape == torch.Size([])
+assert observation_spec["pixels"].shape == torch.Size([3, 64, 64])
+
+###############################################################################
+# Batched env: if the env has batch size ``[2]`` (as with a ``ParallelEnv``
+# of two workers), *all* its specs have a leading shape of ``[2, *]``. The
+# composite has shape ``[2]`` and the leaf has shape ``[2, 3, 64, 64]``.
+
+batched_observation_spec = Composite(
+    pixels=Bounded(low=0, high=255, shape=(2, 3, 64, 64), dtype=torch.uint8),
+    shape=(2,),
+)
+assert batched_observation_spec.shape == torch.Size([2])
+assert batched_observation_spec["pixels"].shape == torch.Size([2, 3, 64, 64])
+
+###############################################################################
+# Nested groups (MARL): the env itself can have an empty batch size while
+# inner composites carry a per-group agent dimension. Here ``agents1`` has
+# three members that output images and ``agents2`` has four members that
+# output a state vector of size 5.
+
+full_observation_spec = Composite(
+    agents1=Composite(
+        pixels=Bounded(low=0, high=255, shape=(3, 3, 64, 64), dtype=torch.uint8),
+        shape=(3,),
+    ),
+    agents2=Composite(
+        state=Unbounded(shape=(4, 5)),
+        shape=(4,),
+    ),
+    shape=(),
+)
+assert full_observation_spec.shape == torch.Size([])
+assert full_observation_spec["agents1"].shape == torch.Size([3])
+assert full_observation_spec["agents1", "pixels"].shape == torch.Size(
+    [3, 3, 64, 64]
+)
+assert full_observation_spec["agents2"].shape == torch.Size([4])
+assert full_observation_spec["agents2", "state"].shape == torch.Size([4, 5])
+
+###############################################################################
 # Seeding, resetting and steps
 # ------------------------------
 # The basic operations on an environment are (1) ``set_seed``, (2) ``reset``
@@ -241,6 +311,13 @@ env = GymEnv("Pendulum-v1", from_pixels=True)
 ###############################################################################
 
 data = env.reset()
+
+###############################################################################
+# The pixel ``GymEnv`` is unbatched: composite shape ``[]``, and the
+# ``"pixels"`` leaf is the image feature (Gym typically uses ``[H, W, C]``).
+
+assert env.observation_spec.shape == env.batch_size == torch.Size([])
+assert env.observation_spec["pixels"].shape == data.get("pixels").shape
 env.close()
 
 ###############################################################################
@@ -472,6 +549,12 @@ parallel_env = ParallelEnv(
 
 parallel_env.reset()
 
+# The composite spec has the env batch ``[3]``; the observation leaf adds
+# the Pendulum feature size, so ``[3, 3]``.
+assert parallel_env.batch_size == torch.Size([3])
+assert parallel_env.observation_spec.shape == torch.Size([3])
+assert parallel_env.observation_spec["observation"].shape == torch.Size([3, 3])
+
 ###############################################################################
 # One can check that the parallel environment has the right batch size.
 # Conventionally, the first part of the ``batch_size`` indicates the batch,
@@ -636,6 +719,11 @@ parallel_env = ParallelEnv(
     mp_start_method=mp_context,
 )
 data = parallel_env.reset()
+
+# Two pixel workers: composite shape ``[2]``, pixels leaf ``[2, 3, 64, 64]``.
+assert parallel_env.batch_size == torch.Size([2])
+assert parallel_env.observation_spec.shape == torch.Size([2])
+assert parallel_env.observation_spec["pixels"].shape == torch.Size([2, 3, 64, 64])
 
 plt.figure()
 plt.subplot(121)
