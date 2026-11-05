@@ -2733,12 +2733,16 @@ if __name__ == "__main__":
             state_dict = collector.state_dict()
             policy_state_dict = policy.state_dict()
             # check they don't match
+            workers_see_unsent_weights = (
+                weight_sync_scheme is MultiProcessWeightSyncScheme
+                and not torch.cuda.is_available()
+            )
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     with (
-                        pytest.raises(AssertionError)
-                        if torch.cuda.is_available()
-                        else nullcontext()
+                        nullcontext()
+                        if workers_see_unsent_weights
+                        else pytest.raises(AssertionError)
                     ):
                         torch.testing.assert_close(
                             state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
@@ -4760,6 +4764,55 @@ class TestUpdateParams:
                 td.shape
             )
             return td
+
+    class SlowTwoReadModule(nn.Module):
+        """Reads two parameters with a pause in between.
+
+        The pause keeps the worker inside a policy call for most of the time it
+        runs, so a weight update that is not atomic with respect to policy calls
+        shows up as a call that read ``first`` and ``second`` from two versions.
+        """
+
+        def __init__(self):
+            super().__init__()
+            self.first = nn.Parameter(torch.zeros(()))
+            self.second = nn.Parameter(torch.zeros(()))
+
+        def forward(self, state):
+            first = self.first.detach().clone()
+            time.sleep(0.01)
+            second = self.second.detach().clone()
+            return torch.zeros_like(state), first, second
+
+    def test_shared_mem_update_never_tears_running_policy(self):
+        policy = TensorDictModule(
+            TestUpdateParams.SlowTwoReadModule(),
+            in_keys=["state"],
+            out_keys=["action", "first", "second"],
+        )
+        env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device="cpu"))
+        col = MultiAsyncCollector(
+            [env, env],
+            policy,
+            frames_per_batch=4,
+            total_frames=-1,
+            weight_sync_schemes={"policy": SharedMemWeightSyncScheme()},
+        )
+        num_updates = 15
+        torn_calls = 0
+        try:
+            for sent, data in enumerate(col):
+                torn_calls += int((data["first"] != data["second"]).sum())
+                if sent == num_updates:
+                    break
+                with torch.no_grad():
+                    policy.module.first.fill_(sent + 1)
+                    policy.module.second.fill_(sent + 1)
+                col.update_policy_weights_()
+        finally:
+            col.shutdown()
+        assert torn_calls == 0
+        assert (data["first"] > 0).all()
 
     @pytest.mark.parametrize(
         "collector",

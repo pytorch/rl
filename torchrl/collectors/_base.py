@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import contextlib
 import functools
+import threading
 import typing
 import warnings
 from collections import OrderedDict
@@ -350,6 +351,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     cudagraphed_policy: bool
     _weight_updater: WeightUpdaterBase | None = None
     _weight_sync_schemes: dict[str, WeightSyncScheme] | None = None
+    _weight_update_lock: contextlib.AbstractContextManager = contextlib.nullcontext()
     verbose: bool = False
     _profile_config: ProfileConfig | None = None
     trajs_per_batch: int | None = None
@@ -1487,10 +1489,18 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         Keyword Args:
             synchronize_weights (bool, optional): If True, synchronize weights immediately after registering the schemes.
                 Defaults to `True`.
+
+        Registering a receiver also gives the collector a lock that it holds
+        around every policy call. Schemes that apply weights from a background
+        thread (such as :class:`~torchrl.weight_update.SharedMemWeightSyncScheme`)
+        hold it while they copy, so a policy call never reads a partially applied
+        update.
         """
         # Initialize _receiver_schemes if not already present
         if not hasattr(self, "_receiver_schemes"):
             self._receiver_schemes = {}
+        if isinstance(self._weight_update_lock, contextlib.nullcontext):
+            self._weight_update_lock = threading.Lock()
 
         # Initialize each scheme on the receiver side
         for model_id, scheme in weight_recv_schemes.items():

@@ -2139,7 +2139,9 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                             cudagraph_mark_step_begin()
                         except NotImplementedError:
                             pass
-                    with _maybe_record_function("Collector.policy"):
+                    with self._weight_update_lock, _maybe_record_function(
+                        "Collector.policy"
+                    ):
                         policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy or self.cudagraphed_policy:
                         policy_output = policy_output.select(

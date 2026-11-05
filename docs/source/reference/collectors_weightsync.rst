@@ -199,8 +199,12 @@ Scheme-Specific Behavior
 SharedMemWeightSyncScheme
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Uses shared memory for zero-copy weight updates. After initial setup, weight updates are instantaneous
-since all processes share the same memory buffers.
+Uses shared memory staging buffers for weight updates: nothing is pickled or sent through a pipe.
+The sender copies the new weights into one staging buffer per device, and each worker copies that
+buffer into its own parameters. The worker does this copy between two policy calls (the collector
+holds a lock around each call), so a policy call always reads a single, complete version of the
+weights. The staging buffers never alias the sender's model, so training the sender's model does not
+change the workers' weights until the next ``send()``.
 
 .. list-table::
    :header-rows: 1
@@ -215,12 +219,12 @@ since all processes share the same memory buffers.
      - None
    * - ``connect``
      - Sends buffer references + initial weights
-     - Receives buffers, applies weights, starts background thread
+     - Receives buffers, copies them into its parameters, starts background thread
      - mp.Queue (blocking)
    * - ``send``
-     - Updates shared memory, sends instruction
-     - Background thread applies shared memory weights
-     - Zero-copy shared memory + mp.Queue
+     - Updates the staging buffers, sends instruction
+     - Background thread copies the staging buffer into the parameters between two policy calls
+     - Shared memory + mp.Queue
 
 MultiProcessWeightSyncScheme
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -494,7 +498,7 @@ two-phase pattern: initialize first (no communication), then connect (blocking r
     scheme.connect()
     # Workers now have copies of policy's weights!
 
-    # PHASE 3: Ongoing updates (zero-copy for shared memory)
+    # PHASE 3: Ongoing updates (no pickling for shared memory)
     for epoch in range(10):
         # ... training step updates policy weights ...
         scheme.send()  # Background threads automatically apply weights
@@ -504,8 +508,12 @@ two-phase pattern: initialize first (no communication), then connect (blocking r
         w.join()
 
 .. note::
-    With ``SharedMemWeightSyncScheme``, weight updates are zero-copy since all processes share the same
-    memory buffers. Background threads automatically apply updates when instructed by the sender.
+    With ``SharedMemWeightSyncScheme``, weight updates never go through a pipe: the sender writes a
+    shared memory staging buffer and background threads copy it into the workers' parameters when
+    instructed by the sender. Each worker keeps its own copy of the parameters, so memory grows by one
+    copy of the weights per worker plus one staging buffer per device. With ``sync=False``, ``send()``
+    returns immediately and the next ``send()`` waits for the workers to finish the previous copy
+    before overwriting the staging buffer.
 
 .. note::
     The ``strategy`` parameter determines the weight format: ``"state_dict"`` uses PyTorch's native state
