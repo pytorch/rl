@@ -413,28 +413,16 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # Find the stop that comes after the start index
             # say start_tensor has shape [N, X] and stop_idx has shape [M, X]
             # diff will have shape [M, N, X]
-            stop_idx_corr = stop_idx.clone()
-            stop_idx_corr[:, 0] = torch.where(
-                stop_idx[:, 0] < start_idx[:, 0],
-                stop_idx[:, 0] + storage._len_along_dim0,
-                stop_idx[:, 0],
-            )
-            diff = stop_idx_corr.unsqueeze(1) - starts_tensor.unsqueeze(0)
+            diff = stop_idx.unsqueeze(1) - starts_tensor.unsqueeze(0)
             # filter out all items that don't belong to the same dim in the storage
             mask = (diff[:, :, 1:] != 0).any(-1)
-            diff = diff[:, :, 0]
+            # Distance forward along the circular time dimension, so a start
+            # past the wrap point finds the stop of its own trajectory.
+            diff = diff[:, :, 0] % storage._len_along_dim0
             diff[mask] = diff.max() + 1
-            diff = diff.reshape(-1, starts_tensor.shape[0])
-            # We remove all neg values from consideration
-            diff[diff < 0] = diff.max() + 1
             # Take the arg min along dim 0 (thereby reducing dim M)
-            idx = diff.argmin(dim=0)
-            stops = stop_idx_corr[idx, 0]
-            # TODO: here things may not work bc we could have spanning trajs,
-            #  though I cannot show that it breaks in the tests
-            if starts_tensor.ndim > 1:
-                starts_tensor = starts_tensor[:, 0]
-            seq_length = (stops - starts_tensor + 1).clamp_max(seq_length)
+            steps_to_stop = diff.min(dim=0).values
+            seq_length = (steps_to_stop + 1).clamp_max(seq_length)
             if (seq_length <= 0).any():
                 raise RuntimeError(
                     "failed to compute seq_length, please report this bug"
