@@ -1461,6 +1461,26 @@ class TestAsyncEnvPool:
         finally:
             env._maybe_shutdown()
 
+    def test_shutdown_returns_when_result_queue_pipe_closed(self):
+        """Shutdown terminates when a result queue's pipe is already closed.
+
+        When the garbage collector reclaims a pool caught in a reference
+        cycle, it may finalize the result queues' connections before
+        ``AsyncEnvPool.__del__`` shuts the pool down. Draining a closed queue
+        fails on every ``get`` without consuming anything, which made the
+        drain loop spin forever and hang whatever test ran next.
+        """
+        env = AsyncEnvPool(
+            [CountingEnv, CountingEnv], backend="multiprocessing", exchange="queue"
+        )
+        env.reset()
+        env.close()
+        env.step_queue._reader.close()
+        closer = threading.Thread(target=env.close, daemon=True)
+        closer.start()
+        closer.join(timeout=30)
+        assert not closer.is_alive()
+
     @set_capture_non_tensor_stack(False)
     def test_queue_shutdown_with_unread_results(self):
         """Shutdown must not deadlock when unread results are still buffered.
