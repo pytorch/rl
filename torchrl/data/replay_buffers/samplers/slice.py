@@ -1373,12 +1373,15 @@ class SliceSampler(Sampler):
                 slice_end[positions] = True
 
             flat_index = index.to(torch.long).unbind(-1)
-            st_index = storage[flat_index]
             info = {self.slice_end_key: slice_end}
             if mask_flat is not None:
                 info[("collector", "mask")] = mask_flat
             self._maybe_emit_init_marker(
-                info, st_index, num_slices, seq_length, target_seq_length
+                info,
+                self._stored_init_flags(storage, flat_index),
+                num_slices,
+                seq_length,
+                target_seq_length,
             )
 
             index = index.reshape(num_slices, time_size, index.shape[-1])
@@ -1425,25 +1428,52 @@ class SliceSampler(Sampler):
             if mask_flat is not None:
                 info[("collector", "mask")] = mask_flat
             self._maybe_emit_init_marker(
-                info, st_index, num_slices, seq_length, target_seq_length
+                info,
+                self._init_flags_from(st_index),
+                num_slices,
+                seq_length,
+                target_seq_length,
             )
             return index, info
         index = index.to(torch.long).unbind(-1)
         info = {}
         if mask_flat is not None:
             info[("collector", "mask")] = mask_flat
-        # Fetch st_index lazily so the marker logic can OR with existing
-        # is_init. Cheap because index is already computed.
-        st_index = storage[index]
         self._maybe_emit_init_marker(
-            info, st_index, num_slices, seq_length, target_seq_length
+            info,
+            self._stored_init_flags(storage, index),
+            num_slices,
+            seq_length,
+            target_seq_length,
         )
         return index, info
+
+    def _init_flags_from(self, st_index) -> torch.Tensor | None:
+        """Read the ``init_key`` entry from already gathered samples."""
+        if self.init_key is None or not hasattr(st_index, "get"):
+            return None
+        return st_index.get(self.init_key, default=None)
+
+    def _stored_init_flags(self, storage, index) -> torch.Tensor | None:
+        """Gather only the stored ``init_key`` entry at ``index``.
+
+        Reading the single entry from the underlying TensorDict avoids
+        gathering every key of the sample, which dominates sampling time on
+        pixel observations. Other storages, such as remote stores where reading
+        a whole column would fetch every row, fall back to a full gather.
+        """
+        if self.init_key is None:
+            return None
+        underlying = getattr(storage, "_storage", None)
+        if isinstance(storage, TensorStorage) and is_tensor_collection(underlying):
+            flags = underlying.get(self.init_key, default=None)
+            return None if flags is None else flags[index]
+        return self._init_flags_from(storage[index])
 
     def _maybe_emit_init_marker(
         self,
         info: dict,
-        st_index,
+        existing_is_init: torch.Tensor | None,
         num_slices: int,
         seq_length,
         target_seq_length: int | None,
@@ -1466,14 +1496,7 @@ class SliceSampler(Sampler):
         introduce one — we'd be lying about real resets we can't see. With
         ``init_key=None`` the stored flags are returned untouched.
         """
-        if self.init_key is None:
-            return
-        existing_is_init = (
-            st_index.get(self.init_key, default=None)
-            if hasattr(st_index, "get")
-            else None
-        )
-        if existing_is_init is None:
+        if self.init_key is None or existing_is_init is None:
             return
         init_marker = torch.zeros_like(existing_is_init)
         device = init_marker.device

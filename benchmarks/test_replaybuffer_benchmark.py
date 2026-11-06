@@ -25,6 +25,7 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,
+    PrioritizedSliceSampler,
     PromptGroupSampler,
     RandomSampler,
     RoundRobinWriter,
@@ -623,6 +624,20 @@ def _prioritized_replay_buffer_benchmark_configs():
             TensorDictReplayBuffer,
             LazyTensorStorage,
             functools.partial(SliceSampler, num_slices=8, traj_key="traj"),
+            10_000,
+        ],
+        [
+            TensorDictReplayBuffer,
+            LazyTensorStorage,
+            functools.partial(
+                PrioritizedSliceSampler,
+                max_capacity=10_000,
+                alpha=0.7,
+                beta=0.5,
+                num_slices=8,
+                traj_key="traj",
+                truncated_key=None,
+            ),
             10_000,
         ],
         [_TensorDictPrioritizedReplayBuffer, ListStorage, None, 4000],
