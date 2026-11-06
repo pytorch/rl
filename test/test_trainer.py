@@ -862,7 +862,7 @@ class TestLoadFromFile:
             warnings.simplefilter("always")
             trainer.save_trainer(force_save=True)
         assert any(
-            item.category is FutureWarning and "v0.15" in str(item.message)
+            item.category is FutureWarning and "v0.16" in str(item.message)
             for item in caught
         )
         assert any(

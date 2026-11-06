@@ -97,7 +97,7 @@ def save_render_checkpoint(
     if format is None:
         warnings.warn(
             "The default save_render_checkpoint output will change from the "
-            "legacy torch.save payload to a unified TorchRL checkpoint in v0.15. "
+            "legacy torch.save payload to a unified TorchRL checkpoint in v0.16. "
             "Pass format='archive' or format='directory' to opt in now.",
             FutureWarning,
             stacklevel=2,
