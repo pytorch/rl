@@ -1206,7 +1206,7 @@ class SliceSampler(Sampler):
         if not self.span[1]:
             end_point = last_indexable_start
         elif self.span[1] is True:
-            end_point = lengths[traj_idx] + 1
+            end_point = lengths[traj_idx]
         else:
             span_left = self.span[1]
             if span_left >= seq_length:

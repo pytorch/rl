@@ -931,6 +931,46 @@ class TestSamplers:
                     curr_eps = curr_eps[curr_eps != 0]
                     assert curr_eps.unique().numel() == 1
 
+    @pytest.mark.parametrize("span", [True, (False, True)])
+    def test_slice_sampler_span_right_returns_every_slice(self, span):
+        """A right span never starts a slice past the end of its trajectory.
+
+        Every requested slice is returned with at least one step, and a slice
+        shorter than ``slice_len`` is cut by the end of its episode or, with a
+        left span, by its start.
+        """
+        torch.manual_seed(0)
+        episode_len, num_slices, slice_len = 4, 4, 4
+        step = torch.arange(episode_len).repeat(2)
+        data = TensorDict(
+            {
+                "episode": torch.arange(2).repeat_interleave(episode_len),
+                "step": step,
+                ("next", "done"): (step == episode_len - 1).unsqueeze(-1),
+            },
+            [2 * episode_len],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel()),
+            sampler=SliceSampler(slice_len=slice_len, traj_key="episode", span=span),
+            batch_size=num_slices * slice_len,
+        )
+        rb.extend(data)
+        for _ in range(50):
+            sample = rb.sample()
+            ends = sample["next", "truncated"].reshape(-1).nonzero().squeeze(-1) + 1
+            slices = sample.tensor_split(ends[:-1].tolist())
+            assert len(slices) == num_slices
+            assert ends[-1] == sample.numel()
+            for slc in slices:
+                assert 1 <= slc.numel() <= slice_len
+                assert (slc["episode"] == slc["episode"][0]).all()
+                assert (slc["step"].diff() == 1).all()
+                if slc.numel() < slice_len:
+                    ends_episode = slc["step"][-1] == episode_len - 1
+                    starts_episode = span is True and slc["step"][0] == 0
+                    assert ends_episode or starts_episode
+
     def test_slice_sampler_left_right_ndim(self):
         torch.manual_seed(0)
         data = TensorDict(
