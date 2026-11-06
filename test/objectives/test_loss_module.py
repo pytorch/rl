@@ -292,7 +292,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     assert d0 > 0
     if mode == "hard":
-        for i in range(value_network_update_interval + 1):
+        for i in range(value_network_update_interval):
             # test that no update is occurring until value_network_update_interval
             d1 = 0.0
             for key, source_val in upd._sources.items(True, True):
@@ -349,6 +349,21 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         with torch.no_grad():
             d2 += (target_val - source_val).norm().item()
     assert d2 < 1e-6
+
+
+@pytest.mark.parametrize("interval", [1, 3])
+def test_hard_update_period(interval):
+    """HardUpdate copies the targets on every ``interval``-th step, not every ``interval + 1``."""
+    loss = DQNLoss(nn.Linear(3, 4), delay_value=True, action_space="one_hot")
+    updater = HardUpdate(loss, value_network_update_interval=interval)
+    copied_at = []
+    for step in range(1, 7):
+        loss.value_network_params.data.add_(1.0)
+        updater.step()
+        targets = loss.target_value_network_params.data
+        if (targets == loss.value_network_params.data).all():
+            copied_at.append(step)
+    assert copied_at == list(range(interval, 7, interval))
 
 
 @pytest.mark.skipif(

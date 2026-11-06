@@ -45,7 +45,10 @@ from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServerConfig,
 )
-from torchrl.testing.mocking_classes import MockBatchedLockedEnv
+from torchrl.testing.mocking_classes import (
+    ContinuousActionVecMockEnv,
+    MockBatchedLockedEnv,
+)
 
 
 class _ResetLatencyPixelEnv(PixelMockEnv):
@@ -625,6 +628,52 @@ def test_async(benchmark):
         benchmark.pedantic(
             execute_collector,
             args=(c,),
+            iterations=10,
+            rounds=10,
+        )
+    finally:
+        collector.shutdown()
+
+
+def async_weight_update_setup():
+    """Async collector with a 2M-parameter MLP policy and the default weight sync."""
+    policy = TensorDictModule(
+        MLP(in_features=7, out_features=7, num_cells=[1024, 1024, 1024]),
+        in_keys=["observation"],
+        out_keys=["action"],
+    )
+    collector = MultiAsyncCollector(
+        [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+        policy,
+        total_frames=-1,
+        frames_per_batch=64,
+    )
+    c = iter(collector)
+    for i, _ in enumerate(c):
+        collector.update_policy_weights_(policy)
+        if i == 10:
+            break
+    return ((c, collector, policy), {})
+
+
+def execute_collector_with_weight_update(c, collector, policy):
+    """Collect one batch, then push the policy weights to the workers."""
+    next(c)
+    collector.update_policy_weights_(policy)
+
+
+def test_async_weight_update(benchmark):
+    """Benchmark an async collector that pushes new weights after every batch.
+
+    Covers the shared memory weight sync on both sides: the sender's copy into
+    the staging buffer and the workers' copy into their parameters, which waits
+    for any policy call in progress.
+    """
+    (c, collector, policy), _ = async_weight_update_setup()
+    try:
+        benchmark.pedantic(
+            execute_collector_with_weight_update,
+            args=(c, collector, policy),
             iterations=10,
             rounds=10,
         )

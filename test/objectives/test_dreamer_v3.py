@@ -538,6 +538,87 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             two_hot(logits).squeeze(-1).double(), reference, rtol=1e-4, atol=1e-3
         )
 
+    def test_dreamer_v3_two_hot_decode_gradient_matches_float64(self, device):
+        # d decode / d logit_j = p_j * (bin_j - decode); mirrored logits make
+        # decode 0, so each gradient is p_j * bin_j with bins up to 4.85e8.
+        two_hot = SymExpTwoHot(255).to(device)
+        torch.manual_seed(0)
+        half = torch.randn(32, 127, device=device) * 1e-3
+        center = torch.zeros(32, 1, device=device)
+        logits = torch.cat([half.flip(-1), center, half], dim=-1).requires_grad_()
+        (gradient,) = torch.autograd.grad(two_hot.decode(logits).sum(), logits)
+
+        probs = logits.detach().double().softmax(-1)
+        bins = two_hot.bins.double()
+        decoded = (probs * bins).sum(-1, keepdim=True)
+        reference = probs * (bins - decoded)
+        torch.testing.assert_close(gradient.double(), reference, rtol=1e-4, atol=1e-5)
+
+    @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+    def test_dreamer_v3_two_hot_decode_half_precision_computes_in_float32(
+        self, device, dtype
+    ):
+        # Every step must run in at least float32, the shift subtraction
+        # included. Once the max is subtracted, each off-max logit below sits
+        # exactly halfway between two neighbouring `dtype` values, so a
+        # subtraction performed in `dtype` rounds it by half an eps and the
+        # weight comes out that much wrong. The two off-max values are picked so
+        # that the rounding goes the opposite way at the two outermost bins,
+        # which is where the support is largest, so the two errors add instead of
+        # cancelling and the decode comes out about twice the true expectation.
+        bins = _default_bins(255, device=device)
+        if dtype == torch.float16:
+            # The symexp support reaches 4.85e8 and the expectation below would
+            # overflow float16, so shrink the support but keep it antisymmetric.
+            bins = bins / bins.abs().max() * 1000.0
+        # Half an eps: the tie point between two neighbouring `dtype` values
+        # once the shifted logit has a magnitude in [1, 2), where the spacing of
+        # `dtype` is exactly one eps.
+        tie = torch.finfo(dtype).eps / 2
+        logits = torch.full((2, 255), -20.0, device=device)
+        logits[:, 127] = 1.0
+        # -(1 + eps / 2) ties to -1, a smaller magnitude, so this weight comes
+        # out too large; -(1 + 3 * eps / 2) ties to -(1 + 2 * eps), a larger
+        # magnitude, so this one comes out too small. Both push the decoded
+        # expectation the same way, towards the positive outermost bin.
+        logits[:, -1] = -tie
+        logits[:, 0] = -3.0 * tie
+        logits = logits.to(dtype)
+
+        probs = logits.double().softmax(-1)
+        reference = (probs * bins.double()).sum(-1)
+        decoded = two_hot_decode(logits, bins)
+        # The return dtype is the logits' dtype, not the compute dtype.
+        assert decoded.dtype == dtype
+        torch.testing.assert_close(
+            decoded.double(),
+            reference,
+            rtol=2 * torch.finfo(dtype).eps,
+            atol=0.0,
+        )
+
+        # The pairing must still be exact in a half dtype.
+        half = (torch.randn(8, 127, device=device) * 1e-3).to(dtype)
+        center = (torch.randn(8, 1, device=device) * 1e-3).to(dtype)
+        mirrored = torch.cat([half.flip(-1), center, half], dim=-1)
+        assert two_hot_decode(mirrored, bins).abs().max().item() == 0.0
+
+    @pytest.mark.gpu
+    def test_dreamer_v3_two_hot_decode_compiled_mirror_symmetric_cuda(self, device):
+        # Inductor on CUDA used to fuse the softmax normalization into the paired
+        # difference and decode these logits to about 0.5 instead of 0.
+        if torch.device(device).type != "cuda":
+            pytest.skip("The fused kernels that broke the pairing are CUDA only.")
+        torch._dynamo.reset()
+        two_hot = SymExpTwoHot(255).to(device)
+        torch.manual_seed(0)
+        half = torch.randn(64, 127, device=device) * 1e-3
+        center = torch.randn(64, 1, device=device) * 1e-3
+        logits = torch.cat([half.flip(-1), center, half], dim=-1)
+        compiled = torch.compile(two_hot, backend=_compile_backend, fullgraph=True)
+        assert two_hot(logits).abs().max().item() == 0.0
+        assert compiled(logits).abs().max().item() == 0.0
+
     # ------------------------------------------------------------------ #
     # World model loss tests
     # ------------------------------------------------------------------ #
@@ -2093,9 +2174,11 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         baseline_td = fake_data.select(*value_model.in_keys, strict=False)
         value_model(baseline_td)
         advantage = (fake_data["lambda_target"] - baseline_td["state_value"]).detach()
-        log_prob = _match_trailing_dim(
-            fake_data["action_log_prob"], fake_data["lambda_target"]
+        actor_inputs = fake_data.select(*actor_model.in_keys, strict=False).detach()
+        log_prob = actor_model.get_dist(actor_inputs).log_prob(
+            fake_data["action"].detach()
         )
+        log_prob = _match_trailing_dim(log_prob, fake_data["lambda_target"])
         expected = -(log_prob * advantage / 10.0).mean()
         torch.testing.assert_close(loss_td["loss_actor"], expected)
         torch.testing.assert_close(
@@ -3213,6 +3296,7 @@ def test_dreamer_v3_behavior_policy_weights_match_served_policy(
         example_dir / "train.py", run_name="dreamer_v3_serving_layout"
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.env.name = PENDULUM_VERSIONED()
     cfg.optimization.device = "cpu"
     cfg.optimization.compile = "off"
     cfg.optimization.separate_policy_rng = separate_policy_rng

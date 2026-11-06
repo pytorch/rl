@@ -501,6 +501,104 @@ class TestStepCounter(TransformBase):
             : max_steps - 1
         ].any(), "Root done should be False before max_steps"
 
+    @pytest.mark.parametrize(
+        "group_prefix",
+        [(), ("team",)],
+        ids=["root_siblings", "shared_team_prefix"],
+    )
+    @pytest.mark.parametrize(
+        "target_group_name",
+        ["left", "right"],
+        ids=["left_reaches_limit", "right_reaches_limit"],
+    )
+    @pytest.mark.parametrize(
+        "update_done",
+        [False, True],
+        ids=["leave_done_unchanged", "update_done"],
+    )
+    def test_stepcounter_independent_nested_groups(
+        self, group_prefix, target_group_name, update_done
+    ):
+        right_group = (*group_prefix, "right")
+        target_group = (*group_prefix, target_group_name)
+
+        class GroupedEnv(EnvBase):
+            def __init__(self):
+                super().__init__()
+                self.observation_spec = Composite(observation=Unbounded(shape=(1,)))
+                self.action_spec = Categorical(2, shape=(1,))
+                self.reward_spec = Unbounded(shape=(1,))
+                flags = Composite(
+                    {
+                        key: Categorical(2, shape=(1,), dtype=torch.bool)
+                        for key in ("done", "terminated", "truncated")
+                    }
+                )
+                group = flags.clone()
+                group["agents"] = flags.expand(3)
+                groups = {"left": group.clone(), "right": group.clone()}
+                if group_prefix:
+                    self.done_spec = Composite(team=Composite(**groups))
+                else:
+                    self.done_spec = Composite(**groups)
+                self.right_group = right_group
+
+            def _reset(self, tensordict=None, **kwargs):
+                return self.observation_spec.zero().update(self.full_done_spec.zero())
+
+            def _step(self, tensordict):
+                result = self._reset().update(self.full_reward_spec.zero())
+                result[(*self.right_group, "agents", "truncated")][0] = True
+                result[(*self.right_group, "agents", "done")][0] = True
+                return result
+
+            def _set_seed(self, seed):
+                pass
+
+        env = TransformedEnv(GroupedEnv(), StepCounter(3, update_done=update_done))
+        try:
+            td = env.reset()
+            td[(*target_group, "step_count")].fill_(2)
+            rollout = env.rollout(1, tensordict=td, auto_reset=False)
+            for group_name in ("left", "right"):
+                group = (*group_prefix, group_name)
+                group_reached_limit = group == target_group
+                step_counter_sets_done = group_reached_limit and update_done
+                torch.testing.assert_close(
+                    rollout.get(("next", *group, "truncated")),
+                    torch.tensor([[group_reached_limit]]),
+                )
+                expected_agent_truncated = torch.tensor(
+                    [
+                        [
+                            group_name == "right" or group_reached_limit,
+                            group_reached_limit,
+                            group_reached_limit,
+                        ]
+                    ],
+                    dtype=torch.bool,
+                ).reshape(1, 3, 1)
+                expected_agent_done = torch.tensor(
+                    [
+                        [
+                            group_name == "right" or step_counter_sets_done,
+                            step_counter_sets_done,
+                            step_counter_sets_done,
+                        ]
+                    ],
+                    dtype=torch.bool,
+                ).reshape(1, 3, 1)
+                torch.testing.assert_close(
+                    rollout.get(("next", *group, "agents", "truncated")),
+                    expected_agent_truncated,
+                )
+                torch.testing.assert_close(
+                    rollout.get(("next", *group, "agents", "done")),
+                    expected_agent_done,
+                )
+        finally:
+            env.close()
+
 
 class _AgentNestedCountingEnv(EnvBase):
     """Counting env whose done keys live under the ``agent`` nest."""

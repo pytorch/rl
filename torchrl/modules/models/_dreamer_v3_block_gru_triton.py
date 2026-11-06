@@ -322,7 +322,7 @@ if _has_triton:
                 scratch_time = 1
             reset = tl.load(is_init_ptr + b64 * T + t, mask=mask_b, other=False) != 0
             hidden_pre = tl.zeros([BLOCK_B, P_PAD], tl.float32)
-            for k_iter in tl.static_range(tl.cdiv(H_PAD, BLOCK_K)):
+            for k_iter in tl.static_range((H_PAD + BLOCK_K - 1) // BLOCK_K):
                 hk = k_iter * BLOCK_K + k_off
                 if t == 0:
                     h_chunk = tl.load(
@@ -373,7 +373,7 @@ if _has_triton:
                 for block in tl.static_range(NUM_BLOCKS):
                     pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
                     if layer == 0:
-                        for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
+                        for k_iter in tl.static_range((D_PAD + BLOCK_K - 1) // BLOCK_K):
                             kk = k_iter * BLOCK_K + k_off
                             carry_index = block * D + kk
                             if t == 0:
@@ -405,7 +405,7 @@ if _has_triton:
                             if COMPUTE_BF16:
                                 recurrent = recurrent.to(tl.bfloat16)
                             pre += tl.dot(recurrent, weight, input_precision="ieee")
-                        for k_iter in tl.static_range(tl.cdiv(P_PAD, BLOCK_K)):
+                        for k_iter in tl.static_range((P_PAD + BLOCK_K - 1) // BLOCK_K):
                             kk = k_iter * BLOCK_K + k_off
                             recurrent = tl.load(
                                 hidden_value_ptr + b64[:, None] * P + kk[None, :],
@@ -436,7 +436,7 @@ if _has_triton:
                         previous_xhat_base = (
                             ((layer - 1) * B + b64[:, None]) * scratch_time + scratch_t
                         ) * H + block * D
-                        for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
+                        for k_iter in tl.static_range((D_PAD + BLOCK_K - 1) // BLOCK_K):
                             kk = k_iter * BLOCK_K + k_off
                             previous_xhat = tl.load(
                                 dynamic_normalized_ptr
@@ -515,7 +515,7 @@ if _has_triton:
                 reset_pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
                 candidate_pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
                 update_pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
-                for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
+                for k_iter in tl.static_range((D_PAD + BLOCK_K - 1) // BLOCK_K):
                     kk = k_iter * BLOCK_K + k_off
                     xhat = tl.load(
                         dynamic_normalized_ptr + last_base + kk[None, :],
@@ -864,7 +864,7 @@ if _has_triton:
                     )
                     if layer > 0:
                         grad_previous = tl.zeros([BLOCK_B, D_PAD], tl.float32)
-                        for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
+                        for k_iter in tl.static_range((D_PAD + BLOCK_K - 1) // BLOCK_K):
                             kk = k_iter * BLOCK_K + k_off
                             grad_chunk = tl.load(
                                 grad_dynamic_pre_ptr
@@ -897,7 +897,7 @@ if _has_triton:
                     else:
                         carry_grad = tl.zeros([BLOCK_B, D_PAD], tl.float32)
                         block_hidden_grad = tl.zeros([BLOCK_B, P_PAD], tl.float32)
-                        for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
+                        for k_iter in tl.static_range((D_PAD + BLOCK_K - 1) // BLOCK_K):
                             kk = k_iter * BLOCK_K + k_off
                             grad_chunk = tl.load(
                                 grad_dynamic_pre_ptr
@@ -984,7 +984,7 @@ if _has_triton:
                 mask=mask_b[:, None] & (p_off[None, :] < P),
             )
             hidden_carry_grad = tl.zeros([BLOCK_B, H_PAD], tl.float32)
-            for k_iter in tl.static_range(tl.cdiv(P_PAD, BLOCK_K)):
+            for k_iter in tl.static_range((P_PAD + BLOCK_K - 1) // BLOCK_K):
                 kk = k_iter * BLOCK_K + k_off
                 grad_chunk = tl.load(
                     grad_hidden_pre_ptr + (b64[:, None] * T + t) * P + kk[None, :],

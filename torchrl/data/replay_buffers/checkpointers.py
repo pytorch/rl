@@ -13,7 +13,6 @@ import tempfile
 import warnings
 from pathlib import Path
 
-import numpy as np
 import torch
 from tensordict import (
     is_tensor_collection,
@@ -106,28 +105,17 @@ class StorageCheckpointerBase:
     def _detach_from_load_path(self, storage):
         del storage
 
-    def _get_shift_from_last_cursor(self, last_cursor):
-        """Computes shift from the last cursor position."""
-        if isinstance(last_cursor, slice):
-            return last_cursor.stop + 1
-        if isinstance(last_cursor, int):
-            return last_cursor + 1
-        if isinstance(last_cursor, range):
-            return last_cursor[-1] + 1
-        if isinstance(last_cursor, torch.Tensor):
-            return last_cursor.reshape(-1)[-1].item() + 1
-        if isinstance(last_cursor, np.ndarray):
-            return last_cursor.reshape(-1)[-1].item() + 1
-        raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
-
     def _set_hooks_shift_is_full(self, storage):
         """Sets shift and is_full attributes on save hooks that have them."""
         is_full = storage._is_full
-        last_cursor = storage._last_cursor
+        last_cursor = getattr(storage, "_last_cursor_index", None)
         for hook in self._save_hooks:
             if hasattr(hook, "is_full"):
                 hook.is_full = is_full
-        if last_cursor is None:
+        len_along_dim0 = getattr(storage, "_len_along_dim0", None)
+        if not is_full and len_along_dim0 is not None:
+            shift = len_along_dim0
+        elif last_cursor is None:
             warnings.warn(
                 "last_cursor is None. The replay buffer "
                 "may not be saved properly in this setting. To solve this issue, make "
@@ -135,7 +123,7 @@ class StorageCheckpointerBase:
             )
             shift = 0
         else:
-            shift = self._get_shift_from_last_cursor(last_cursor)
+            shift = last_cursor + 1
         for hook in self._save_hooks:
             if hasattr(hook, "shift"):
                 hook.shift = shift
@@ -321,7 +309,7 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
 
         if memmap_path.exists():
             # Load the memmapped data
-            stacked_data = TensorDict.load_memmap(memmap_path)
+            stacked_data = TensorDict.load_memmap(memmap_path, allow_pickle=True)
             compressed_data = stacked_data.tolist()
             if len(compressed_data) != len(data_indices):
                 raise ValueError(
@@ -367,9 +355,12 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
         path = Path(path)
         path.mkdir(exist_ok=True)
 
+        metadata = {}
+        if self._save_hooks and not storage._len:
+            self._write_metadata(path, metadata, is_pytree=False, length=0)
+            return
         if not storage.initialized:
             raise RuntimeError("Cannot save a non-initialized storage.")
-        metadata = {}
         _storage = storage._storage
 
         self._set_hooks_shift_is_full(storage)
@@ -382,7 +373,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                 and _storage.saved_path
                 and Path(_storage.saved_path).absolute() == Path(path).absolute()
             ):
-                _storage.memmap_refresh_()
+                _storage.memmap_refresh_(allow_pickle=True)
             else:
                 # try to load the path and overwrite.
                 _storage.memmap(
@@ -394,12 +385,16 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             _save_pytree(_storage, metadata, path)
             is_pytree = True
 
+        self._write_metadata(path, metadata, is_pytree=is_pytree, length=storage._len)
+
+    @staticmethod
+    def _write_metadata(path, metadata, *, is_pytree, length):
         with open(path / "storage_metadata.json", "w") as file:
             json.dump(
                 {
                     "metadata": metadata,
                     "is_pytree": is_pytree,
-                    "len": storage._len,
+                    "len": length,
                 },
                 file,
             )
@@ -409,6 +404,9 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             metadata = json.load(file)
         is_pytree = metadata["is_pytree"]
         _len = metadata["len"]
+        if not _len:
+            storage._len = 0
+            return
         if is_pytree:
             if self._load_hooks:
                 raise RuntimeError(
@@ -448,7 +446,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                         "Cannot fill a non-initialized pytree-based TensorStorage."
                     )
         else:
-            _storage = TensorDict.load_memmap(path)
+            _storage = TensorDict.load_memmap(path, allow_pickle=True)
             if storage.initialized:
                 dest = storage._storage
             else:
@@ -464,7 +462,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                     and storage.scratch_dir
                     and Path(storage.scratch_dir).absolute() == Path(path).absolute()
                 ):
-                    storage._storage = TensorDict.load_memmap(path)
+                    storage._storage = TensorDict.load_memmap(path, allow_pickle=True)
                     storage.initialized = True
                 else:
                     # this should not be reached if is_pytree=True
@@ -477,7 +475,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
                 == Path(path).absolute()
             ):
                 # If the storage is already where it should be, we don't need to load anything.
-                storage._storage.memmap_refresh_()
+                storage._storage.memmap_refresh_(allow_pickle=True)
 
             else:
                 storage._storage.copy_(_storage)
@@ -582,15 +580,17 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
     def dumps(self, storage, path):
         path = self._get_path(path)
 
-        self._set_hooks_shift_is_full(storage)
-
-        if not storage.initialized:
-            raise RuntimeError("Cannot save a non-initialized storage.")
-        _storage = storage._storage
         length = storage._len
-        for hook in self._save_hooks:
-            # we don't pass a path here since we're not reusing the tensordict
-            _storage = hook(_storage)
+        if length:
+            self._set_hooks_shift_is_full(storage)
+            if not storage.initialized:
+                raise RuntimeError("Cannot save a non-initialized storage.")
+            _storage = storage._storage
+            for hook in self._save_hooks:
+                # we don't pass a path here since we're not reusing the tensordict
+                _storage = hook(_storage)
+        else:
+            _storage = TensorDict()
         if is_tensor_collection(_storage):
             # try to load the path and overwrite.
             data = PersistentTensorDict.from_dict(_storage, path, **self.kwargs)
@@ -600,13 +600,16 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
 
     def loads(self, storage, path):
         path = self._get_path(path)
-        data = PersistentTensorDict.from_h5(path)
+        data = PersistentTensorDict.from_h5(path, auto_batch_size=True)
+        _len = data["_len"]
+        if not _len:
+            storage._len = 0
+            return
         if storage.initialized:
             dest = storage._storage
         else:
             # TODO: This could load the RAM a lot, maybe try to catch this within the hook and use memmap instead
             dest = None
-        _len = data["_len"]
         for hook in self._load_hooks:
             data = hook(data, out=dest)
         if not storage.initialized:

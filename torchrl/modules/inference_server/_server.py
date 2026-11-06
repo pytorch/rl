@@ -683,6 +683,16 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                 self._policy_version_shared.value = self._policy_version
         mark_weight_update(self.model)
 
+    @property
+    def _weight_update_lock(self) -> threading.Lock:
+        """The lock held around every forward, for weight-sync schemes.
+
+        :class:`~torchrl.weight_update.SharedMemWeightSyncScheme` with
+        ``atomic=True`` holds it while its background thread copies new
+        weights into the model, so a batch never runs on half-copied weights.
+        """
+        return self._model_lock
+
     def update_policy_weights_(self, model_id=None, policy_or_weights=None, **kwargs):
         """Weight-sync cascade hook: record an applied weight update.
 

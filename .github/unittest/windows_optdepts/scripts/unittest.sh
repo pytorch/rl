@@ -107,7 +107,7 @@ python -m pip install cloudpickle packaging importlib_metadata numpy 'orjson; py
 # install tensordict
 echo "=== Installing tensordict ==="
 if [[ "$RELEASE" == 0 ]]; then
-  python -m pip install --no-deps git+https://github.com/pytorch/tensordict@$(cat .github/ci_commit_pins/tensordict.txt)
+  python -m pip install --no-deps git+https://github.com/pytorch/tensordict
 else
   python -m pip install --no-deps tensordict
 fi

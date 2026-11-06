@@ -23,6 +23,7 @@ from torchrl.data.tensor_specs import Bounded, Unbounded
 from torchrl.modules import (
     DreamerV3ImageDecoder,
     DreamerV3ImageEncoder,
+    IndependentNormal,
     MLP,
     QValueActor,
     SignedHyperbolicValueTransform,
@@ -43,6 +44,7 @@ from torchrl.objectives import (
     SACLoss,
     TD3Loss,
     TQCLoss,
+    TransitiveQLoss,
 )
 from torchrl.objectives.deprecated import REDQLoss_deprecated
 from torchrl.objectives.utils import SoftUpdate
@@ -1444,6 +1446,94 @@ def test_iql_speed(
     value(td.clone())
 
     loss = IQLLoss(actor_network=actor, value_network=value, qvalue_network=qvalue)
+    loss(td)
+
+    loss = _maybe_compile(loss, compile, td)
+
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
+    else:
+        benchmark(loss, td)
+
+
+@pytest.mark.parametrize("backward", [None, "backward"])
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+def test_transitive_q_speed(
+    benchmark,
+    backward,
+    compile,
+    n_obs=8,
+    n_act=4,
+    ncells=128,
+    batch=256,
+):
+    if compile == "reduce-overhead" and backward is not None:
+        pytest.skip("reduce-overhead with backward causes segfaults in CI")
+    if compile:
+        torch._dynamo.reset_code_caches()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    actor = ProbSeq(
+        Mod(
+            MLP(
+                in_features=2 * n_obs,
+                out_features=2 * n_act,
+                num_cells=ncells,
+                depth=2,
+                device=device,
+            ),
+            in_keys=["observation", "goal"],
+            out_keys=["param"],
+        ),
+        Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
+        ProbMod(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=IndependentNormal,
+            default_interaction_type=InteractionType.DETERMINISTIC,
+        ),
+    )
+    critics = [
+        Mod(
+            MLP(
+                in_features=2 * n_obs + n_act,
+                out_features=1,
+                num_cells=ncells,
+                depth=2,
+                device=device,
+            ),
+            in_keys=["observation", "goal", "action"],
+            out_keys=["state_action_value"],
+        )
+        for _ in range(2)
+    ]
+    subgoal = torch.randint(0, 8, (batch,), device=device)
+    goal = subgoal + torch.randint(1, 8, (batch,), device=device)
+    td = TensorDict(
+        {
+            "observation": torch.randn(batch, 4, n_obs),
+            "action": torch.rand(batch, 4, n_act) * 1.98 - 0.99,
+            "step_offset": torch.stack(
+                [torch.zeros_like(goal), subgoal, goal, goal], -1
+            ),
+        },
+        [batch, 4],
+        device=device,
+    )
+    loss = TransitiveQLoss(actor, critics, distance_weight=1.0)
     loss(td)
 
     loss = _maybe_compile(loss, compile, td)

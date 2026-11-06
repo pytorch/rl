@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import builtins
 import doctest
 import importlib.util
 import os
@@ -11,11 +12,14 @@ import shutil
 import time
 from contextlib import nullcontext
 from decimal import Decimal
+from importlib.metadata import version
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
+
+from packaging.version import Version
 from tensordict import (
     assert_allclose_td,
     MetaData,
@@ -26,7 +30,6 @@ from tensordict import (
     UnbatchedTensor,
 )
 from torch.utils.data import DataLoader, Dataset, Subset
-
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
     LazyTensorStorage,
@@ -34,6 +37,7 @@ from torchrl.data import (
     ReplayBuffer,
     ReplayBufferEnsemble,
     SamplerWithoutReplacement,
+    StorageDataset,
     tensordict_collate,
     TensorStorage,
     VideoClipRef,
@@ -41,6 +45,8 @@ from torchrl.data import (
 from torchrl.data.datasets import (
     huggingface,
     HuggingFaceDatasetAdapter,
+    lerobot_adapter,
+    LeRobotDatasetAdapter,
     ReplayDatasetAdapter,
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
@@ -87,10 +93,22 @@ _has_minari = importlib.util.find_spec("minari") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
 _has_pyarrow = importlib.util.find_spec("pyarrow") is not None
+_has_lerobot_dataset = (
+    importlib.util.find_spec("lerobot") is not None
+    and importlib.util.find_spec("av") is not None
+    and _has_datasets
+    and _has_pyarrow
+    and Version(version("lerobot")) >= Version("0.6.1")
+)
 
 if _has_datasets and _has_pyarrow:
     import datasets
     import pyarrow as pa
+
+
+if _has_lerobot_dataset:
+    from lerobot.datasets import dataset_metadata as lerobot_dataset_metadata
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 
 class TestHuggingFaceDatasetAdapter:
@@ -2475,5 +2493,697 @@ class TestLeRobotExperienceReplay:
         assert decoded.dtype == torch.uint8
 
 
+@pytest.mark.skipif(not _has_lerobot_dataset, reason="requires torchrl[lerobot]")
+class TestLeRobotDatasetAdapter:
+    @staticmethod
+    def _source():
+        return TensorDict(
+            {
+                ("robot", "state"): torch.arange(18, dtype=torch.float32).reshape(6, 3),
+                "action": torch.arange(12, dtype=torch.float32).reshape(6, 2),
+                ("next", "reward"): (
+                    torch.arange(6, dtype=torch.float64) + 0.123456789
+                )[:, None],
+                ("next", "done"): torch.tensor([False, False, True] * 2)[:, None],
+                "joint_ids": torch.arange(12, dtype=torch.int16).reshape(6, 2),
+                ("collector", "episode"): torch.tensor([0, 0, 0, 1, 1, 1]),
+                ("collector", "step"): torch.tensor([0, 1, 2, 0, 1, 2]),
+            },
+            [6],
+        )
+
+    @staticmethod
+    def _adapter(root, **kwargs):
+        return LeRobotDatasetAdapter(
+            repo_id="local/test",
+            root=root,
+            fps=10,
+            features={
+                "observation.state": {"dtype": "float32", "shape": (3,)},
+                "action": {"dtype": "float32", "shape": (2,)},
+                "next.reward": {"dtype": "float64", "shape": (1,)},
+                "next.done": {"dtype": "bool", "shape": (1,)},
+                "joint_ids": {"dtype": "int16", "shape": (2,)},
+            },
+            key_map={
+                "observation.state": ("robot", "state"),
+                "episode_index": ("collector", "episode"),
+                "frame_index": ("collector", "step"),
+            },
+            task="Perform the task.",
+            batch_size=2,
+            **kwargs,
+        )
+
+    @pytest.mark.parametrize("batch_size", [1, 2, 3])
+    @pytest.mark.parametrize("camera", [False, True])
+    def test_mixed_dtypes_rejected_before_collation(self, tmp_path, batch_size, camera):
+        rows = []
+        for index in range(3):
+            dtype = (
+                (torch.uint8 if index % 2 == 0 else torch.float32)
+                if camera
+                else (torch.float64 if index % 2 == 0 else torch.int64)
+            )
+            value = (
+                torch.ones(3, 4, 4, dtype=dtype)
+                if camera
+                else torch.tensor(
+                    [2**53 + 1 if dtype == torch.int64 else 0.5], dtype=dtype
+                )
+            )
+            rows.append(
+                TensorDict(
+                    {
+                        ("sensor", "value"): value,
+                        "episode": torch.tensor(0),
+                        "frame": torch.tensor(index),
+                    },
+                    [],
+                )
+            )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/mixed",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={
+                "value": {
+                    "dtype": "image" if camera else "float64",
+                    "shape": (3, 4, 4) if camera else (1,),
+                }
+            },
+            key_map={"value": ("sensor", "value")},
+            task="Inspect the sensor.",
+            batch_size=batch_size,
+        )
+        with pytest.raises(ValueError, match="dtype"):
+            adapter.to_external(rows)
+
+    @pytest.mark.parametrize("episode_length", [2, 4])
+    def test_reused_batched_buffer_is_snapshotted(self, tmp_path, episode_length):
+        class ReusedRows(Dataset):
+            def __init__(self):
+                self.buffer = torch.empty(2, 1)
+
+            def __len__(self):
+                return 4
+
+            def __getitem__(self, index):
+                return TensorDict(
+                    {
+                        "action": torch.tensor([float(index)]),
+                        "episode": torch.tensor(index // episode_length),
+                        "frame": torch.tensor(index % episode_length),
+                        "instruction": "go",
+                    },
+                    [],
+                )
+
+            def __getitems__(self, indices):
+                self.buffer[:, 0] = torch.tensor(indices)
+                index = torch.tensor(indices)
+                return TensorDict(
+                    {
+                        "action": self.buffer,
+                        "episode": index // episode_length,
+                        "frame": index % episode_length,
+                        "instruction": MetaData("go"),
+                    },
+                    [2],
+                )
+
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/reused",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (1,)}},
+            task_key="instruction",
+            batch_size=2,
+        )
+        native = adapter.to_external(ReusedRows())
+        assert native.hf_dataset.with_format(None)[:]["action"] == [0.0, 1.0, 2.0, 3.0]
+        assert [native[i]["task"] for i in range(4)] == ["go"] * 4
+
+    def test_unexported_fields_do_not_affect_collation(self, tmp_path):
+        rows = [
+            TensorDict(
+                {
+                    "action": torch.tensor([float(i)]),
+                    "episode": torch.tensor(0),
+                    "frame": torch.tensor(i),
+                    f"unused_{i}": torch.zeros(i + 1),
+                },
+                [],
+            )
+            for i in range(3)
+        ]
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/selected",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (1,)}},
+            task="Move the object.",
+            batch_size=3,
+        )
+        imported = adapter.from_external(adapter.to_external(rows))
+        assert [imported[i]["action"].item() for i in range(3)] == [0, 1, 2]
+        assert all(
+            not any(key.startswith("unused_") for key in imported[i].keys())
+            for i in range(3)
+        )
+
+    @pytest.mark.parametrize(
+        "dtype",
+        [
+            "bool",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "float16",
+            "float32",
+            "float64",
+        ],
+    )
+    def test_numeric_dtypes(self, tmp_path, dtype):
+        numpy_dtype = np.dtype(dtype)
+        if dtype == "uint64":
+            values = [0, 2**32 + 1]
+        elif numpy_dtype.kind in "iu":
+            limits = np.iinfo(numpy_dtype)
+            values = [limits.min, limits.max]
+        elif dtype == "bool":
+            values = [False, True]
+        else:
+            values = [0.0, 1.123456789012345]
+        source = TensorDict(
+            {
+                "action": torch.tensor(values, dtype=getattr(torch, dtype)).reshape(
+                    2, 1
+                ),
+                "episode": torch.zeros(2, dtype=torch.int64),
+                "frame": torch.arange(2),
+            },
+            [2],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/dtypes",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"motor-position": {"dtype": dtype, "shape": (1,)}},
+            key_map={"motor-position": "action"},
+            task="Move the object.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        assert native.features["motor-position"]["dtype"] == dtype
+        np.testing.assert_equal(
+            np.asarray(
+                native.hf_dataset.with_format(None)[:]["motor-position"],
+                dtype=numpy_dtype,
+            ),
+            source["action"].numpy().squeeze(-1),
+        )
+        imported = adapter.from_external(native)
+        for i in range(2):
+            torch.testing.assert_close(
+                imported[i]["action"], native[i]["motor-position"], rtol=0, atol=0
+            )
+
+    @pytest.mark.parametrize(
+        "shape", [(2,), (2, 2), (2, 1, 2), (1, 2, 1, 2), (1, 1, 2, 1, 2)]
+    )
+    def test_numeric_shapes(self, tmp_path, shape):
+        values = torch.arange(2 * int(np.prod(shape)), dtype=torch.float64).reshape(
+            2, *shape
+        )
+        source = TensorDict(
+            {
+                "action": values,
+                "episode": torch.zeros(2, dtype=torch.int64),
+                "frame": torch.arange(2),
+            },
+            [2],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/shapes",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": "float64", "shape": shape}},
+            task="Move the object.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        np.testing.assert_equal(
+            np.asarray(
+                native.hf_dataset.with_format(None)[:]["action"], dtype=np.float64
+            ),
+            values.numpy(),
+        )
+        imported = adapter.from_external(native)
+        for i in range(2):
+            torch.testing.assert_close(
+                imported[i]["action"], native[i]["action"], rtol=0, atol=0
+            )
+
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "bfloat16",
+            "sparse",
+            "quantized",
+            "unbatched",
+            "unbatched-batched",
+            pytest.param(
+                "float8",
+                marks=pytest.mark.skipif(
+                    not hasattr(torch, "float8_e4m3fn"), reason="requires float8"
+                ),
+            ),
+        ],
+    )
+    def test_unsupported_tensor_errors_name_feature(self, tmp_path, kind):
+        if kind == "bfloat16":
+            value = torch.ones(1, dtype=torch.bfloat16)
+        elif kind == "sparse":
+            value = torch.ones(1).to_sparse()
+        elif kind == "quantized":
+            value = torch.quantize_per_tensor(torch.ones(1), 0.1, 0, torch.quint8)
+        elif kind.startswith("unbatched"):
+            value = UnbatchedTensor(torch.ones(1))
+        else:
+            value = torch.ones(1).to(torch.float8_e4m3fn)
+        source = TensorDict(
+            {
+                ("motor", "value"): value,
+                "episode": torch.tensor(0),
+                "frame": torch.tensor(0),
+            },
+            [],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/unsupported",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (1,)}},
+            key_map={"action": ("motor", "value")},
+            task="Move the motor.",
+        )
+        dataset = (
+            StorageDataset(TensorStorage(source.unsqueeze(0)), share_memory=False)
+            if kind == "unbatched-batched"
+            else [source]
+        )
+        with pytest.raises(TypeError, match="action"):
+            adapter.to_external(dataset)
+
+    @pytest.mark.parametrize(
+        "dtype,values",
+        [("float64", [float("nan"), 1.000000000001]), ("uint64", [1, 2**32 + 1])],
+    )
+    def test_import_native_numeric_features(self, tmp_path, dtype, values):
+        native = LeRobotDataset.create(
+            repo_id="local/native",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={"action": {"dtype": dtype, "shape": (1,)}},
+            video_backend="pyav",
+        )
+        for value in values:
+            native.add_frame({"action": np.array([value], dtype=dtype), "task": "go"})
+        native.save_episode()
+        native.finalize()
+        imported = LeRobotDatasetAdapter().from_external(native)
+        for i in range(len(native)):
+            torch.testing.assert_close(
+                imported[i]["action"],
+                native[i]["action"],
+                rtol=0,
+                atol=0,
+                equal_nan=True,
+            )
+
+    @pytest.mark.parametrize("storage_cls", [LazyTensorStorage, ListStorage])
+    def test_ordered_export_roundtrip_and_independence(self, tmp_path, storage_cls):
+        source = self._source()
+        replay = ReplayBuffer(storage=storage_cls(6))
+        replay.extend(source[torch.tensor([5, 2, 4, 0, 1, 3])])
+        adapter: ReplayDatasetAdapter = self._adapter(tmp_path / "dataset")
+        native = replay.export(
+            adapter,
+            trajectory_key=("collector", "episode"),
+            step_key=("collector", "step"),
+        )
+        replay.extend(source.clone().zero_())
+        # Reopen from disk to verify parquet footers and episode metadata.
+        loaded = type(native)(
+            repo_id="local/test", root=native.root, video_backend="pyav"
+        )
+        assert loaded.num_episodes == 2
+        assert loaded.meta.total_frames == 6
+        imported = adapter.from_external(loaded)
+        batch = next(
+            iter(DataLoader(imported, batch_size=6, collate_fn=tensordict_collate))
+        )
+        raw = loaded.hf_dataset.with_format(None)[:]
+        for name, key in {
+            "observation.state": ("robot", "state"),
+            "action": "action",
+            "next.reward": ("next", "reward"),
+            "next.done": ("next", "done"),
+            "joint_ids": "joint_ids",
+        }.items():
+            np.testing.assert_equal(
+                np.asarray(raw[name]).reshape(source[key].shape), source[key].numpy()
+            )
+            expected = torch.stack([loaded[i][name] for i in range(6)])
+            if isinstance(key, tuple) and key[0] == "next" and expected.ndim == 1:
+                expected = expected.unsqueeze(-1)
+            torch.testing.assert_close(batch[key], expected, rtol=0, atol=0)
+        assert batch["collector", "episode"].tolist() == [0, 0, 0, 1, 1, 1]
+        assert batch["collector", "step"].tolist() == [0, 1, 2, 0, 1, 2]
+        assert batch.get("language_instruction").tolist() == ["Perform the task."] * 6
+        torch.testing.assert_close(
+            batch["timestamp"], torch.tensor([0.0, 0.1, 0.2] * 2)
+        )
+
+    @pytest.mark.parametrize(
+        "kind,layout",
+        [
+            ("image", "chw"),
+            ("image", "hwc-float"),
+            ("video", "chw"),
+            ("video", "hwc-float"),
+        ],
+    )
+    def test_camera_compression(self, tmp_path, kind, layout):
+        pixels = (
+            torch.arange(4)[:, None, None, None] * 20
+            + torch.tensor([30, 80, 130])[None, :, None, None]
+            + torch.arange(16)[None, None, :, None]
+            + torch.arange(24)[None, None, None, :]
+        ).to(torch.uint8)
+        camera = pixels if layout == "chw" else pixels.permute(0, 2, 3, 1).float() / 255
+        source = TensorDict(
+            {
+                "pixels": camera,
+                ("camera", "wrist"): camera.flip(0),
+                "action": torch.arange(8, dtype=torch.float32).reshape(4, 2),
+                "episode": torch.tensor([0, 0, 1, 1]),
+                "frame": torch.tensor([0, 1, 0, 1]),
+                "instruction": NonTensorStack.from_list(
+                    ["stand", "stand", "walk", "walk"]
+                ),
+            },
+            [4],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/cameras",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={
+                "observation.images.front": {"dtype": kind, "shape": (3, 16, 24)},
+                "observation.images.wrist": {"dtype": kind, "shape": (3, 16, 24)},
+                "action": {"dtype": "float32", "shape": (2,)},
+            },
+            key_map={
+                "observation.images.front": "pixels",
+                "observation.images.wrist": ("camera", "wrist"),
+            },
+            task_key="instruction",
+            batch_size=3,
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        loaded = type(native)(
+            repo_id="local/cameras", root=native.root, video_backend="pyav"
+        )
+        imported = LeRobotDatasetAdapter(key_map=adapter.key_map).from_external(loaded)
+        decoded = torch.stack([imported[i]["pixels"] for i in range(4)])
+        # Float input is quantized to uint8; H.264 additionally uses lossy yuv420p.
+        tolerance = (
+            10 / 255
+            if kind == "video"
+            else (1 / 255 + 1e-7 if layout == "hwc-float" else 0)
+        )
+        torch.testing.assert_close(
+            decoded,
+            pixels.float() / 255,
+            atol=tolerance,
+            rtol=0,
+        )
+        torch.testing.assert_close(
+            torch.stack([imported[i]["camera", "wrist"] for i in range(4)]),
+            pixels.flip(0).float() / 255,
+            atol=tolerance,
+            rtol=0,
+        )
+        assert [imported[i]["language_instruction"] for i in range(4)] == [
+            "stand",
+            "stand",
+            "walk",
+            "walk",
+        ]
+        torch.testing.assert_close(
+            torch.stack([imported[i]["action"] for i in range(4)]), source["action"]
+        )
+        if kind == "video":
+            paths = list(native.root.rglob("*.mp4"))
+            assert paths and all(path.stat().st_size > 0 for path in paths)
+            assert not list(native.root.rglob("*.png"))
+        np.testing.assert_allclose(
+            loaded.meta.stats["observation.images.front"]["mean"],
+            np.array([79, 129, 179]).reshape(3, 1, 1) / 255,
+            atol=1 / 255 + 1e-7,
+            rtol=0,
+        )
+
+    @pytest.mark.parametrize(
+        "field,values,match",
+        [
+            (("collector", "episode"), [0, 1, 0, 1, 1, 1], "increasing ID"),
+            (("collector", "step"), [0, 1, 3, 0, 1, 2], "consecutive"),
+            (("collector", "step"), [-1, 0, 1, 0, 1, 2], "non-negative"),
+        ],
+    )
+    def test_invalid_order(self, tmp_path, field, values, match):
+        source = self._source()
+        source[field] = torch.tensor(values)
+        with pytest.raises(ValueError, match=match):
+            self._adapter(tmp_path / "dataset").to_external(
+                TensorStorage(source).as_dataset()
+            )
+
+    def test_partial_episode_rebased(self, tmp_path):
+        source = self._source()[:3].clone()
+        source["collector", "step"] += 7
+        native = self._adapter(tmp_path / "dataset").to_external(
+            TensorStorage(source).as_dataset()
+        )
+        assert [native[i]["frame_index"].item() for i in range(3)] == [0, 1, 2]
+        assert native.num_episodes == 1
+
+    @pytest.mark.parametrize(
+        "root", ["relative/dataset", "~torchrl-no-such-user/dataset", None]
+    )
+    def test_native_destination(self, tmp_path, monkeypatch, root):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            lerobot_dataset_metadata, "HF_LEROBOT_HOME", tmp_path / "default"
+        )
+        source = TensorDict(
+            {"episode": torch.zeros(2, dtype=torch.int64), "frame": torch.arange(2)},
+            [2],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/destination", root=root, fps=10, features={}, task="Go."
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        expected = (
+            Path(root) if root is not None else tmp_path / "default/local/destination"
+        )
+        assert native.root == expected
+        assert expected.is_dir()
+        assert native.num_frames == 2
+        assert native[1]["task"] == "Go."
+        with pytest.raises(FileExistsError):
+            adapter.to_external(TensorStorage(source).as_dataset())
+
+    @pytest.mark.parametrize("kind", ["image", "video"])
+    def test_export_imported_camera_with_hwc_schema(self, tmp_path, kind):
+        pixels = (
+            torch.tensor([30, 80, 130])[:, None, None]
+            + torch.arange(16)[None, :, None]
+            + torch.arange(24)[None, None, :]
+        ).to(torch.uint8)
+        source = TensorDict(
+            {
+                "pixels": pixels.unsqueeze(0),
+                "episode": torch.zeros(1, dtype=torch.long),
+                "frame": torch.zeros(1, dtype=torch.long),
+            },
+            [1],
+        )
+        features = {
+            "observation.images.front": {
+                "dtype": kind,
+                "shape": (16, 24, 3),
+                "names": ["height", "width", "channels"],
+            }
+        }
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/hwc",
+            root=tmp_path / "hwc",
+            fps=10,
+            features=features,
+            key_map={"observation.images.front": "pixels"},
+            task="Go.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        imported = adapter.from_external(native)[0]["pixels"]
+        tolerance = 10 / 255 if kind == "video" else 0
+        torch.testing.assert_close(
+            imported, pixels.float() / 255, atol=tolerance, rtol=0
+        )
+        second = LeRobotDatasetAdapter(
+            repo_id="local/roundtrip",
+            root=tmp_path / "roundtrip",
+            fps=10,
+            features=features,
+            key_map={"observation.images.front": "pixels"},
+            task="Go.",
+        )
+        roundtrip = second.from_external(
+            second.to_external(adapter.from_external(native))
+        )[0]["pixels"]
+        torch.testing.assert_close(
+            roundtrip, imported, atol=10 / 255 if kind == "video" else 1 / 255, rtol=0
+        )
+
+    def test_native_image_and_string_features(self, tmp_path):
+        depth = (
+            torch.tensor([1000, 2000], dtype=torch.uint16)[:, None, None, None]
+            .expand(2, 1, 4, 6)
+            .clone()
+        )
+        source = TensorDict(
+            {
+                "depth": depth,
+                "annotation": NonTensorStack.from_list(["first", "second"]),
+                "operator": MetaData("Alice"),
+                "episode": torch.zeros(2, dtype=torch.int64),
+                "frame": torch.arange(2),
+            },
+            [2],
+        )
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/native-features",
+            root=tmp_path / "dataset",
+            fps=10,
+            features={
+                "observation.images.depth": {
+                    "dtype": "image",
+                    "shape": (1, 4, 6),
+                    "info": {"is_depth_map": True, "depth_unit": "mm"},
+                },
+                "annotation": {"dtype": "string", "shape": (1,)},
+                "operator": {"dtype": "string", "shape": (1,)},
+            },
+            key_map={"observation.images.depth": "depth"},
+            task="Inspect.",
+        )
+        native = adapter.to_external(TensorStorage(source).as_dataset())
+        imported = adapter.from_external(native)
+        torch.testing.assert_close(
+            torch.stack([imported[i]["depth"] for i in range(2)]), depth.float()
+        )
+        assert [imported[i]["annotation"] for i in range(2)] == ["first", "second"]
+        assert [imported[i]["operator"] for i in range(2)] == ["Alice", "Alice"]
+
+    def test_validation(self, tmp_path):
+        with pytest.raises(ValueError, match="overlapping"):
+            LeRobotDatasetAdapter(
+                key_map={"episode_index": "same", "frame_index": ("same",)}
+            )
+        with pytest.raises(ValueError, match="empty"):
+            self._adapter(tmp_path / "empty").to_external([])
+        source = self._source()
+        source["action"] = source["action"].double()
+        with pytest.raises(ValueError, match="action.*dtype"):
+            self._adapter(tmp_path / "dtype").to_external(
+                TensorStorage(source).as_dataset()
+            )
+        with pytest.raises(TypeError, match="native LeRobotDataset"):
+            self._adapter(tmp_path / "type").from_external(source)
+
+    def test_export_requires_task_or_task_key(self, tmp_path):
+        root = tmp_path / "missing_task"
+        adapter = LeRobotDatasetAdapter(
+            repo_id="local/missing-task",
+            root=root,
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (1,)}},
+        )
+        with pytest.raises(ValueError, match="task or task_key"):
+            adapter.to_external(TensorStorage(self._source()).as_dataset())
+
+    def test_import_validation_and_failed_destination(self, tmp_path):
+        adapter = self._adapter(tmp_path / "dataset")
+        native = adapter.to_external(TensorStorage(self._source()).as_dataset())
+        native.delta_timestamps = {"action": [0.0, 0.1]}
+        with pytest.raises(ValueError, match="delta_timestamps"):
+            LeRobotDatasetAdapter().from_external(native)
+        native.delta_timestamps = None
+        with pytest.raises(ValueError, match="overlapping"):
+            LeRobotDatasetAdapter(
+                key_map={"observation.state": "action"}
+            ).from_external(native)
+        source = self._source()
+        source["collector", "step"][-1] = 4
+        failed = self._adapter(tmp_path / "failed")
+        with pytest.raises(ValueError, match="consecutive"):
+            failed.to_external(TensorStorage(source).as_dataset())
+        assert not failed.root.exists()
+        recovered = failed.to_external(TensorStorage(self._source()).as_dataset())
+        assert recovered.num_frames == 6
+        with pytest.raises(ValueError, match="Export requires"):
+            LeRobotDatasetAdapter().to_external(
+                TensorStorage(self._source()).as_dataset()
+            )
+
+    def test_docstring(self):
+        parser = doctest.DocTestParser()
+        test = parser.get_doctest(
+            LeRobotDatasetAdapter.__doc__, {}, "LeRobotDatasetAdapter", None, 0
+        )
+        assert doctest.DocTestRunner().run(test).failed == 0
+
+
+def test_lerobot_adapter_optional_dependency(monkeypatch, tmp_path):
+    monkeypatch.setattr(lerobot_adapter, "_has_lerobot", False)
+    with pytest.raises(ImportError, match=r"torchrl\[lerobot\]"):
+        LeRobotDatasetAdapter(
+            repo_id="local/test",
+            root=tmp_path,
+            fps=10,
+            features={"action": {"dtype": "float32", "shape": (2,)}},
+        )
+
+
+def test_lerobot_adapter_partial_install(monkeypatch):
+    monkeypatch.setattr(lerobot_adapter, "_has_lerobot", True)
+    real_import = builtins.__import__
+
+    def missing_dataset_dependencies(name, *args, **kwargs):
+        if name == "lerobot.configs":
+            raise ModuleNotFoundError("No module named 'datasets'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", missing_dataset_dependencies)
+    with pytest.raises(ImportError, match=r"torchrl\[lerobot\]"):
+        LeRobotDatasetAdapter()
+
+
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    pytest.main([__file__, "--capture", "no", "--exitfirst"])

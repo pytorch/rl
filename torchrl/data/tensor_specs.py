@@ -2559,10 +2559,8 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
                 * (b - a)
                 + a
             )
-            if (out > b).any():
-                out[out > b] = b.expand_as(out)[out > b]
-            if (out < a).any():
-                out[out < a] = a.expand_as(out)[out < a]
+            out = torch.where(out > b, b, out)
+            out = torch.where(out < a, a, out)
             return out
         else:
             if self.space.high.dtype == torch.bool:
@@ -3340,6 +3338,7 @@ class MultiOneHot(OneHot):
         dtype (str or torch.dtype, optional): dtype of the tensors.
         mask (torch.Tensor or None): mask some of the possible outcomes when a
             sample is taken. See :meth:`update_mask` for more information.
+            The mask stays boolean when the spec is cast to another dtype.
 
     Examples:
         >>> ts = MultiOneHot((3,2,3))
@@ -3455,7 +3454,7 @@ class MultiOneHot(OneHot):
             shape=self.shape,
             device=dest_device,
             dtype=dest_dtype,
-            mask=self.mask.to(dest) if self.mask is not None else None,
+            mask=self.mask.to(dest_device) if self.mask is not None else None,
         )
 
     def clone(self) -> MultiOneHot:
@@ -4642,6 +4641,7 @@ class MultiCategorical(Categorical):
             will be squeezed. Defaults to ``True``.
         mask (torch.Tensor or None): mask some of the possible outcomes when a
             sample is taken. See :meth:`update_mask` for more information.
+            The mask stays boolean when the spec is cast to another dtype.
 
     Examples:
         >>> ts = MultiCategorical((3, 2, 3))
@@ -4764,7 +4764,7 @@ class MultiCategorical(Categorical):
             dest_device = torch.device(dest)
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
-        mask = self.mask.to(dest) if self.mask is not None else None
+        mask = self.mask.to(dest_device) if self.mask is not None else None
         return self.__class__(
             nvec=self.nvec.to(dest),
             shape=None,

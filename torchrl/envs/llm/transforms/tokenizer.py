@@ -354,13 +354,22 @@ class IncrementalTokenizer(Transform):
     **How it works:**
 
     - **On reset**: Tokenizes ``history.prompt`` and stores in ``tokens.prompt``.
-    - **On step**: Reuses ``tokens.full`` from the LLM wrapper output as the new
-      ``tokens.prompt``. Since ``ChatEnv`` sets ``next.history.prompt = history.full``,
-      and the LLM wrapper already produced ``tokens.full`` (tokenized ``history.full``),
-      no re-tokenization is needed - we simply copy ``tokens.full`` to ``next.tokens.prompt``.
+    - **On step**: Reuses ``tokens.full`` from the LLM wrapper output as the start of
+      the new ``tokens.prompt``. ``ChatEnv`` sets ``next.history.prompt = history.full``,
+      but other transforms (e.g. tool transforms) may append messages to it. If the
+      decoded ``tokens.full`` is a prefix of the rendered ``next.history.prompt``, only
+      the remaining text (appended messages and generation prompt) is tokenized and
+      appended. Otherwise ``next.history.prompt`` is tokenized from scratch.
 
-    This approach is both efficient (avoids redundant tokenization) and ensures perfect
-    token consistency (the exact same tokens are reused).
+    This approach is both efficient (avoids redundant tokenization) and keeps the
+    tokens produced by the LLM unchanged in the next prompt.
+
+    The batch must have a single dimension: ``tokens.prompt`` holds one
+    variable-length sequence per batch element and is stored as a nested tensor,
+    which has a single ragged dimension. Whenever a history is found, any other
+    number of batch dimensions raises a :class:`ValueError`, on reset and on step
+    alike, rather than leaving ``tokens.prompt`` out of sync with
+    ``history.prompt``.
 
     Args:
         tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for encoding.
@@ -395,10 +404,11 @@ class IncrementalTokenizer(Transform):
         This transform is automatically added by :class:`~torchrl.envs.llm.ChatEnv`
         when ``with_tokenizer=True`` is passed to the constructor.
 
-    .. warning::
-        **TODO**: Add validation that tokens match history (hash or length check).
-        For now, we trust that tokens are kept in sync. If you manually modify the
-        history, clear the tokens field to trigger re-tokenization.
+    .. note::
+        Transforms that edit ``next.history.prompt`` should be placed before this
+        transform. Tool transforms (subclasses of
+        :class:`~torchrl.envs.llm.transforms.ToolTransformBase`) placed after it
+        re-run it once their results are added to the history.
 
     See Also:
         :class:`~torchrl.modules.llm.policies.vLLMWrapper`: Uses ``prefer_tokens=True``
@@ -440,27 +450,82 @@ class IncrementalTokenizer(Transform):
         Returns:
             List of token tensors (one per batch element).
         """
-        if add_generation_prompt is None:
-            add_generation_prompt = self.add_generation_prompt
-
-        tokenizer_kwargs = {
-            "tokenize": True,
-            "padding": False,
-            "return_dict": True,
-            "add_generation_prompt": add_generation_prompt,
-        }
-        if self.chat_template_name is not None:
-            tokenizer_kwargs["chat_template_name"] = self.chat_template_name
-        if self.chat_template is not None:
-            tokenizer_kwargs["chat_template"] = self.chat_template
-
         result = history.apply_chat_template(
             tokenizer=self.tokenizer,
-            **tokenizer_kwargs,
+            tokenize=True,
+            padding=False,
+            return_dict=True,
+            **self._template_kwargs(add_generation_prompt),
         )
         # Get input_ids as list of tensors
         tokens_list = result.get("input_ids", as_list=True)
         return tokens_list
+
+    def _template_kwargs(self, add_generation_prompt: bool | None = None) -> dict:
+        if add_generation_prompt is None:
+            add_generation_prompt = self.add_generation_prompt
+        kwargs = {"add_generation_prompt": add_generation_prompt}
+        if self.chat_template_name is not None:
+            kwargs["chat_template_name"] = self.chat_template_name
+        if self.chat_template is not None:
+            kwargs["chat_template"] = self.chat_template
+        return kwargs
+
+    def _extend_tokens(
+        self, history: Any, prefix_tokens: Sequence[Tensor]
+    ) -> list[Tensor]:
+        """Tokenize ``history``, reusing ``prefix_tokens`` where they match its rendered text.
+
+        For each batch element, if the decoded prefix tokens are a prefix of the rendered
+        history, they are kept and only the rest of the text is tokenized. Otherwise the
+        whole rendered history is tokenized.
+        """
+        texts = history.apply_chat_template(
+            tokenizer=self.tokenizer, tokenize=False, **self._template_kwargs()
+        )
+        if isinstance(texts, str):
+            texts = [texts]
+        tokens_list = []
+        for text, prefix in zip(texts, prefix_tokens, strict=True):
+            decoded = self.tokenizer.decode(prefix, skip_special_tokens=False)
+            if text.startswith(decoded):
+                suffix = self.tokenizer(text[len(decoded) :], add_special_tokens=False)
+                tokens = torch.cat([prefix, prefix.new_tensor(suffix["input_ids"])])
+                # Encoding the suffix alone can change the text at the boundary.
+                if self.tokenizer.decode(tokens, skip_special_tokens=False) == text:
+                    tokens_list.append(tokens)
+                    continue
+            tokens = self.tokenizer(text, add_special_tokens=False)["input_ids"]
+            tokens_list.append(prefix.new_tensor(tokens))
+        return tokens_list
+
+    def _check_batch_dims(self, tensordict: TensorDictBase) -> None:
+        """Raise unless the batch has exactly one dimension.
+
+        ``tokens.prompt`` holds one variable-length token sequence per batch element
+        and is stored as a nested tensor, which has a single ragged dimension. Under
+        more than one batch dimension that ragged dimension is the outer one, so the
+        token lengths would have to agree within each row of the batch, which prompt
+        lengths do not in general. Tokenizing a flattened batch and restoring the
+        shape afterwards does not work either: a nested tensor cannot gain a batch
+        dimension, since :meth:`~torch.Tensor.reshape`, :meth:`~torch.Tensor.view`,
+        :meth:`~torch.Tensor.unflatten` and :meth:`~torch.Tensor.unsqueeze` all
+        refuse to touch its implicit batch dimension, and a tensordict refuses a
+        flattened nested tensor under a multi-dimensional batch size.
+
+        So the tokens cannot be written back for ``batch_dims != 1``, and writing the
+        previous ``tokens.full`` instead would hand the LLM wrapper a prompt without
+        the messages and the generation prompt that the history gained in between.
+        """
+        if tensordict.batch_dims != 1:
+            raise ValueError(
+                f"{type(self).__name__} requires exactly one batch dimension, got "
+                f"batch_size={tuple(tensordict.batch_size)}. tokens.prompt is stored "
+                "as a nested tensor, which has a single ragged dimension, so the "
+                "tokens cannot be kept in sync with the history for any other number "
+                "of dimensions. Flatten the batch to one dimension before appending "
+                "this transform."
+            )
 
     def _get_history(self, tensordict: TensorDictBase) -> Any | None:
         """Get history from tensordict, handling both nested keys and tensorclass access."""
@@ -477,11 +542,18 @@ class IncrementalTokenizer(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        """Tokenize full history on reset."""
+        """Tokenize full history on reset.
+
+        Raises:
+            ValueError: if a history is found and the batch does not have exactly one
+                dimension. See :meth:`_check_batch_dims`.
+        """
         history = self._get_history(tensordict_reset)
         if history is None:
             # No history to tokenize
             return tensordict_reset
+
+        self._check_batch_dims(tensordict_reset)
 
         # Tokenize full history
         tokens_list = self._tokenize_history(history)
@@ -496,14 +568,18 @@ class IncrementalTokenizer(Transform):
     ) -> TensorDictBase:
         """Set tokens.prompt on step, reusing tokens.full when available.
 
-        The LLM wrapper produces tokens.full (tokenized history.full).
-        Since ChatEnv sets next.history.prompt = history.full, we can
-        directly use tokens.full as next.tokens.prompt without re-tokenization.
+        The LLM wrapper produces tokens.full (tokenized history.full). ChatEnv sets
+        next.history.prompt = history.full, and later transforms may append messages
+        to it, so tokens.full is kept as the start of next.tokens.prompt only when it
+        matches the rendered next.history.prompt, and the rest is tokenized.
 
         Falls back to tokenizing next.history.prompt if tokens.full is not available.
+
+        Raises:
+            ValueError: if a history is found and the batch does not have exactly one
+                dimension, since the tokens cannot be kept in sync with the history
+                in that case. See :meth:`_check_batch_dims`.
         """
-        # Try to reuse tokens.full from the action tensordict
-        # Since next.history.prompt = history.full, tokens.full is already the correct tokenization
         # Replace the last NestedKey component with "full":
         #   "tokens" -> ("tokens", "full")
         #   ("tokens",) -> ("tokens", "full")
@@ -514,18 +590,22 @@ class IncrementalTokenizer(Transform):
         else:
             tokens_full_key = (*tokens_key[:-1], "full")
         existing_tokens_full = tensordict.get(tokens_full_key, None)
-
-        if existing_tokens_full is not None:
-            # Reuse tokens.full as the new tokens.prompt - no tokenization needed!
-            next_tensordict.set(self.tokens_key, existing_tokens_full)
-            return next_tensordict
-
-        # Fallback: tokenize next.history.prompt if tokens.full was not available
         history = self._get_history(next_tensordict)
+
         if history is None:
+            # Nothing to synchronize against: pass tokens.full through when present.
+            if existing_tokens_full is not None:
+                next_tensordict.set(self.tokens_key, existing_tokens_full)
             return next_tensordict
 
-        tokens_list = self._tokenize_history(history)
+        self._check_batch_dims(next_tensordict)
+
+        if existing_tokens_full is None:
+            tokens_list = self._tokenize_history(history)
+        else:
+            if isinstance(existing_tokens_full, Tensor):
+                existing_tokens_full = existing_tokens_full.unbind(0)
+            tokens_list = self._extend_tokens(history, existing_tokens_full)
         self._set_tokens(next_tensordict, tokens_list)
 
         return next_tensordict

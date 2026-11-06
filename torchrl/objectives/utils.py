@@ -662,30 +662,33 @@ class HardUpdate(TargetNetUpdater):
             updated.
 
     Keyword Args:
-        value_network_update_interval (scalar): how often the target network should be updated.
-            default: 1000
+        value_network_update_interval (int, optional): number of :meth:`step`
+            calls between two copies. The target parameters are copied on every
+            ``value_network_update_interval``-th call, so ``1`` copies them on
+            every call. Defaults to ``1000``.
     """
 
     def __init__(
         self,
         loss_module: LossModule,
         *,
-        value_network_update_interval: float = 1000,
+        value_network_update_interval: int = 1000,
     ):
         super().__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
         self.counter = 0
 
+    @property
+    def _copy_due(self) -> bool:
+        return self.counter + 1 >= self.value_network_update_interval
+
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
-        if self.counter == self.value_network_update_interval:
+        if self._copy_due:
             p_target.data.copy_(p_source.data)
 
     def step(self) -> None:
         super().step()
-        if self.counter == self.value_network_update_interval:
-            self.counter = 0
-        else:
-            self.counter += 1
+        self.counter = 0 if self._copy_due else self.counter + 1
 
 
 class KLAdaptiveLR:
@@ -1072,7 +1075,10 @@ def _reduce(
                     )
                 mask = mask.to(dtype=weights.dtype)
                 masked_weight = weights * mask
-                result = (tensor * masked_weight).sum() / masked_weight.sum()
+                normalizer = masked_weight.sum().clamp_min(
+                    torch.finfo(masked_weight.dtype).tiny
+                )
+                result = (tensor * masked_weight).sum() / normalizer
             else:
                 if tensor.shape != weights.shape:
                     raise ValueError(

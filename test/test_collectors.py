@@ -27,6 +27,7 @@ import torch
 import torchrl.collectors._multi_base
 import torchrl.collectors._runner
 import torchrl.collectors.distributed.generic as distributed_generic
+import torchrl.weight_update._shared
 from packaging import version
 from pyvers import implement_for
 from tensordict import (
@@ -43,7 +44,7 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictSequential,
 )
-from torch import nn
+from torch import multiprocessing as mp, nn
 from torchrl import service_backend
 from torchrl._utils import (
     _make_ordinal_device,
@@ -2683,7 +2684,15 @@ if __name__ == "__main__":
     )
     @pytest.mark.parametrize(
         "weight_sync_scheme",
-        [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+        [
+            None,
+            MultiProcessWeightSyncScheme,
+            SharedMemWeightSyncScheme,
+            pytest.param(
+                functools.partial(SharedMemWeightSyncScheme, atomic=True),
+                id="SharedMemWeightSyncScheme-atomic",
+            ),
+        ],
     )
     # @pytest.mark.skipif(not torch.cuda.is_available() and not torch.mps.is_available(), reason="no cuda/mps device found")
     def test_update_weights(self, use_async, cudagraph, weight_sync_scheme):
@@ -2698,8 +2707,10 @@ if __name__ == "__main__":
 
         collector_class = MultiSyncCollector if not use_async else MultiAsyncCollector
         kwargs = {}
+        scheme = None
         if weight_sync_scheme is not None:
-            kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
+            scheme = weight_sync_scheme()
+            kwargs["weight_sync_schemes"] = {"policy": scheme}
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         collector = collector_class(
             [create_env] * 3,
@@ -2733,12 +2744,15 @@ if __name__ == "__main__":
             state_dict = collector.state_dict()
             policy_state_dict = policy.state_dict()
             # check they don't match
+            workers_see_unsent_weights = not torch.cuda.is_available() and not (
+                scheme is not None and scheme.atomic
+            )
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     with (
-                        pytest.raises(AssertionError)
-                        if torch.cuda.is_available()
-                        else nullcontext()
+                        nullcontext()
+                        if workers_see_unsent_weights
+                        else pytest.raises(AssertionError)
                     ):
                         torch.testing.assert_close(
                             state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
@@ -4252,6 +4266,15 @@ def weight_reset(m):
         m.reset_parameters()
 
 
+def _report_received_weights(scheme, requests, replies):
+    model = nn.Linear(2, 2)
+    scheme.init_on_receiver(model_id="policy", model=model, worker_idx=0)
+    scheme.connect(worker_idx=0)
+    while requests.get() == "report":
+        replies.put(TensorDict.from_module(model).data.clone())
+    scheme.shutdown()
+
+
 def _stop_interruptor(interruptor):
     interruptor.stop_collection()
 
@@ -4760,6 +4783,128 @@ class TestUpdateParams:
                 td.shape
             )
             return td
+
+    class SlowTwoReadModule(nn.Module):
+        """Reads two parameters with a pause in between.
+
+        The pause keeps the worker inside a policy call for most of the time it
+        runs, so a weight update that is not atomic with respect to policy calls
+        shows up as a call that read ``first`` and ``second`` from two versions.
+        """
+
+        def __init__(self):
+            super().__init__()
+            self.first = nn.Parameter(torch.zeros(()))
+            self.second = nn.Parameter(torch.zeros(()))
+
+        def forward(self, state):
+            first = self.first.detach().clone()
+            time.sleep(0.01)
+            second = self.second.detach().clone()
+            return torch.zeros_like(state), first, second
+
+    def test_shared_mem_update_never_tears_running_policy(self):
+        policy = TensorDictModule(
+            TestUpdateParams.SlowTwoReadModule(),
+            in_keys=["state"],
+            out_keys=["action", "first", "second"],
+        )
+        env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device="cpu"))
+        col = MultiAsyncCollector(
+            [env, env],
+            policy,
+            frames_per_batch=4,
+            total_frames=-1,
+            weight_sync_schemes={"policy": SharedMemWeightSyncScheme(atomic=True)},
+        )
+        num_updates = 15
+        torn_calls = 0
+        try:
+            for sent, data in enumerate(col):
+                torn_calls += int((data["first"] != data["second"]).sum())
+                if sent == num_updates:
+                    break
+                with torch.no_grad():
+                    policy.module.first.fill_(sent + 1)
+                    policy.module.second.fill_(sent + 1)
+                col.update_policy_weights_()
+        finally:
+            col.shutdown()
+        assert torn_calls == 0
+        assert (data["first"] > 0).all()
+
+    @pytest.mark.parametrize("atomic", [None, False, True])
+    def test_shared_mem_atomic_default_warns(self, atomic):
+        scheme = SharedMemWeightSyncScheme(atomic=atomic)
+        try:
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                scheme.init_on_sender(
+                    model=nn.Linear(2, 2),
+                    devices=[torch.device("cpu")],
+                )
+        finally:
+            scheme.shutdown()
+        warned = [
+            w
+            for w in record
+            if issubclass(w.category, FutureWarning) and "v0.16" in str(w.message)
+        ]
+        assert len(warned) == (atomic is None)
+
+    def test_shared_mem_atomic_standalone_send_reads_the_model(self):
+        """send() without weights pushes the model given to init_on_sender."""
+        train = nn.Linear(2, 2)
+        scheme = SharedMemWeightSyncScheme(atomic=True)
+        scheme.init_on_sender(model=train, devices=[torch.device("cpu")])
+        ctx = mp.get_context("spawn")
+        requests, replies = ctx.Queue(), ctx.Queue()
+        proc = ctx.Process(
+            target=_report_received_weights, args=(scheme, requests, replies)
+        )
+        proc.start()
+        try:
+            scheme.connect()
+            with torch.no_grad():
+                train.weight.fill_(3.0)
+                train.bias.fill_(-1.0)
+            scheme.send()
+            requests.put("report")
+            received = replies.get(timeout=60)
+        finally:
+            requests.put("stop")
+            proc.join(30)
+            scheme.shutdown()
+        torch.testing.assert_close(received["weight"], torch.full((2, 2), 3.0))
+        torch.testing.assert_close(received["bias"], torch.full((2,), -1.0))
+
+    @pytest.mark.parametrize("sync", [False, True])
+    def test_shared_mem_atomic_send_survives_dead_worker(self, sync, monkeypatch):
+        monkeypatch.setattr(torchrl.weight_update._shared, "WEIGHT_SYNC_TIMEOUT", 1.0)
+        policy = TensorDictModule(
+            TestUpdateParams.SlowTwoReadModule(),
+            in_keys=["state"],
+            out_keys=["action", "first", "second"],
+        )
+        env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device="cpu"))
+        col = MultiAsyncCollector(
+            [env, env],
+            policy,
+            frames_per_batch=4,
+            total_frames=-1,
+            weight_sync_schemes={
+                "policy": SharedMemWeightSyncScheme(atomic=True, sync=sync)
+            },
+        )
+        try:
+            col.procs[0].kill()
+            col.procs[0].join()
+            start = time.monotonic()
+            col.update_policy_weights_()
+            col.update_policy_weights_()
+            assert time.monotonic() - start < 30
+        finally:
+            col.shutdown()
 
     @pytest.mark.parametrize(
         "collector",

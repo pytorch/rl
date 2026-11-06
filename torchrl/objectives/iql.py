@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
@@ -82,6 +83,9 @@ class IQLLoss(LossModule):
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        use_prioritized_weights (bool or ``"auto"``, optional): weight the
+            per-sample losses by the ``priority_weight`` entry of a prioritized
+            replay buffer when it is present; ``False`` ignores it. Defaults to ``"auto"``.
 
     Examples:
         >>> import torch
@@ -235,6 +239,9 @@ class IQLLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+            priority_weight (NestedKey): The input tensordict key where the
+                importance-sampling weights of a prioritized replay buffer are
+                read from. Defaults to ``"priority_weight"``.
         """
 
         value: NestedKey = "state_value"
@@ -245,6 +252,7 @@ class IQLLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -282,12 +290,14 @@ class IQLLoss(LossModule):
         reduction: str | None = None,
         deactivate_vmap: bool = False,
         scalar_output_mode: str | None = None,
+        use_prioritized_weights: bool | Literal["auto"] = "auto",
     ) -> None:
         self._in_keys = None
         self._out_keys = None
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority=priority_key)
         self._scalar_output_mode = scalar_output_mode
 
@@ -513,7 +523,11 @@ class IQLLoss(LossModule):
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         loss_actor = -(exp_a * log_prob)
-        loss_actor = self._reduce_loss(loss_actor, tensordict=tensordict)
+        loss_actor = self._reduce_loss(
+            loss_actor,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -538,7 +552,11 @@ class IQLLoss(LossModule):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile)
-        value_loss = self._reduce_loss(value_loss, tensordict=tensordict)
+        value_loss = self._reduce_loss(
+            value_loss,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -552,15 +570,15 @@ class IQLLoss(LossModule):
 
     def qvalue_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         obs_keys = self.actor_network.in_keys
-        tensordict = tensordict.select(
+        selected = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
         )
 
         target_value = self.value_estimator.value_estimate(
-            tensordict, target_params=self.target_value_network_params
+            selected, target_params=self.target_value_network_params
         ).squeeze(-1)
         tensordict_expand = self._vmap_qvalue_networkN0(
-            tensordict.select(*self.qvalue_network.in_keys, strict=False),
+            selected.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
         )
         pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
@@ -572,10 +590,14 @@ class IQLLoss(LossModule):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict)
+        loss_qval = self._reduce_loss(
+            loss_qval,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
-            tensordict,
+            selected,
             "actor_network_params",
             "qvalue_network_params",
             "value_network_params",
@@ -650,6 +672,9 @@ class DiscreteIQLLoss(IQLLoss):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        use_prioritized_weights (bool or ``"auto"``, optional): weight the
+            per-sample losses by the ``priority_weight`` entry of a prioritized
+            replay buffer when it is present; ``False`` ignores it. Defaults to ``"auto"``.
 
     Examples:
         >>> import torch
@@ -792,6 +817,9 @@ class DiscreteIQLLoss(IQLLoss):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+            priority_weight (NestedKey): The input tensordict key where the
+                importance-sampling weights of a prioritized replay buffer are
+                read from. Defaults to ``"priority_weight"``.
         """
 
         value: NestedKey = "state_value"
@@ -802,6 +830,7 @@ class DiscreteIQLLoss(IQLLoss):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -839,6 +868,7 @@ class DiscreteIQLLoss(IQLLoss):
         separate_losses: bool = False,
         reduction: str | None = None,
         scalar_output_mode: str | None = None,
+        use_prioritized_weights: bool | Literal["auto"] = "auto",
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -858,6 +888,7 @@ class DiscreteIQLLoss(IQLLoss):
             priority_key=priority_key,
             separate_losses=separate_losses,
             scalar_output_mode=scalar_output_mode,
+            use_prioritized_weights=use_prioritized_weights,
         )
         if action_space is None:
             warnings.warn(
@@ -941,7 +972,11 @@ class DiscreteIQLLoss(IQLLoss):
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         loss_actor = -(exp_a * log_prob)
-        loss_actor = self._reduce_loss(loss_actor, tensordict=tensordict)
+        loss_actor = self._reduce_loss(
+            loss_actor,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -991,7 +1026,11 @@ class DiscreteIQLLoss(IQLLoss):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_Q - value, self.expectile)
-        value_loss = self._reduce_loss(value_loss, tensordict=tensordict)
+        value_loss = self._reduce_loss(
+            value_loss,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -1044,7 +1083,11 @@ class DiscreteIQLLoss(IQLLoss):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict)
+        loss_qval = self._reduce_loss(
+            loss_qval,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
             tensordict,

@@ -7,6 +7,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from numbers import Number
+from typing import Literal
 
 import numpy as np
 import torch
@@ -88,6 +89,9 @@ class REDQLoss_deprecated(LossModule):
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        use_prioritized_weights (bool or ``"auto"``, optional): weight the
+            per-sample losses by the ``priority_weight`` entry of a prioritized
+            replay buffer when it is present; ``False`` ignores it. Defaults to ``"auto"``.
     """
 
     @dataclass
@@ -108,6 +112,9 @@ class REDQLoss_deprecated(LossModule):
                 Defaults to ``"_log_prob"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
+            priority_weight (NestedKey): The input tensordict key where the
+                prioritized replay importance weights are read from.
+                Defaults to ``"priority_weight"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
                 Will be used for the underlying value estimator. Defaults to ``"reward"``.
             done (NestedKey): The key in the input TensorDict that indicates
@@ -123,6 +130,7 @@ class REDQLoss_deprecated(LossModule):
         value: NestedKey = "state_value"
         log_prob: NestedKey | None = None
         priority: NestedKey = "td_error"
+        priority_weight: NestedKey = "priority_weight"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
@@ -167,12 +175,14 @@ class REDQLoss_deprecated(LossModule):
         separate_losses: bool = False,
         reduction: str | None = None,
         deactivate_vmap: bool = False,
+        use_prioritized_weights: bool | Literal["auto"] = "auto",
     ):
         self._in_keys = None
         self._out_keys = None
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.deactivate_vmap = deactivate_vmap
@@ -336,9 +346,12 @@ class REDQLoss_deprecated(LossModule):
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
             )
         loss_tensordict = tensordict.unsqueeze(0)
-        loss_actor = self._reduce_loss(loss_actor, loss_tensordict)
-        loss_qval = self._reduce_loss(loss_qval, loss_tensordict)
-        loss_alpha = self._reduce_loss(loss_alpha, tensordict)
+        weights = self._maybe_get_priority_weight(loss_tensordict)
+        loss_actor = self._reduce_loss(loss_actor, loss_tensordict, weights=weights)
+        loss_qval = self._reduce_loss(loss_qval, loss_tensordict, weights=weights)
+        loss_alpha = self._reduce_loss(
+            loss_alpha, tensordict, weights=self._maybe_get_priority_weight(tensordict)
+        )
         td_out = TensorDict(
             {
                 "loss_actor": loss_actor,

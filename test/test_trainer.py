@@ -24,11 +24,10 @@ from unittest.mock import MagicMock
 
 import pytest
 import torch
-from hydra.core.config_store import ConfigStore
-from hydra.utils import instantiate
 from torch import nn
 
 _has_tb = importlib.util.find_spec("tensorboard") is not None
+_has_hydra = importlib.util.find_spec("hydra") is not None
 
 from tensordict import TensorDict
 from tensordict.nn import (
@@ -87,7 +86,6 @@ from torchrl.trainers import EvaluatorHook, LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
 from torchrl.trainers.algorithms import FQLTrainer
 from torchrl.trainers.algorithms.a2c import A2CTrainer
-from torchrl.trainers.algorithms.configs import FQLLossConfig, FQLTrainerConfig
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
@@ -1395,6 +1393,7 @@ class TestOptimizer:
 
 
 class TestLogReward:
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_log_reward_normalizes_hydra_nested_key(self):
         from omegaconf import ListConfig
         from torchrl.trainers.algorithms.configs.hooks import _make_log_scalar
@@ -1561,6 +1560,31 @@ class TestRewardNorm:
 
         RewardNormalizer.state_dict = RewardNormalizer_state_dict
         RewardNormalizer.load_state_dict = RewardNormalizer_load_state_dict
+
+    @pytest.mark.filterwarnings(
+        "error:TensorDict.load_memmap is loading a pickled:FutureWarning"
+    )
+    def test_reward_norm_save_memmap_pickled_state(self, tmp_path, monkeypatch):
+        # The reward stats are a dict of tensors and floats, which is not
+        # JSON-serializable, so the memmap backend pickles them.
+        monkeypatch.setenv("CKPT_BACKEND", "memmap")
+        torch.manual_seed(0)
+        file = tmp_path / "ckpt"
+        trainer = mocking_trainer(str(file))
+        reward_normalizer = RewardNormalizer()
+        reward_normalizer.register(trainer)
+        td = TensorDict({REWARD_KEY: torch.randn(10, 1)}, [10])
+        trainer._process_batch_hook(td)
+        trainer._process_optim_batch_hook(td)
+        trainer.save_trainer(True)
+
+        trainer2 = mocking_trainer()
+        reward_normalizer2 = RewardNormalizer()
+        reward_normalizer2.register(trainer2)
+        trainer2.load_from_file(file)
+        torch.testing.assert_close(
+            reward_normalizer2.state_dict(), reward_normalizer.state_dict()
+        )
 
 
 def test_masking():
@@ -3757,6 +3781,7 @@ def _make_tdmpc2_loss_for_stepper():
     return TdMpc2Loss(world_model, policy_prior, q_ensemble, horizon=3)
 
 
+@pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestTdMpc2OptimizationStepper:
     def test_step(self):
         loss = _make_tdmpc2_loss_for_stepper()
@@ -3986,6 +4011,7 @@ def _tdmpc2_make_replay_buffer(num_episodes=4, batch_size=2, strict_length=True)
     )
 
 
+@pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestTdMpc2Trainer:
     def test_replay_optimization(self):
         loss = _tdmpc2_make_loss()
@@ -4458,8 +4484,14 @@ def test_fql_shutdown_on_failure():
     assert stopped == [True]
 
 
+@pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 @pytest.mark.parametrize("critic_list", [False, True])
 def test_fql_hydra_configs(critic_list):
+    from hydra.core.config_store import ConfigStore
+    from hydra.utils import instantiate
+
+    from torchrl.trainers.algorithms.configs import FQLLossConfig, FQLTrainerConfig
+
     original = make_fql_loss()
     loss = instantiate(
         FQLLossConfig(gamma=0.95, alpha=4),
@@ -4686,8 +4718,11 @@ def test_fql_logger_checkpoint(tmp_path):
     )
 
 
+@pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 def test_fql_config_constructor_parity():
     from dataclasses import fields
+
+    from torchrl.trainers.algorithms.configs import FQLTrainerConfig
 
     config = {field.name: field for field in fields(FQLTrainerConfig)}
     for name, parameter in inspect.signature(FQLTrainer).parameters.items():

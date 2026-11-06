@@ -152,7 +152,10 @@ uv_pip_install \
   coverage \
   transformers \
   ninja \
-  timm
+  timm \
+  onnx \
+  "onnxscript>=0.7.1" \
+  onnxruntime
 
 # Dataset adapter tests are collected by the CPU bulk shard.
 if [[ "${CU_VERSION:-}" == cpu && "${TORCHRL_TEST_SHARD:-all}" == bulk ]]; then
@@ -263,7 +266,7 @@ export pybind11_DIR
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
+  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
   uv_pip_install --no-deps tensordict
 fi

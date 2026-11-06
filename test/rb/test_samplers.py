@@ -1821,6 +1821,102 @@ class TestSamplers:
         else:
             assert found_traj_0
 
+    @pytest.mark.parametrize("layout", ["1d", "2d-1env", "2d-2env"])
+    @pytest.mark.parametrize("cut", ["strict", "span", "non_strict"])
+    def test_slice_sampler_prioritized_wrapped_slices_stay_in_episode(
+        self, layout, cut
+    ):
+        """Slices from a wrapped storage stay within one env and one episode.
+
+        A slice shorter than ``slice_len`` must end where its episode ends (or
+        at the newest stored step), not earlier.
+        """
+        torch.manual_seed(0)
+        rows_per_env, slice_len, num_steps = 20, 4, 45
+        num_envs = 2 if layout == "2d-2env" else 1
+        episode_len = torch.tensor([[7], [5]])[:num_envs]
+        step = torch.arange(num_steps).expand(num_envs, num_steps)
+        env = torch.arange(num_envs).unsqueeze(-1).expand(num_envs, num_steps)
+        data = TensorDict(
+            {
+                "env": env,
+                "step": step,
+                "episode": step // episode_len + 1000 * env,
+                ("next", "done"): (step % episode_len == episode_len - 1)[..., None],
+            },
+            [num_envs, num_steps],
+        )
+        capacity = num_envs * rows_per_env
+        if layout == "1d":
+            data = data[0]
+            storage = LazyTensorStorage(capacity)
+        else:
+            storage = LazyTensorStorage(capacity, ndim=2)
+        rb = TensorDictReplayBuffer(
+            storage=storage,
+            sampler=PrioritizedSliceSampler(
+                max_capacity=capacity,
+                alpha=0.7,
+                beta=0.5,
+                end_key=("next", "done"),
+                slice_len=slice_len,
+                strict_length=cut != "non_strict",
+                span=(False, True) if cut == "span" else False,
+            ),
+            batch_size=10 * slice_len,
+        )
+        for chunk in data.split(5, dim=-1):
+            rb.extend(chunk)
+        assert rb.storage.shape[0] == rows_per_env
+
+        for _ in range(50):
+            sample = rb.sample()
+            ends = sample["next", "truncated"].reshape(-1).nonzero().squeeze(-1) + 1
+            for slc in sample.tensor_split(ends[:-1].tolist()):
+                if cut == "strict":
+                    assert slc.shape == (slice_len,)
+                elif slc.shape[0] < slice_len:
+                    assert (
+                        slc["next", "done"][-1].item()
+                        or slc["step"][-1].item() == num_steps - 1
+                    )
+                assert (slc["env"] == slc["env"][0]).all()
+                assert (slc["episode"] == slc["episode"][0]).all()
+                assert (slc["step"].diff() == 1).all()
+
+    @pytest.mark.parametrize(
+        "end_kwargs",
+        [
+            {"end_key": ("next", "done")},
+            {"end_keys": [("next", "terminated"), ("next", "truncated")]},
+        ],
+    )
+    def test_slice_sampler_ndim2_single_env_end_signal(self, end_kwargs):
+        """A one-env 2-D storage reads its end-of-trajectory signal per step."""
+        num_steps, episode_len, slice_len = 30, 6, 3
+        step = torch.arange(num_steps).expand(1, num_steps)
+        done = (step % episode_len == episode_len - 1)[..., None]
+        data = TensorDict(
+            {
+                "step": step,
+                ("next", "done"): done,
+                ("next", "terminated"): done.clone(),
+                ("next", "truncated"): torch.zeros_like(done),
+            },
+            [1, num_steps],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20, ndim=2),
+            sampler=SliceSampler(slice_len=slice_len, **end_kwargs),
+            batch_size=4 * slice_len,
+        )
+        for chunk in data.split(5, dim=1):
+            rb.extend(chunk)
+        for _ in range(20):
+            slices = rb.sample().reshape(-1, slice_len)["step"]
+            assert (slices.diff(dim=-1) == 1).all()
+            assert (slices // episode_len == slices[:, :1] // episode_len).all()
+
     @pytest.mark.parametrize("max_priority_within_buffer", [True, False])
     @pytest.mark.parametrize("alpha", [1.0, 0.6])
     def test_prb_update_max_priority(self, max_priority_within_buffer, alpha):

@@ -33,7 +33,10 @@ except ImportError:
         return tree_flat
 
 
-from torchrl.data.replay_buffers.sample_units import Sequence as SequenceSampleUnit
+from torchrl.data.replay_buffers.sample_units import (
+    Sequence as SequenceSampleUnit,
+    SubgoalTriplet,
+)
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler
 from torchrl.data.replay_buffers.utils import (
     _is_int,
@@ -367,7 +370,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         the update well-defined when the same anchor appears in several
         windows. Returns ``None`` when no expansion metadata is present.
         """
-        if not isinstance(self._sample_unit, SequenceSampleUnit):
+        if not isinstance(self._sample_unit, (SequenceSampleUnit, SubgoalTriplet)):
             return None
         anchor = data.get("anchor_index", None)
         if anchor is None:
@@ -406,8 +409,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
         priority = priority.reshape(-1)
         if validity is not None:
             validity = validity.reshape(-1)
-            # every anchor's own record is always valid, so masking cannot
-            # drop an anchor from the update
+            # an anchor drops out of the update only when its own record is
+            # invalid (a SubgoalTriplet anchor in a single-record episode)
             anchor = anchor[validity]
             priority = priority[validity]
         unique, inverse = torch.unique(anchor, return_inverse=True)

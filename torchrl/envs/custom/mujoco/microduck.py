@@ -489,6 +489,17 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             term and pose diagnostics to the observation spec under
             ``diagnostic_*`` keys. Off by default because it roughly doubles
             the per-step task cost.
+        policy_observation (bool, optional): if ``True``, also expose the
+            ``policy_observation`` entry: the 61-D vector the MicroDuck robot
+            runtime feeds its policies at 50 Hz. It holds base angular
+            velocity (3), projected gravity (3), joint-position error (14),
+            joint velocity (14), the previous action (14) and the robot
+            command (13): ``(vx, vy, wz)``, four head-pose and six body-pose
+            entries, of which the env fills ``(vx, vy)`` from ``command`` and
+            leaves the rest at zero. Linear velocity and the gait clock, which
+            the robot cannot measure, are left out, so ``observation`` remains
+            available as a privileged critic input. The MJCF actuators must
+            drive :attr:`JOINT_NAMES` in order. Defaults to ``False``.
         root (str or Path, optional): directory holding downloaded
             ``microduck_rl`` checkouts. Defaults to
             ``~/.cache/torchrl/microduck``.
@@ -602,6 +613,15 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         >>> task = MicroDuckEnv.tracking_task(0.2, reward_weights={"heading": 1.0}, heading_std=0.5)
         >>> env = MicroDuckEnv(download=True, tasks=task)  # doctest: +SKIP
 
+        Train a policy the robot can run: the actor reads the robot's
+        ``policy_observation`` while the critic keeps the privileged
+        ``observation`` with linear velocity and the gait clock.
+
+        >>> env = MicroDuckEnv(download=True, policy_observation=True, num_envs=4)  # doctest: +SKIP
+        >>> td = env.reset()  # doctest: +SKIP
+        >>> td["policy_observation"].shape, td["observation"].shape  # doctest: +SKIP
+        (torch.Size([4, 61]), torch.Size([4, 56]))
+
     .. seealso::
         :class:`MicroDuckTask` represents one locomotion objective;
         :class:`MicroDuckTaskSampler` controls task selection at reset; and
@@ -635,6 +655,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         "right_knee",
         "right_ankle",
     )
+    """Actuated joints in the order the robot runtime reads and writes them."""
     FOOT_GEOMS: ClassVar[tuple[str, str]] = (
         "left_foot_collision",
         "right_foot_collision",
@@ -649,6 +670,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     GAIT_PHASE_START: ClassVar[int] = COMMAND_START + 2 + NUM_JOINTS * 2
     """Index of the gait clock ``(sin, cos, ramp)`` in the observation."""
     OBSERVATION_DIM: ClassVar[int] = GAIT_PHASE_START + 3 + NUM_JOINTS
+    POLICY_COMMAND_START: ClassVar[int] = 6 + NUM_JOINTS * 3
+    """Index of the robot command ``(vx, vy, wz, head (4), body (6))`` in ``policy_observation``."""
+    POLICY_OBSERVATION_DIM: ClassVar[int] = POLICY_COMMAND_START + 13
     COMMAND_THRESHOLD: ClassVar[float] = 0.01
     """Planar command speed under which a task counts as standing."""
     GAIT_FREQUENCY_HZ: ClassVar[float] = 1.8913
@@ -711,6 +735,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         tasks: MicroDuckTask | Sequence[MicroDuckTask] | None = None,
         action_scale: float = 0.35,
         diagnostics: bool = False,
+        policy_observation: bool = False,
         root: str | Path | None = None,
         download: bool | str = False,
         backend: BackendName = "mujoco-torch",
@@ -729,6 +754,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         self.tasks = self.stack_tasks(tasks)
         self.action_scale = float(action_scale)
         self.diagnostics = bool(diagnostics)
+        self.policy_observation = bool(policy_observation)
         self.scene_path = self.resolve_scene(
             microduck_root, root=root, download=download
         )
@@ -1456,6 +1482,14 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         joint_ids = torch.as_tensor(model.actuator_trnid[:, 0].copy()).long()
         if (joint_ids < 0).any():
             raise ValueError("Every MicroDuck actuator must target a joint.")
+        actuated = tuple(model.joint(int(joint)).name for joint in joint_ids)
+        defined = tuple(model.joint(joint).name for joint in range(1, model.njnt))
+        if self.policy_observation and not actuated == defined == self.JOINT_NAMES:
+            raise ValueError(
+                "policy_observation follows the robot's joint order "
+                f"{self.JOINT_NAMES}, but the MJCF actuators drive {actuated} "
+                f"and its joints are defined in the order {defined}."
+            )
         home_ctrl = torch.as_tensor(model.key_ctrl[key_id].copy())
         joint_limited = torch.as_tensor(
             model.jnt_limited[joint_ids.numpy()].copy()
@@ -1539,6 +1573,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             shape=(self.num_envs,),
             device=self.device,
         )
+        if self.policy_observation:
+            spec["policy_observation"] = Unbounded(
+                shape=(self.num_envs, self.POLICY_OBSERVATION_DIM),
+                dtype=self.dtype,
+                device=self.device,
+            )
         if not self.diagnostics:
             return spec
         for name in self.REWARD_TERMS:
@@ -1562,6 +1602,11 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         observation["fallen"] = self._fallen(
             state["qpos"].to(self.dtype), state["qvel"].to(self.dtype)
         ).unsqueeze(-1)
+        if self.policy_observation:
+            full = observation.get("observation")
+            observation["policy_observation"] = self._make_policy_obs(
+                self._make_obs(state) if full is None else full
+            )
         if self.diagnostics:
             observation.update(self._diagnostics(state, self._observation_action))
         return observation
@@ -1596,6 +1641,20 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             self._observation_action,
         ]
         return torch.cat(parts, dim=-1)
+
+    def _make_policy_obs(self, observation: torch.Tensor) -> torch.Tensor:
+        """Reorder the observation into the robot's layout, dropping what it cannot sense."""
+        unfilled = self.POLICY_OBSERVATION_DIM - self.POLICY_COMMAND_START - 2
+        return torch.cat(
+            (
+                observation[..., 3:6],
+                observation[..., :3],
+                observation[..., self.COMMAND_START + 2 : self.GAIT_PHASE_START],
+                observation[..., self.GAIT_PHASE_START + 3 :],
+                torch.nn.functional.pad(self._command, (0, unfilled)),
+            ),
+            dim=-1,
+        )
 
     # ------------------------------------------------------------------
     # Reset: task pick-up, command and initial state

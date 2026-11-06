@@ -9,6 +9,7 @@ import argparse
 import importlib.util
 import re
 import uuid
+import warnings
 from collections.abc import Mapping
 
 import pytest
@@ -1163,6 +1164,28 @@ class TestTopK:
             ).all()
         else:
             assert (r3 == torch.tensor([[4, 3]])).all()
+
+    def test_topk_regular_tensordict(self):
+        # Trajectories that are regular TensorDicts concatenate into a regular
+        # TensorDict, whose rewards must be read as a regular tensor.
+        # get(as_nested_tensor=True) warns there with tensordict 0.15 and
+        # returns a nested tensor from 0.17 on, which mean(dim=-2) rejects.
+        topk = TopKRewardSelector(total_dialog_turns=4, topk_size=2, verbose=False)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            for reward in [0.0, 3.0, 1.0, 2.0]:
+                out = topk.inv(
+                    TensorDict(
+                        {
+                            ("next", "done"): torch.ones(1, 1, dtype=torch.bool),
+                            ("next", "reward"): torch.full((1, 3, 1), reward),
+                            ("text", "prompt"): "prompt",
+                        },
+                        batch_size=[1],
+                    )
+                )
+        # the two trajectories above the median, highest reward first
+        assert out["next", "reward"].squeeze(-1).tolist() == [[3.0] * 3, [2.0] * 3]
 
 
 if __name__ == "__main__":

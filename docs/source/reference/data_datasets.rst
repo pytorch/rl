@@ -70,6 +70,7 @@ are called as ``factory(dataset_id, **kwargs)``.
     datasets.ReplayDatasetImporter
     datasets.ReplayDatasetAdapter
     datasets.HuggingFaceDatasetAdapter
+    datasets.LeRobotDatasetAdapter
     datasets.AtariDQNExperienceReplay
     datasets.D4RLExperienceReplay
     datasets.GenDGRLExperienceReplay

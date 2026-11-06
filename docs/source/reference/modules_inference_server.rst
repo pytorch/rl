@@ -332,7 +332,7 @@ to receive updated model weights from a trainer between inference batches:
 
     from torchrl.weight_update import SharedMemWeightSyncScheme
 
-    weight_sync = SharedMemWeightSyncScheme()
+    weight_sync = SharedMemWeightSyncScheme(atomic=True)
     # Initialise on the trainer (sender) side first
     weight_sync.init_on_sender(model=training_model, ...)
 
@@ -348,7 +348,7 @@ to receive updated model weights from a trainer between inference batches:
         loss = loss_fn(training_model(batch))
         loss.backward()
         optimizer.step()
-        weight_sync.send(model=training_model)  # pushed to server
+        weight_sync.send()  # reads training_model and pushes it to the server
 
 Integration with Collectors
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

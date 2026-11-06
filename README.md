@@ -12,7 +12,7 @@
 <a href="https://pypi.org/project/torchrl-nightly"><img src="https://img.shields.io/pypi/v/torchrl-nightly?label=nightly" alt="pypi nightly version"></a>
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/torchrl)
 [![Downloads](https://static.pepy.tech/personalized-badge/torchrl-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/torchrl-nightly)
-[![Discord Shield](https://dcbadge.vercel.app/api/server/cZs26Qq3Dd)](https://discord.gg/cZs26Qq3Dd)
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/cZs26Qq3Dd)
 
 # TorchRL
 
@@ -414,7 +414,7 @@ with old or optional dependency stacks.
 
 ## Installation
 
-TorchRL 0.13 targets Python 3.10+, PyTorch 2.1+, and TensorDict 0.13.x.
+TorchRL targets Python 3.10+, PyTorch 2.11+, and TensorDict 0.15.x (0.15.2 or later).
 
 Install the stable release:
 
