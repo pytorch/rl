@@ -6,12 +6,16 @@ Shared memory transport for in-place weight updates.
 
 This transport uses queue-based buffer distribution for initialization, then
 updates shared memory tensors directly for subsequent weight updates.
-Workers automatically see weight updates without explicit communication.
 
 Initialization flow:
 - Shared memory buffers are created and sent to workers via per-worker queues
-- Workers receive the buffer reference and apply weights to their models
-- Subsequent updates are pure in-place shared memory (zero-copy)
+- Workers receive the buffer reference and apply it to their models
+- Subsequent updates write the buffers in place
+
+By default the buffers are the sender's own weights, so workers that bind
+them as their parameters see every in-place change on the sender. With
+`copy=True` in `register_weights()`, the buffers are staging copies
+that alias neither the sender's model nor the workers' parameters.
 
 Both CPU and CUDA tensors maintain shared references when sent through mp.Queue.
 
@@ -42,7 +46,7 @@ Returns:
 
 The applied weights, or None if not applied.
 
-register_weights(*params_map: dict[int, Queue]*, *init_queues: dict[int, Queue]*, *per_worker: bool = False*) → None[[source]](../../_modules/torchrl/weight_update/_shared.html#SharedMemTransport.register_weights)
+register_weights(*params_map: dict[int, [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)]*, *init_queues: dict[int, Queue]*, *per_worker: bool = False*, *copy: bool = False*) → None[[source]](../../_modules/torchrl/weight_update/_shared.html#SharedMemTransport.register_weights)
 
 Initialize per-worker queues for shared memory buffer distribution.
 
@@ -53,6 +57,11 @@ Parameters:
 - **per_worker** - If True, each worker gets its own independent weight copy
 (for distinct policy factories). If False, workers on the same
 device share the same weight buffer (device-based deduplication).
+- **copy** - If True, each unique entry of `params_map` is copied into a
+new shared memory staging buffer, so that writes to the tensors
+passed here (for instance an optimizer step on the sender's
+model) never reach the workers. If False (default), the buffers
+share storage with `params_map`.
 
 send_ack(*message: str = 'updated'*) → None[[source]](../../_modules/torchrl/weight_update/_shared.html#SharedMemTransport.send_ack)
 

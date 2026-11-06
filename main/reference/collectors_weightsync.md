@@ -194,14 +194,30 @@ for batch in dataloader:
 
 ### SharedMemWeightSyncScheme
 
-Uses shared memory for zero-copy weight updates. After initial setup, weight updates are instantaneous
-since all processes share the same memory buffers.
+Uses shared memory buffers for weight updates: nothing is pickled or sent through a pipe. The
+`atomic` argument selects how workers read them:
+
+- `atomic=False` (the current behavior, also used when `atomic` is not passed): the shared
+buffers are the sender's own weights and the workers bind them as their parameters (zero-copy).
+Workers see every in-place change on the sender, including an optimizer step, without any
+`send()` call, and a policy call can read a mix of two weight versions while the sender writes.
+- `atomic=True`: on `send()` the sender copies the new weights into a staging buffer (one per
+device, or one per worker with `per_worker_weights=True`), and each worker copies that buffer
+into its own parameters between two policy calls (the collector, or the
+`InferenceServer`, holds a lock around each call).
+A policy call always reads a single, complete version of the weights, and training the sender's
+model does not change the workers' weights until the next `send()`.
+
+Creating the scheme without `atomic` emits a `FutureWarning`: the default becomes
+`atomic=True` in v0.16. Code that trains the policy and never calls `update_policy_weights_()`
+relies on `atomic=False` and should either pass it explicitly or start calling
+`update_policy_weights_()`.
 
 | Phase | Sender | Receiver | Communication |
 | --- | --- | --- | --- |
 | `init` | Creates shared buffers + instruction queues | Stores model reference | None |
-| `connect` | Sends buffer references + initial weights | Receives buffers, applies weights, starts background thread | mp.Queue (blocking) |
-| `send` | Updates shared memory, sends instruction | Background thread applies shared memory weights | Zero-copy shared memory + mp.Queue |
+| `connect` | Sends buffer references + initial weights | Receives buffers, binds them (`atomic=False`) or a private copy (`atomic=True`) as its parameters, starts background thread | mp.Queue (blocking) |
+| `send` | Updates the shared buffers, sends instruction | Background thread applies the shared buffer (with `atomic=True`, between two policy calls) | Shared memory + mp.Queue |
 
 ### MultiProcessWeightSyncScheme
 
@@ -378,7 +394,7 @@ def worker_fn(scheme, worker_idx):
 
 # === MAIN PROCESS (Sender) ===
 policy = nn.Linear(4, 2)
-scheme = SharedMemWeightSyncScheme()
+scheme = SharedMemWeightSyncScheme(atomic=True)
 
 # PHASE 1: Initialize on sender (no communication yet)
 scheme.init_on_sender(
@@ -397,7 +413,7 @@ for w in workers:
 scheme.connect()
 # Workers now have copies of policy's weights!
 
-# PHASE 3: Ongoing updates (zero-copy for shared memory)
+# PHASE 3: Ongoing updates (no pickling for shared memory)
 for epoch in range(10):
  # ... training step updates policy weights ...
  scheme.send() # Background threads automatically apply weights
@@ -409,8 +425,13 @@ for w in workers:
 
 Note
 
-With `SharedMemWeightSyncScheme`, weight updates are zero-copy since all processes share the same
-memory buffers. Background threads automatically apply updates when instructed by the sender.
+With `SharedMemWeightSyncScheme`, weight updates never go through a pipe. With
+`atomic=True`, the sender writes a shared memory staging buffer and background threads copy it
+into the workers' parameters when instructed by the sender. Each worker keeps its own copy of the
+parameters, so memory grows by one copy of the weights per worker plus one staging buffer per
+device. With `sync=False`, `send()` returns immediately and the next `send()` waits (up to
+`WEIGHT_SYNC_TIMEOUT` seconds per worker) for the workers to finish the previous copy before
+overwriting the staging buffer.
 
 Note
 

@@ -1007,16 +1007,16 @@ for iteration, batch in enumerate(collector):
 
 ```
 episode_reward_mean_adversary = 0, episode_reward_mean_agent = 0: 0%| | 0/10 [00:00<?, ?it/s]
-episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0: 10%|█ | 1/10 [00:02<00:26, 2.99s/it]
-episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0: 20%|██ | 2/10 [00:06<00:27, 3.46s/it]
-episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0: 30%|███ | 3/10 [00:10<00:23, 3.41s/it]
-episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0: 40%|████ | 4/10 [00:13<00:19, 3.30s/it]
-episode_reward_mean_adversary = 215.0, episode_reward_mean_agent = -215.0: 50%|█████ | 5/10 [00:16<00:16, 3.26s/it]
-episode_reward_mean_adversary = 1135.0, episode_reward_mean_agent = -1135.0: 60%|██████ | 6/10 [00:19<00:12, 3.21s/it]
-episode_reward_mean_adversary = 0.0, episode_reward_mean_agent = 0.0: 70%|███████ | 7/10 [00:22<00:09, 3.01s/it]
-episode_reward_mean_adversary = 2.0, episode_reward_mean_agent = -2.0: 80%|████████ | 8/10 [00:24<00:05, 2.77s/it]
-episode_reward_mean_adversary = 2.0, episode_reward_mean_agent = -2.0: 90%|█████████ | 9/10 [00:26<00:02, 2.63s/it]
-episode_reward_mean_adversary = 51.0, episode_reward_mean_agent = -51.0: 100%|██████████| 10/10 [00:29<00:00, 2.54s/it]
+episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0: 10%|█ | 1/10 [00:03<00:30, 3.38s/it]
+episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0: 20%|██ | 2/10 [00:07<00:28, 3.59s/it]
+episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0: 30%|███ | 3/10 [00:10<00:24, 3.49s/it]
+episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0: 40%|████ | 4/10 [00:13<00:20, 3.47s/it]
+episode_reward_mean_adversary = 215.0, episode_reward_mean_agent = -215.0: 50%|█████ | 5/10 [00:17<00:17, 3.48s/it]
+episode_reward_mean_adversary = 1135.0, episode_reward_mean_agent = -1135.0: 60%|██████ | 6/10 [00:20<00:13, 3.47s/it]
+episode_reward_mean_adversary = 0.0, episode_reward_mean_agent = 0.0: 70%|███████ | 7/10 [00:23<00:09, 3.13s/it]
+episode_reward_mean_adversary = 2.0, episode_reward_mean_agent = -2.0: 80%|████████ | 8/10 [00:25<00:05, 2.92s/it]
+episode_reward_mean_adversary = 2.0, episode_reward_mean_agent = -2.0: 90%|█████████ | 9/10 [00:28<00:02, 2.75s/it]
+episode_reward_mean_adversary = 51.0, episode_reward_mean_agent = -51.0: 100%|██████████| 10/10 [00:30<00:00, 2.68s/it]
 ```
 
 ## Results
@@ -1111,7 +1111,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 Scenarios available in [VMAS](https://github.com/proroklab/VectorizedMultiAgentSimulator)
 
-**Total running time of the script:** (0 minutes 29.417 seconds)
+**Total running time of the script:** (0 minutes 30.997 seconds)
 
 [`Download Jupyter notebook: multiagent_competitive_ddpg.ipynb`](../_downloads/f3b53654a2b96b82010dd96f73ff5151/multiagent_competitive_ddpg.ipynb)
 

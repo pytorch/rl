@@ -163,25 +163,11 @@ Shared memory weights ready to send
 
 receive(*timeout: float | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None
 
-Check for and apply new weights (non-blocking).
+Apply the shared buffer to the model, as the background thread does.
 
-This method is called in the worker's main loop to check if
-new weights have been sent. If weights are available, they
-are applied to the registered model immediately, and the update
-is cascaded to any sub-collectors via context.update_policy_weights_().
-
-Parameters:
-
-**timeout** - Maximum time to wait for weights (seconds).
-None means no timeout (blocking). Some transports may not
-support timeout and will raise ValueError if specified.
-
-Returns:
-
-The received weights if available, None otherwise.
-
-Note: For SharedMemWeightSyncScheme, this always returns None
-since workers automatically see updates via shared memory.
+The application holds the receiving context's weight-update lock, so a
+manual call cannot race with a policy call or with the background
+receiver thread.
 
 *property*receiver_transport*: [TransportBackend](torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend) | None*
 

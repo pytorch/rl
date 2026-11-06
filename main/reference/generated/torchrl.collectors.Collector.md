@@ -770,6 +770,12 @@ Keyword Arguments:
 **synchronize_weights** (*bool**,**optional*) - If True, synchronize weights immediately after registering the schemes.
 Defaults to True.
 
+Registering a receiver also gives the collector a lock that it holds
+around every policy call. Schemes that apply weights from a background
+thread (such as [`SharedMemWeightSyncScheme`](torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme))
+hold it while they copy, so a policy call never reads a partially applied
+update.
+
 reset(*index=None*, ***kwargs*) → None[[source]](../../_modules/torchrl/collectors/_single.html#Collector.reset)
 
 Resets the environments to a new initial state.

@@ -177,8 +177,9 @@ Returns:
 
 The received weights if available, None otherwise.
 
-Note: For SharedMemWeightSyncScheme, this always returns None
-since workers automatically see updates via shared memory.
+Note: For SharedMemWeightSyncScheme, this applies the current shared
+buffer to the model; the background receiver thread already does so on
+every `send()`.
 
 *property*receiver_transport*: [TransportBackend](torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend) | None*
 

@@ -1,32 +1,80 @@
 # SharedMemWeightSyncScheme
 
-*class*torchrl.weight_update.SharedMemWeightSyncScheme(*strategy: str = 'tensordict'*, *sync: bool = True*, *per_worker_weights: bool = False*)[[source]](../../_modules/torchrl/weight_update/_shared.html#SharedMemWeightSyncScheme)
+*class*torchrl.weight_update.SharedMemWeightSyncScheme(*strategy: str = 'tensordict'*, *sync: bool = True*, *per_worker_weights: bool = False*, *atomic: bool | None = None*)[[source]](../../_modules/torchrl/weight_update/_shared.html#SharedMemWeightSyncScheme)
 
 Weight synchronization using shared memory.
 
-This scheme uses shared memory for in-place weight updates. Workers
-automatically see weight updates without explicit message passing.
+This scheme uses shared memory buffers for weight updates, so no weights
+are pickled or sent through a pipe. A background thread on the receiver
+side listens for "receive" instructions from the sender. When an
+instruction arrives, the thread applies the shared buffer to the model and
+sends an acknowledgment.
 
-A background thread on the receiver side listens for "receive" instructions
-from the sender. When an instruction arrives, the thread applies the current
-shared memory weights to the model and sends an acknowledgment.
+Two modes are available, selected by `atomic`:
+
+- `atomic=False` (the current behavior, also used when `atomic` is
+not passed): the shared buffers are the sender's own weights, and each
+worker binds them as its parameters. The workers see every in-place
+change on the sender, including an optimizer step, without any
+`send()` call. Because those writes land while a
+worker's policy is running, a policy call can read a mix of two weight
+versions.
+- `atomic=True`: the sender copies the weights into a shared staging
+buffer on `send()` (one per device, or one per worker with
+`per_worker_weights=True`), and each worker copies that buffer into
+its own private parameters while holding the lock that the receiving
+collector (or `InferenceServer`) holds around
+each policy call. A policy call therefore always reads a single, complete
+version of the weights, and workers only see new weights after
+`send()` (for instance through `update_policy_weights_()`). Memory
+grows by one copy of the weights per worker plus the staging buffers,
+and each update costs one extra copy on the sender and on every
+worker.
+
+The default changes to `atomic=True` in v0.16. Code that trains the
+sender's policy and relies on the workers seeing the change without calling
+`update_policy_weights_()` must then pass `atomic=False` or call
+`update_policy_weights_()` after each update.
 
 Parameters:
 
-- **strategy** - The weight transmission strategy (default: "tensordict").
-- **sync** - If True (default), send() blocks until receiver acknowledges.
-If False, send() returns immediately (use send_async/wait_async).
-- **per_worker_weights** - If True, each worker maintains independent weights
-(for distinct policy factories). If False (default), workers on the
-same device share the same weight buffer. This flag is auto-set to
-True when distinct policy factories are detected.
+- **strategy** (*str**,**optional*) - The weight transmission strategy,
+`"tensordict"` or `"state_dict"`. Defaults to `"tensordict"`.
+- **sync** (*bool**,**optional*) - If `True`, `send()` blocks until every
+receiver acknowledges. If `False`, `send()` returns immediately;
+with `atomic=True` the next `send()` first waits for the
+previous acknowledgments, so that a staging buffer is never
+overwritten while a worker copies it. With `atomic=True` each
+wait lasts at most `WEIGHT_SYNC_TIMEOUT` seconds per worker, so a
+dead worker does not block the sender. Defaults to `True`.
+- **per_worker_weights** (*bool**,**optional*) - If `True`, each worker
+maintains independent weights (for distinct policy factories). If
+`False`, workers on the same device share the same weight buffer.
+This flag is auto-set to `True` when distinct policy factories are
+detected. Defaults to `False`.
+- **atomic** (*bool**,**optional*) - If `True`, workers keep a private copy of the
+weights and apply each update between two policy calls, as
+described above. If `False`, workers read the sender's weights in
+place. `None` behaves like `False` and emits a
+`FutureWarning` when the scheme is initialized on the sender,
+since the default becomes `True` in v0.16. Defaults to `None`.
 
 Example
 
 ```
->>> # Basic usage
->>> scheme = SharedMemWeightSyncScheme()
->>> # Weights are initialized via init_on_sender()
+>>> from torchrl.weight_update import SharedMemWeightSyncScheme
+>>> scheme = SharedMemWeightSyncScheme(atomic=True)
+>>> scheme.atomic
+True
+>>> # Pass it to a multiprocess collector, then push each new set of
+>>> # weights to the workers explicitly:
+>>> # collector = MultiSyncCollector(
+>>> # [make_env] * 2, policy, frames_per_batch=64, total_frames=-1,
+>>> # weight_sync_schemes={"policy": scheme},
+>>> # )
+>>> # for data in collector:
+>>> # ... # optimizer step on policy
+>>> # collector.update_policy_weights_()
 ```
 
 apply_weights(*weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *inplace: bool = True*) → None
@@ -134,27 +182,13 @@ Returns:
 
 Shared memory weights ready to send
 
-receive(*timeout: float | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None
+receive(*timeout: float | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None[[source]](../../_modules/torchrl/weight_update/_shared.html#SharedMemWeightSyncScheme.receive)
 
-Check for and apply new weights (non-blocking).
+Apply the shared buffer to the model, as the background thread does.
 
-This method is called in the worker's main loop to check if
-new weights have been sent. If weights are available, they
-are applied to the registered model immediately, and the update
-is cascaded to any sub-collectors via context.update_policy_weights_().
-
-Parameters:
-
-**timeout** - Maximum time to wait for weights (seconds).
-None means no timeout (blocking). Some transports may not
-support timeout and will raise ValueError if specified.
-
-Returns:
-
-The received weights if available, None otherwise.
-
-Note: For SharedMemWeightSyncScheme, this always returns None
-since workers automatically see updates via shared memory.
+The application holds the receiving context's weight-update lock, so a
+manual call cannot race with a policy call or with the background
+receiver thread.
 
 *property*receiver_transport*: [TransportBackend](torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend) | None*
 
@@ -169,9 +203,16 @@ send(*weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/refer
 Send weights via shared memory (in-place update).
 
 For SharedMemWeightSyncScheme:
+1. With `atomic=True`, waits until every worker has finished
+
+> copying the previous update, so that a staging buffer is never
+> written while a worker reads it
+
 1. Updates the shared memory buffer(s) in-place
-2. _send_instruction() tells workers to apply the new weights
-3. If sync=True, waits for acknowledgments from all workers
+2. _send_instruction() tells workers to apply the new weights (with
+`atomic=True`, between two policy calls)
+3. If sync=True, waits for acknowledgments from all workers (with
+`atomic=True`, at most `WEIGHT_SYNC_TIMEOUT` seconds per worker)
 
 Parameters:
 

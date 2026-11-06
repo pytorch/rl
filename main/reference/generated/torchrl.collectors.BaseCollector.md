@@ -416,6 +416,12 @@ Keyword Arguments:
 **synchronize_weights** (*bool**,**optional*) - If True, synchronize weights immediately after registering the schemes.
 Defaults to True.
 
+Registering a receiver also gives the collector a lock that it holds
+around every policy call. Schemes that apply weights from a background
+thread (such as [`SharedMemWeightSyncScheme`](torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme))
+hold it while they copy, so a policy call never reads a partially applied
+update.
+
 set_post_collect_hook(*hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None*) → None[[source]](../../_modules/torchrl/collectors/_base.html#BaseCollector.set_post_collect_hook)
 
 Method form of the `post_collect_hook` setter.
