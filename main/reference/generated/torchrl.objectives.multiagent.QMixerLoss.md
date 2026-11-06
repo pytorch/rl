@@ -38,6 +38,9 @@ will be made.
 The key at which priority is assumed to be stored within TensorDicts added
 to this ReplayBuffer. This is to be used when the sampler is of type
 `PrioritizedSampler`. Defaults to `"td_error"`.
+- **use_prioritized_weights** (bool or `"auto"`, optional) - weight the
+per-sample losses by the `priority_weight` entry of a prioritized
+replay buffer when it is present; `False` ignores it. Defaults to `"auto"`.
 
 Examples
 

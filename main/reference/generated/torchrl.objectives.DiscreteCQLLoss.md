@@ -25,6 +25,9 @@ Defaults to None.
 `"none"` | `"mean"` | `"sum"`. `"none"`: no reduction will be applied,
 `"mean"`: the sum of the output will be divided by the number of
 elements in the output, `"sum"`: the output will be summed. Default: `"mean"`.
+- **use_prioritized_weights** (bool or `"auto"`, optional) - weight the
+per-sample losses by the `priority_weight` entry of a prioritized
+replay buffer when it is present; `False` ignores it. Defaults to `"auto"`.
 
 Examples
 

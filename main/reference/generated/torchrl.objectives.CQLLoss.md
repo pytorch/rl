@@ -66,6 +66,9 @@ Default is `False`.
 elements in the output, `"sum"`: the output will be summed. Default: `"mean"`.
 - **deactivate_vmap** (*bool**,**optional*) - whether to deactivate vmap calls and replace them with a plain for loop.
 Defaults to `False`.
+- **use_prioritized_weights** (bool or `"auto"`, optional) - weight the
+per-sample losses by the `priority_weight` entry of a prioritized
+replay buffer when it is present; `False` ignores it. Defaults to `"auto"`.
 
 Examples
 

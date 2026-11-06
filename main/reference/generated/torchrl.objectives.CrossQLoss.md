@@ -63,6 +63,9 @@ parameters for both policy and critic losses.
 elements in the output, `"sum"`: the output will be summed. Default: `"mean"`.
 - **deactivate_vmap** (*bool**,**optional*) - whether to deactivate vmap calls and replace them with a plain for loop.
 Defaults to `False`.
+- **use_prioritized_weights** (bool or `"auto"`, optional) - weight the
+per-sample losses by the `priority_weight` entry of a prioritized
+replay buffer when it is present; `False` ignores it. Defaults to `"auto"`.
 
 Examples
 
@@ -208,7 +211,10 @@ The entropy loss should be computed last.
 Parameters:
 
 - **log_prob** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a log-probability as computed by the `actor_loss()` and returned in the metadata.
-- **tensordict** (*TensorDictBase**,**optional*) - the input tensordict.
+- **tensordict** (*TensorDictBase**,**optional*) - the input tensordict, read
+for the loss mask and the prioritized-replay weights. Defaults
+to `None`, in which case the loss is reduced unmasked and
+unweighted.
 
 Returns: a differentiable tensor with the entropy loss.
 
