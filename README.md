@@ -229,19 +229,43 @@ for data in collector:
     train_step(data)
 ```
 
-For larger jobs, the collector family adds multiple worker processes, weight
-updaters, evaluator loops, profiling hooks, and fake-data helpers. For
-asynchronous execution, `AsyncEnvPool` supports stepping and resetting
-environments with process or thread backends. `AsyncBatchedCollector` combines
-an async environment pool with batched policy inference and supports background
-collection into replay. See the [async environment API](docs/source/reference/envs_vectorized.rst)
-and [async collector API](docs/source/reference/collectors_single.rst).
+TorchRL 0.14 substantially expanded the collector architecture for local and
+distributed workloads. `Collector` is the common construction entry point for
+direct collection, local worker processes, and distributed backends such as Ray,
+RPC, and PyTorch distributed. The concrete collector classes remain available
+when an application needs an implementation-specific API. Collectors can also
+integrate replay buffers, policy weight updates, evaluation, and profiling.
 
-**What's new in 0.15:** Multiprocess collectors expose acknowledged policy
-versions, and collectors support explicit trajectory writes to replay. Replay
-buffers provide readiness waits and counters, plus structured batch-time
-sampling. These controls help coordinate collection and learning and preserve
-trajectory structure.
+For asynchronous workloads, `AsyncEnvPool` executes environments using process
+or thread backends. `AsyncBatchedCollector` combines an asynchronous environment
+pool with an inference server that batches policy requests: environments can
+progress independently while environment stepping and policy inference overlap.
+It can also write to replay in the background while a learner samples data.
+Depending on the configuration, inference can run in a separate process and
+workers can send transitions in chunks to reduce communication overhead.
+
+**Data collection updates in 0.15:**
+
+- **Policy version visibility.** With tracking enabled, collected frames carry
+  the version of the policy that produced them. Multiprocess collectors can
+  now report each worker's version and report a shared version when all
+  workers have confirmed the same synchronous weight updates. This helps
+  identify which policy produced data during asynchronous training.
+- **Complete trajectories in replay.** Set `replay_write_mode="trajectory"` to
+  write complete trajectories to replay. This preserves episode boundaries
+  when sampling sequences from multiple workers. `SliceSampler` can also
+  return slices with explicit batch and time dimensions.
+- **Replay readiness and rate control.** Learners can wait until replay can
+  supply a batch, inspect collection and sampling counters, and use a
+  rate-limited buffer to control the number of samples per inserted item.
+- **Collection progress.** Collector statistics distinguish frames being
+  assembled into unfinished trajectories from completed trajectories and
+  frames written to replay, making asynchronous pipelines easier to monitor.
+
+See the [collector API](docs/source/reference/collectors_single.rst),
+[distributed collectors](docs/source/reference/collectors_distributed.rst),
+[async environments](docs/source/reference/envs_vectorized.rst), and
+[collectors and replay](docs/source/reference/collectors_replay.rst).
 
 ### Replay buffers and offline data
 
