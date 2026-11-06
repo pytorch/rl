@@ -346,8 +346,10 @@ TensorDict payloads through queues:
     )
 
 This mode requires identical child batch sizes, TensorDict keys, tensor shapes,
-and CPU devices. Queue exchange remains the default for dynamic or non-tensor
-data. Receive methods also accept ``max_get`` and ``timeout``. ``min_get`` is a
+and CPU devices. Input entries outside the child schema, such as keys written by
+transforms wrapping the pool or by a collector, stay in the parent process and
+are merged back into the results, as with the queue exchange. Queue exchange
+remains the default for dynamic or non-tensor data. Receive methods also accept ``max_get`` and ``timeout``. ``min_get`` is a
 hard lower bound. The timeout starts when the first result arrives and does not
 limit the wait for ``min_get`` results. After ``min_get`` is reached, the call
 returns when that deadline expires or ``max_get`` results have arrived. Exchange

@@ -28,7 +28,7 @@ from tensordict import (
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import expand_as_right, NestedKey
 
-from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl._utils import _replace_last, logger as torchrl_logger, timeit
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec
 from torchrl.envs._async_exchange import _receive_batch, _SharedSlotExchange
 from torchrl.envs.common import _EnvPostInit, EnvBase
@@ -121,7 +121,10 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
             memory so retaining results does not retain one mapping per tensor.
             ``"shm"`` stores fixed-shape tensor data in shared slots and sends
             only readiness descriptors through queues; it requires identical,
-            fixed-shape, CPU, tensor-only schemas across workers. ``"auto"``
+            fixed-shape, CPU, tensor-only schemas across workers. Input
+            entries outside that schema (e.g. written by transforms wrapping
+            the pool or by a collector) stay in the parent process and are
+            merged back into the results, as the queue exchange does. ``"auto"``
             selects ``"shm"`` when the env schema supports it and falls back to
             ``"queue"`` otherwise (the resolution is reported by
             :attr:`resolved_exchange` and logged on fallback). Defaults to
@@ -1023,11 +1026,15 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         *,
         per_env: bool,
         record_action: bool,
+        keep_extra_inputs: bool,
     ) -> None:
         requests = [[] for _ in range(self.num_workers)]
         for env_index, local_td in zip(env_idx, local_tds, strict=True):
             data = self._prepare_worker_data(
-                env_index, local_td, record_action=record_action
+                env_index,
+                local_td,
+                record_action=record_action,
+                keep_extra_inputs=keep_extra_inputs,
             )
             requests[self._env_to_worker[env_index]].append((env_index, data))
         for worker_index, worker_requests in enumerate(requests):
@@ -1040,11 +1047,15 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         tensordict: TensorDictBase,
         *,
         record_action: bool,
+        keep_extra_inputs: bool,
     ):
         if self._slot_exchange is None:
             return tensordict
         return self._slot_exchange.write_input(
-            env_index, tensordict, record_action=record_action
+            env_index,
+            tensordict,
+            record_action=record_action,
+            keep_extra_inputs=keep_extra_inputs,
         )
 
     def _check_worker_errors(self) -> None:
@@ -1121,6 +1132,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             tensordict.unbind(0),
             per_env=_per_env,
             record_action=True,
+            keep_extra_inputs=True,
         )
         if not _per_env:
             self._current_step = self._current_step + len(env_idx)
@@ -1148,6 +1160,21 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 check_worker_errors=self._check_worker_errors,
             )
             return self._slot_exchange.read_one(descriptor)
+        return self._recv_step_batch(min_get, max_get, timeout, slot_key=None)
+
+    def _recv_step_batch(
+        self,
+        min_get: int | None,
+        max_get: int | None,
+        timeout: float | None,
+        *,
+        slot_key: NestedKey | None,
+    ) -> TensorDictBase:
+        """Receives a batch of step results from the shared step queue.
+
+        ``slot_key`` is forwarded to the shared-memory exchange reader and
+        names the sub-tensordict of the result slots the workers wrote to.
+        """
         if min_get is None:
             min_get = self.min_get
         if min_get > self._current_step:
@@ -1164,7 +1191,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._current_step = self._current_step - len(r)
         if self._slot_exchange is not None:
             idx = [item[0] for item in r]
-            result = self._slot_exchange.read(r, self._stack_func)
+            result = self._slot_exchange.read(r, self._stack_func, slot_key=slot_key)
             self._busy.difference_update(idx)
             return result
         r, idx = self._sort_results(r)
@@ -1188,10 +1215,24 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             tensordict.unbind(0),
             per_env=False,
             record_action=True,
+            keep_extra_inputs=False,
         )
         self._current_step = self._current_step + len(env_idx)
 
-    _async_private_step_recv = async_step_recv
+    def _async_private_step_recv(
+        self,
+        min_get: int = 1,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
+    ) -> TensorDictBase:
+        """Receives the outputs of private ``_step`` calls.
+
+        Workers publish a ``_step`` output under the ``"next"`` entry of their
+        shared result slot, which is where the exchange schema stores the step
+        outputs (reward included).
+        """
+        return self._recv_step_batch(min_get, max_get, timeout, slot_key="next")
 
     def async_step_and_maybe_reset_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
@@ -1213,6 +1254,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             tensordict.unbind(0),
             per_env=_per_env,
             record_action=True,
+            keep_extra_inputs=True,
         )
 
     def async_step_and_maybe_reset_recv(
@@ -1285,6 +1327,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             tensordict.unbind(0),
             per_env=_per_env,
             record_action=False,
+            keep_extra_inputs=True,
         )
 
     def async_reset_recv(
@@ -1352,6 +1395,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             tensordict.unbind(0),
             per_env=False,
             record_action=False,
+            keep_extra_inputs=False,
         )
 
     _async_private_reset_recv = async_reset_recv
@@ -1507,6 +1551,23 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             for env_index, data in requests:
                 local_input_queues[env_index].put((msg, data, per_env))
 
+    @staticmethod
+    def _exchange_template(env: EnvBase) -> TensorDictBase:
+        """Returns the schema of the shared-memory exchange slots for ``env``.
+
+        This is the env's fake tensordict plus one boolean entry per reset key
+        (e.g. ``"_reset"``), shaped like the matching done entry, so that the
+        partial-reset masks written by transforms wrapping the pool reach the
+        child env's reset.
+        """
+        template = env.fake_tensordict()
+        for done_key, *_ in env.done_keys_groups:
+            template.set(
+                _replace_last(done_key, "_reset"),
+                torch.zeros_like(template.get(done_key)),
+            )
+        return template
+
     @classmethod
     def _env_exec(
         cls,
@@ -1560,7 +1621,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 if msg == "get_specs":
                     output_queue.put((i, env.specs))
                 elif msg == "get_fake_tensordict":
-                    output_queue.put((i, env.fake_tensordict()))
+                    output_queue.put((i, cls._exchange_template(env)))
                 elif msg == "init_shm":
                     shared_slots = data
                     output_queue.put(True)
@@ -1633,7 +1694,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                         step_queue.put(data)
                     else:
                         keys, ready_s = _SharedSlotExchange.publish(
-                            shared_slots[1], data, shared_slots[3]
+                            shared_slots[1].get("next"), data, shared_slots[3]
                         )
                         step_queue.put((i, keys, ready_s))
                 elif msg == "shutdown":

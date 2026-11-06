@@ -42,7 +42,13 @@ from torchrl.envs.batched_envs import (
     _to_device_mps_safe,
 )
 from torchrl.envs.env_creator import get_env_metadata
-from torchrl.envs.transforms import RewardScaling, StepCounter, TransformedEnv
+from torchrl.envs.transforms import (
+    Compose,
+    RewardScaling,
+    RewardSum,
+    StepCounter,
+    TransformedEnv,
+)
 from torchrl.envs.transforms.transforms import Tokenizer
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import RandomPolicy
@@ -1159,6 +1165,7 @@ class TestAsyncEnvPool:
         [
             ("threading", None),
             ("multiprocessing", "queue"),
+            ("multiprocessing", "shm"),
         ],
     )
     @set_capture_non_tensor_stack(False)
@@ -1167,7 +1174,8 @@ class TestAsyncEnvPool:
 
         The pool wrote ``"env_index"`` as a tensor on step but as a
         ``NonTensorStack`` on reset, so the collector could not stack its
-        rollout.
+        rollout. With ``exchange="shm"`` the collector's ``("collector",
+        "traj_ids")`` input was also rejected instead of being passed through.
         """
         makers = [partial(_rewarded_counting_env, index) for index in range(3)]
         kwargs = {} if exchange is None else {"exchange": exchange}
@@ -1189,6 +1197,43 @@ class TestAsyncEnvPool:
             pool.close(raise_if_closed=False)
             serial.close(raise_if_closed=False)
 
+    @pytest.mark.parametrize("exchange", ["queue", "shm"])
+    @set_capture_non_tensor_stack(False)
+    def test_outer_transforms_match_serial_env(self, exchange):
+        """Transforms wrapping the pool produce the rollout they produce around a SerialEnv.
+
+        With ``exchange="shm"`` the pool rejected the keys written by the
+        outer transforms (``"step_count"``, ``"episode_reward"``), lost the
+        reward of its private ``_step`` and could not forward the partial
+        ``"_reset"`` mask. Each child is done after a different number of
+        steps, so the rollout goes through partial resets.
+        """
+        makers = [partial(_rewarded_counting_env, index) for index in range(3)]
+        transform = Compose(StepCounter(), RewardSum())
+        pool_env = TransformedEnv(
+            AsyncEnvPool(makers, backend="multiprocessing", exchange=exchange),
+            transform.clone(),
+        )
+        serial_env = TransformedEnv(SerialEnv(3, makers), transform.clone())
+        policy = CountingEnvCountPolicy(serial_env.action_spec)
+        try:
+            rollout = pool_env.rollout(6, policy, break_when_any_done=False)
+            expected = serial_env.rollout(6, policy, break_when_any_done=False)
+            assert_allclose_td(rollout.exclude("env_index"), expected)
+            torch.testing.assert_close(
+                expected["next", "episode_reward"].squeeze(-1),
+                torch.tensor(
+                    [
+                        [1.0, 2.0, 3.0, 4.0, 1.0, 2.0],
+                        [2.0, 4.0, 6.0, 2.0, 4.0, 6.0],
+                        [3.0, 6.0, 3.0, 6.0, 3.0, 6.0],
+                    ]
+                ),
+            )
+        finally:
+            pool_env.close(raise_if_closed=False)
+            serial_env.close(raise_if_closed=False)
+
     @set_capture_non_tensor_stack(False)
     def test_shared_memory_exchange(self, make_envs):
         env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")
@@ -1208,15 +1253,20 @@ class TestAsyncEnvPool:
             assert stats["avg_batch_to_action_ms"] > 0
             assert stats["consumer_busy_fraction"] > 0
 
-            invalid = next_step.clone()
-            invalid.set("unknown_input", torch.zeros(invalid.shape))
+            extra = next_step.clone()
+            extra.set("unknown_input", torch.arange(env.num_envs, dtype=torch.float32))
+            env.async_step_send(extra)
+            echoed = env.async_step_recv(min_get=env.num_envs)
+            torch.testing.assert_close(echoed["unknown_input"], extra["unknown_input"])
+
+            invalid = echoed.exclude("next")
+            invalid.set("observation", NonTensorStack(*["a"] * env.num_envs))
             with pytest.raises(KeyError) as exc_info:
                 env.async_step_send(invalid)
             message = str(exc_info.value)
-            assert "unknown_input" in message
+            assert "observation" in message
             assert "fixed exchange schema" in message
             assert "action" in message
-            assert "observation" in message
         finally:
             env._maybe_shutdown()
 
