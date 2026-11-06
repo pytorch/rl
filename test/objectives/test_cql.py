@@ -692,8 +692,9 @@ class TestCQL(LossModuleTestBase):
                 (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
 
+    @pytest.mark.parametrize("with_lagrange", [False, True])
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_cql_reduction(self, reduction):
+    def test_cql_reduction(self, reduction, with_lagrange):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
@@ -713,9 +714,11 @@ class TestCQL(LossModuleTestBase):
             delay_qvalue=False,
             reduction=reduction,
             scalar_output_mode="exclude" if reduction == "none" else None,
+            with_lagrange=with_lagrange,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
+        assert ("loss_alpha_prime" in loss.keys()) == with_lagrange
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss"):
@@ -725,6 +728,10 @@ class TestCQL(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+        if with_lagrange and reduction != "sum":
+            torch.testing.assert_close(
+                loss["loss_alpha_prime"], -0.5 * loss["loss_cql"]
+            )
 
     @pytest.mark.parametrize("num_random", [1, 4])
     def test_cql_regularizer_matches_cql_h(self, num_random):
@@ -800,6 +807,59 @@ class TestCQL(LossModuleTestBase):
                 )
             )
         torch.testing.assert_close(loss["loss_cql"], 2 * min_q_weight * per_head)
+
+    def test_cql_lagrange_gradients_match_reference(self):
+        """With ``with_lagrange=True`` each parameter group gets the CQL(H) Lagrange gradient.
+
+        Following the reference implementation, the Q-networks receive
+        ``alpha_prime`` times the gradient of the conservative term and nothing
+        from ``loss_alpha_prime``, while ``log_alpha_prime`` receives
+        ``-alpha_prime * ((c_1 + c_2) / 2 - lagrange_thresh)`` and nothing from
+        ``loss_cql``. Both hold when the losses are summed into one backward
+        pass. The conservative terms come from the loss without Lagrange
+        multiplier, evaluated on the same random draws.
+        """
+        alpha_prime, lagrange_thresh = 3.0, 2.0
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql()
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        torch.manual_seed(self.seed)
+        plain_loss_fn = CQLLoss(actor, qvalue, delay_qvalue=False)
+        torch.manual_seed(self.seed)
+        lagrange_loss_fn = CQLLoss(
+            actor,
+            qvalue,
+            delay_qvalue=False,
+            with_lagrange=True,
+            lagrange_thresh=lagrange_thresh,
+        )
+        with torch.no_grad():
+            lagrange_loss_fn.log_alpha_prime.fill_(math.log(alpha_prime))
+        torch.manual_seed(self.seed)
+        plain = plain_loss_fn(td.clone())
+        torch.manual_seed(self.seed)
+        lagrange = lagrange_loss_fn(td.clone())
+
+        plain_q_params = list(plain_loss_fn.qvalue_network_params.values(True, True))
+        lagrange_q_params = list(
+            lagrange_loss_fn.qvalue_network_params.values(True, True)
+        )
+        conservative_grads = torch.autograd.grad(plain["loss_cql"], plain_q_params)
+        *q_grads, alpha_prime_grad = torch.autograd.grad(
+            lagrange["loss_cql"] + lagrange["loss_alpha_prime"],
+            [*lagrange_q_params, lagrange_loss_fn.log_alpha_prime],
+        )
+
+        conservative = plain["loss_cql"].detach()
+        torch.testing.assert_close(
+            lagrange["loss_cql"], alpha_prime * (conservative - 2 * lagrange_thresh)
+        )
+        for q_grad, conservative_grad in zip(q_grads, conservative_grads):
+            torch.testing.assert_close(q_grad, alpha_prime * conservative_grad)
+        torch.testing.assert_close(
+            alpha_prime_grad, -alpha_prime * (conservative / 2 - lagrange_thresh)
+        )
 
     def test_cql_priority_weights(self):
         torch.manual_seed(self.seed)
