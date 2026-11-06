@@ -103,8 +103,8 @@ def train_start(
         collector_policy = actor
         postproc = WorkerGAEPostproc(adv_module, version_counter)
         weight_sync_schemes = {
-            "policy": SharedMemWeightSyncScheme(atomic=True),
-            "postproc.adv_module": SharedMemWeightSyncScheme(atomic=True),
+            "policy": SharedMemWeightSyncScheme(),
+            "postproc.adv_module": SharedMemWeightSyncScheme(),
         }
     else:
         collector_policy = actor

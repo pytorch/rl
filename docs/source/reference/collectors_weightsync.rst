@@ -202,13 +202,14 @@ SharedMemWeightSyncScheme
 Uses shared memory buffers for weight updates: nothing is pickled or sent through a pipe. The
 ``atomic`` argument selects how workers read them:
 
-- ``atomic=False`` (the current default): the shared buffers are the sender's own weights and the
-  workers bind them as their parameters (zero-copy). Workers see every in-place change on the
-  sender, including an optimizer step, without any ``send()`` call, and a policy call can read a
-  mix of two weight versions while the sender writes.
-- ``atomic=True``: the sender copies the new weights into one staging buffer per device on
-  ``send()``, and each worker copies that buffer into its own parameters between two policy calls
-  (the collector, or the :class:`~torchrl.modules.InferenceServer`, holds a lock around each call).
+- ``atomic=False`` (the current behavior, also used when ``atomic`` is not passed): the shared
+  buffers are the sender's own weights and the workers bind them as their parameters (zero-copy).
+  Workers see every in-place change on the sender, including an optimizer step, without any
+  ``send()`` call, and a policy call can read a mix of two weight versions while the sender writes.
+- ``atomic=True``: on ``send()`` the sender copies the new weights into a staging buffer (one per
+  device, or one per worker with ``per_worker_weights=True``), and each worker copies that buffer
+  into its own parameters between two policy calls (the collector, or the
+  :class:`~torchrl.modules.InferenceServer`, holds a lock around each call).
   A policy call always reads a single, complete version of the weights, and training the sender's
   model does not change the workers' weights until the next ``send()``.
 

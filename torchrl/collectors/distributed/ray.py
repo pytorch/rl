@@ -649,7 +649,7 @@ class RayCollector(BaseCollector):
                 from torchrl.weight_update import SharedMemWeightSyncScheme
 
                 collector_kwarg["weight_sync_schemes"] = {
-                    "policy": SharedMemWeightSyncScheme()
+                    "policy": SharedMemWeightSyncScheme(atomic=False)
                 }
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (

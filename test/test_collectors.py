@@ -44,7 +44,7 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictSequential,
 )
-from torch import nn
+from torch import multiprocessing as mp, nn
 from torchrl import service_backend
 from torchrl._utils import (
     _make_ordinal_device,
@@ -4266,6 +4266,15 @@ def weight_reset(m):
         m.reset_parameters()
 
 
+def _report_received_weights(scheme, requests, replies):
+    model = nn.Linear(2, 2)
+    scheme.init_on_receiver(model_id="policy", model=model, worker_idx=0)
+    scheme.connect(worker_idx=0)
+    while requests.get() == "report":
+        replies.put(TensorDict.from_module(model).data.clone())
+    scheme.shutdown()
+
+
 def _stop_interruptor(interruptor):
     interruptor.stop_collection()
 
@@ -4827,12 +4836,15 @@ class TestUpdateParams:
     @pytest.mark.parametrize("atomic", [None, False, True])
     def test_shared_mem_atomic_default_warns(self, atomic):
         scheme = SharedMemWeightSyncScheme(atomic=atomic)
-        with warnings.catch_warnings(record=True) as record:
-            warnings.simplefilter("always")
-            scheme.init_on_sender(
-                model=nn.Linear(2, 2),
-                devices=[torch.device("cpu")],
-            )
+        try:
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                scheme.init_on_sender(
+                    model=nn.Linear(2, 2),
+                    devices=[torch.device("cpu")],
+                )
+        finally:
+            scheme.shutdown()
         warned = [
             w
             for w in record
@@ -4840,7 +4852,34 @@ class TestUpdateParams:
         ]
         assert len(warned) == (atomic is None)
 
-    def test_shared_mem_async_send_survives_dead_worker(self, monkeypatch):
+    def test_shared_mem_atomic_standalone_send_reads_the_model(self):
+        """send() without weights pushes the model given to init_on_sender."""
+        train = nn.Linear(2, 2)
+        scheme = SharedMemWeightSyncScheme(atomic=True)
+        scheme.init_on_sender(model=train, devices=[torch.device("cpu")])
+        ctx = mp.get_context("spawn")
+        requests, replies = ctx.Queue(), ctx.Queue()
+        proc = ctx.Process(
+            target=_report_received_weights, args=(scheme, requests, replies)
+        )
+        proc.start()
+        try:
+            scheme.connect()
+            with torch.no_grad():
+                train.weight.fill_(3.0)
+                train.bias.fill_(-1.0)
+            scheme.send()
+            requests.put("report")
+            received = replies.get(timeout=60)
+        finally:
+            requests.put("stop")
+            proc.join(30)
+            scheme.shutdown()
+        torch.testing.assert_close(received["weight"], torch.full((2, 2), 3.0))
+        torch.testing.assert_close(received["bias"], torch.full((2,), -1.0))
+
+    @pytest.mark.parametrize("sync", [False, True])
+    def test_shared_mem_atomic_send_survives_dead_worker(self, sync, monkeypatch):
         monkeypatch.setattr(torchrl.weight_update._shared, "WEIGHT_SYNC_TIMEOUT", 1.0)
         policy = TensorDictModule(
             TestUpdateParams.SlowTwoReadModule(),
@@ -4854,7 +4893,7 @@ class TestUpdateParams:
             frames_per_batch=4,
             total_frames=-1,
             weight_sync_schemes={
-                "policy": SharedMemWeightSyncScheme(atomic=True, sync=False)
+                "policy": SharedMemWeightSyncScheme(atomic=True, sync=sync)
             },
         )
         try:

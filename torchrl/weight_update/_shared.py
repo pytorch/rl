@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import warnings
 from collections.abc import Callable
+from queue import Empty
 from typing import Any
 
 import torch
@@ -359,21 +360,23 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
     Two modes are available, selected by ``atomic``:
 
-    - ``atomic=False`` (the current default): the shared buffers are the
-      sender's own weights, and each worker binds them as its parameters. The
-      workers see every in-place change on the sender, including an optimizer
-      step, without any ``send()`` call. Because those writes land while a
+    - ``atomic=False`` (the current behavior, also used when ``atomic`` is
+      not passed): the shared buffers are the sender's own weights, and each
+      worker binds them as its parameters. The workers see every in-place
+      change on the sender, including an optimizer step, without any
+      ``send()`` call. Because those writes land while a
       worker's policy is running, a policy call can read a mix of two weight
       versions.
-    - ``atomic=True``: the sender copies the weights into one shared staging
-      buffer per device on ``send()``, and each worker copies that buffer into
+    - ``atomic=True``: the sender copies the weights into a shared staging
+      buffer on ``send()`` (one per device, or one per worker with
+      ``per_worker_weights=True``), and each worker copies that buffer into
       its own private parameters while holding the lock that the receiving
       collector (or :class:`~torchrl.modules.InferenceServer`) holds around
       each policy call. A policy call therefore always reads a single, complete
       version of the weights, and workers only see new weights after
       ``send()`` (for instance through ``update_policy_weights_()``). Memory
-      grows by one copy of the weights per worker plus one staging buffer per
-      device, and each update costs one extra copy on the sender and on every
+      grows by one copy of the weights per worker plus the staging buffers,
+      and each update costs one extra copy on the sender and on every
       worker.
 
     The default changes to ``atomic=True`` in v0.16. Code that trains the
@@ -386,10 +389,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             ``"tensordict"`` or ``"state_dict"``. Defaults to ``"tensordict"``.
         sync (bool, optional): If ``True``, ``send()`` blocks until every
             receiver acknowledges. If ``False``, ``send()`` returns immediately;
-            with ``atomic=True`` the next ``send()`` first waits (up to
-            ``WEIGHT_SYNC_TIMEOUT`` seconds per worker) for the previous
-            acknowledgments, so that a staging buffer is never overwritten
-            while a worker copies it. Defaults to ``True``.
+            with ``atomic=True`` the next ``send()`` first waits for the
+            previous acknowledgments, so that a staging buffer is never
+            overwritten while a worker copies it. With ``atomic=True`` each
+            wait lasts at most ``WEIGHT_SYNC_TIMEOUT`` seconds per worker, so a
+            dead worker does not block the sender. Defaults to ``True``.
         per_worker_weights (bool, optional): If ``True``, each worker
             maintains independent weights (for distinct policy factories). If
             ``False``, workers on the same device share the same weight buffer.
@@ -447,7 +451,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self._receiver_instruction_queue: mp.Queue | None = None
         self._receiver_ack_queue: mp.Queue | None = None
 
-        self._unacknowledged_workers: set[int] = set()
+        self._pending_acks: dict[int, int] = {}
+        self._stalled_workers: set[int] = set()
+        self._sender_weights_source: nn.Module | TensorDictBase | None = None
 
     def _init_on_sender_impl(
         self,
@@ -591,6 +597,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self.model_id = model_id
         if context is not None:
             self.context = context
+        else:
+            self._sender_weights_source = model if model is not None else weights
 
     def _get_params_map(
         self,
@@ -973,6 +981,20 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             # Extract fresh weights from the model (base class handles this)
             fresh_weights = super().prepare_weights(None, model_id, strategy, context)
 
+        if fresh_weights is None and self.atomic:
+            source = self._sender_weights_source
+            if isinstance(source, nn.Module):
+                fresh_weights = strategy.extract_weights(source)
+            elif source is not None:
+                fresh_weights = source
+            else:
+                raise RuntimeError(
+                    "SharedMemWeightSyncScheme(atomic=True).send() was called "
+                    "without weights, and the scheme has no model to read them "
+                    "from: pass the weights to send(), or initialize the scheme "
+                    "with a context, a model or weights."
+                )
+
         if fresh_weights is None:
             return None
 
@@ -1002,13 +1024,14 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         """Send weights via shared memory (in-place update).
 
         For SharedMemWeightSyncScheme:
-        1. With ``atomic=True`` and ``sync=False``, waits until every worker
-           has finished copying the previous update, so that a staging buffer
-           is never written while a worker reads it
+        1. With ``atomic=True``, waits until every worker has finished
+           copying the previous update, so that a staging buffer is never
+           written while a worker reads it
         2. Updates the shared memory buffer(s) in-place
         3. _send_instruction() tells workers to apply the new weights (with
            ``atomic=True``, between two policy calls)
-        4. If sync=True, waits for acknowledgments from all workers
+        4. If sync=True, waits for acknowledgments from all workers (with
+           ``atomic=True``, at most ``WEIGHT_SYNC_TIMEOUT`` seconds per worker)
 
         Args:
             weights: Weights to send. Can be:
@@ -1055,31 +1078,56 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # Send instruction to workers' background threads to apply the weights
         self._send_instruction(instruction="receive", worker_ids=target_workers)
 
-        # Wait for acknowledgments if in synchronous mode
-        if self.sync:
+        if self.atomic:
+            if target_workers is None:
+                target_workers = list(self._instruction_queues)
+            elif isinstance(target_workers, int):
+                target_workers = [target_workers]
+            for worker_idx in target_workers:
+                self._pending_acks[worker_idx] = (
+                    self._pending_acks.get(worker_idx, 0) + 1
+                )
+            if self.sync:
+                self._wait_for_unacknowledged_workers()
+        elif self.sync:
             self._wait_for_ack(worker_ids=target_workers)
-        elif not self.atomic:
-            return
-        elif target_workers is None:
-            self._unacknowledged_workers.update(self._instruction_queues)
-        elif isinstance(target_workers, int):
-            self._unacknowledged_workers.add(target_workers)
-        else:
-            self._unacknowledged_workers.update(target_workers)
 
     def _wait_for_unacknowledged_workers(self) -> None:
-        """Collect the acknowledgments that ``send(sync=False)`` left pending.
+        """Collect the acknowledgments of the updates sent with ``atomic=True``.
 
         A worker acknowledges once it has copied the staging buffer into its
-        parameters. Until then the buffer must not be overwritten. Each worker
-        gets ``WEIGHT_SYNC_TIMEOUT`` seconds, so a worker that died does not
-        block the sender forever; a timeout is logged as a warning.
+        parameters. Until then the buffer must not be overwritten. Every
+        instruction is acknowledged once, so a late acknowledgment is counted
+        against the update it belongs to rather than the next one.
+
+        A worker gets ``WEIGHT_SYNC_TIMEOUT`` seconds. If it does not answer in
+        time, a warning is logged and the worker is treated as stalled: later
+        sends only collect whatever it has acknowledged in the meantime, without
+        waiting, until it catches up. A dead worker therefore does not block
+        the sender.
         """
-        if not self._unacknowledged_workers:
-            return
-        worker_ids = sorted(self._unacknowledged_workers)
-        self._unacknowledged_workers.clear()
-        self._wait_for_ack(worker_ids=worker_ids, timeout=WEIGHT_SYNC_TIMEOUT)
+        for worker_idx, pending in list(self._pending_acks.items()):
+            stalled = worker_idx in self._stalled_workers
+            while pending:
+                try:
+                    self._ack_queues[worker_idx].get(
+                        timeout=0 if stalled else WEIGHT_SYNC_TIMEOUT
+                    )
+                except Empty:
+                    if not stalled:
+                        torchrl_logger.warning(
+                            f"Worker {worker_idx} did not acknowledge a weight "
+                            f"update within {WEIGHT_SYNC_TIMEOUT}s; its staging "
+                            "buffer is overwritten while it may still be reading it."
+                        )
+                        self._stalled_workers.add(worker_idx)
+                    break
+                pending -= 1
+            if pending:
+                self._pending_acks[worker_idx] = pending
+            else:
+                del self._pending_acks[worker_idx]
+                self._stalled_workers.discard(worker_idx)
 
     @property
     def weights(self) -> Any | None:
@@ -1204,8 +1252,12 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         that a policy call reads either the previous or the new weights, never a
         mix of both. Collectors and :class:`~torchrl.modules.InferenceServer`
         expose this lock as ``_weight_update_lock``; receivers without such a
-        context get a no-op context.
+        context get a no-op context. With ``atomic=False`` the sender writes
+        the workers' parameters directly, so the lock cannot help and is not
+        taken.
         """
+        if not self.atomic:
+            return contextlib.nullcontext()
         return getattr(self.context, "_weight_update_lock", contextlib.nullcontext())
 
     def _apply_shared_weights(self) -> None:
@@ -1248,6 +1300,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         state = super().__getstate__()
         # mp.Queue objects can be pickled and shared across processes
         # Keep them in state so workers have access
+        state["_sender_weights_source"] = None
         return state
 
     def shutdown(self) -> None:
