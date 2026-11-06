@@ -518,6 +518,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(
             create_env_fn, num_workers, frames_per_batch
         )
+        self.requested_frames_per_batch = total_frames_per_batch
 
         # Set up basic configuration
         self.set_truncated = set_truncated
@@ -604,7 +605,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         )
 
         # Set up split trajectories
-        self.requested_frames_per_batch = total_frames_per_batch
         self.reset_when_done = reset_when_done
         self._setup_split_trajs(split_trajs, reset_when_done)
 
@@ -1071,6 +1071,13 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.cat_results = cat_results
 
     def _check_replay_buffer_init(self):
+        """Initialise an empty replay-buffer storage before the workers write to it.
+
+        The storage is laid out from a fake batch of the same shape as the
+        batches the workers write, ``(*env_batch_size, time)`` with ``time``
+        the number of steps each worker collects per env, so that a storage
+        with fewer dimensions than that batch stores rows of the right length.
+        """
         if self.replay_buffer is None:
             return
 
@@ -1154,8 +1161,13 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 fake_td["collector", "traj_ids"] = torch.zeros(
                     fake_td.shape, dtype=torch.long
                 )
+                time_steps = -(
+                    -self.frames_per_batch_worker(worker_idx=0)
+                    // max(fake_td.numel(), 1)
+                )
+                fake_td = fake_td.unsqueeze(-1).expand(*fake_td.shape, time_steps)
                 # Use extend to avoid time-related transforms to fail
-                self.replay_buffer.extend(fake_td.unsqueeze(-1))
+                self.replay_buffer.extend(fake_td)
             self.replay_buffer.empty()
 
     def _should_init_replay_buffer_from_worker(self, storage):

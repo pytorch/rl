@@ -7137,6 +7137,33 @@ class TestCollectorRB:
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
 
+    def test_multi_collector_rb_batched_env_writes_time_rows(self):
+        """A batched env writes rows of frames_per_batch // num_envs steps into a 1-D storage."""
+        make_env = functools.partial(CountingEnv, max_steps=100, batch_size=[2])
+        probe = make_env()
+        try:
+            policy = CountingEnvCountPolicy(probe.action_spec)
+        finally:
+            probe.close(raise_if_closed=False)
+        rb = ReplayBuffer(storage=LazyTensorStorage(16), shared=True)
+        collector = MultiSyncCollector(
+            [make_env],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=8,
+            total_frames=16,
+        )
+        try:
+            for data in collector:
+                assert data is None
+        finally:
+            collector.shutdown()
+        observations = rb[: len(rb)]["observation"].squeeze(-1)
+        expected = torch.tensor(
+            [[0, 1, 2, 3], [0, 1, 2, 3], [4, 5, 6, 7], [4, 5, 6, 7]]
+        )
+        torch.testing.assert_close(observations, expected.to(observations.dtype))
+
     def test_multi_async_replay_buffer_device_metadata(self):
         probe = CountingEnv()
         try:
