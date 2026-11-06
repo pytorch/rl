@@ -2744,8 +2744,10 @@ if __name__ == "__main__":
             state_dict = collector.state_dict()
             policy_state_dict = policy.state_dict()
             # check they don't match
-            workers_see_unsent_weights = not torch.cuda.is_available() and not (
-                scheme is not None and scheme.atomic
+            workers_see_unsent_weights = (
+                not torch.cuda.is_available()
+                and not isinstance(scheme, MultiProcessWeightSyncScheme)
+                and not (scheme is not None and scheme.atomic)
             )
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
@@ -4803,7 +4805,19 @@ class TestUpdateParams:
             second = self.second.detach().clone()
             return torch.zeros_like(state), first, second
 
-    def test_shared_mem_update_never_tears_running_policy(self):
+    @pytest.mark.parametrize(
+        "make_scheme",
+        [
+            pytest.param(
+                functools.partial(SharedMemWeightSyncScheme, atomic=True),
+                id="SharedMemWeightSyncScheme-atomic",
+            ),
+            pytest.param(
+                MultiProcessWeightSyncScheme, id="MultiProcessWeightSyncScheme"
+            ),
+        ],
+    )
+    def test_update_never_tears_running_policy(self, make_scheme):
         policy = TensorDictModule(
             TestUpdateParams.SlowTwoReadModule(),
             in_keys=["state"],
@@ -4815,7 +4829,7 @@ class TestUpdateParams:
             policy,
             frames_per_batch=4,
             total_frames=-1,
-            weight_sync_schemes={"policy": SharedMemWeightSyncScheme(atomic=True)},
+            weight_sync_schemes={"policy": make_scheme()},
         )
         num_updates = 15
         torn_calls = 0

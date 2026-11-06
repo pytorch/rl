@@ -1,17 +1,45 @@
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from typing import Any
 
 import torch
 from tensordict import TensorDictBase
 from torch import multiprocessing as mp, nn
+from torchrl._utils import logger as torchrl_logger
 from torchrl.weight_update._shared import SharedMemWeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
     register_weight_sync_backend,
     TransportBackend,
 )
+
+
+def _copy_weights(
+    weights: TensorDictBase | dict | None, share: bool = False
+) -> TensorDictBase | dict | None:
+    """Return a copy of ``weights`` that shares no storage with them.
+
+    With ``share=True``, CPU tensors of the copy are moved to shared memory, so
+    that pickling them through a queue to several workers neither moves the
+    original tensors to shared memory nor races to move the copy.
+    """
+    if isinstance(weights, TensorDictBase):
+        copy = weights.detach().clone()
+        if share:
+            copy.share_memory_()
+        return copy
+    if isinstance(weights, dict):
+        copy = {}
+        for key, value in weights.items():
+            if isinstance(value, torch.Tensor):
+                value = value.detach().clone()
+                if share:
+                    value.share_memory_()
+            copy[key] = value
+        return copy
+    return weights
 
 
 @register_weight_sync_backend("process")
@@ -22,9 +50,15 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
     Unlike the parent SharedMemWeightSyncScheme which uses shared memory for in-place
     updates, this scheme sends actual weight copies through queues to workers.
 
+    Each worker keeps its own copy of the weights: changes made to the sender's
+    model (for instance an optimizer step) only reach the workers through
+    ``send()``, which copies the weights at the time it is called.
+
     A background thread on the receiver side listens for "receive" instructions
     from the sender. When an instruction arrives, the thread receives the weights
-    from the weight queue and applies them to the model.
+    from the weight queue and copies them into the model while holding the lock
+    that the receiving collector holds around each policy call, so a policy
+    call always reads a single, complete version of the weights.
 
     It follows the same two-phase pattern as SharedMemWeightSyncScheme:
 
@@ -299,7 +333,9 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                 - list[int]: Send to specific workers
 
         Note: If sync=True (default), this is a blocking call that ensures
-        specified workers are updated before returning.
+        specified workers are updated before returning. The weights are copied
+        before they are queued, so changes made to them after ``send()``
+        returns never reach the workers.
         """
         from torchrl.collectors.utils import _stage_unshareable_weights_on_cpu
 
@@ -318,7 +354,9 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             strategy=self._strategy,
             context=context,
         )
-        prepared_weights = _stage_unshareable_weights_on_cpu(prepared_weights)
+        prepared_weights = _copy_weights(
+            _stage_unshareable_weights_on_cpu(prepared_weights), share=True
+        )
 
         transports = list(self._iterate_transports(worker_ids))
 
@@ -393,10 +431,14 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
 
         # Send to workers sequentially via queues (no ACK - workers are still initializing)
         # This allows GC to clean up each worker's weights before creating the next
+        copies = {}
         for i, transport in enumerate(self._iterate_transports()):
             if worker_idx is not None and i != worker_idx:
                 continue
-            worker_weights = params_map[i]
+            source = params_map[i]
+            if id(source) not in copies:
+                copies[id(source)] = _copy_weights(source, share=True)
+            worker_weights = copies[id(source)]
             if hasattr(transport, "send_weights_async"):
                 transport.send_weights_async(worker_weights, model_id=self._model_id)
             else:
@@ -446,10 +488,60 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
 
         # Apply weights to model
         if weights is not None and self.model is not None:
-            self._strategy.apply_weights(self.model, weights, inplace=False)
+            self._strategy.apply_weights(
+                self.model, _copy_weights(weights), inplace=False
+            )
 
         # Start background receiver thread
         self._start_background_receiver()
+
+    def _weight_update_lock(self) -> contextlib.AbstractContextManager:
+        """Return the lock that the receiving context holds around policy calls.
+
+        Weights are always copied into the worker's own parameters, so the
+        copy is made while holding this lock whatever the value of ``atomic``.
+        """
+        return getattr(self.context, "_weight_update_lock", contextlib.nullcontext())
+
+    def _apply_received_weights(self, weights: Any) -> None:
+        """Copy received weights into the model and cascade the update.
+
+        The cascade through the context's ``update_policy_weights_`` reads the
+        model's freshly copied parameters, so a context whose policy is the
+        model itself does not copy the weights a second time.
+        """
+        model = self.model
+        if weights is not None and model is not None:
+            self._strategy.apply_weights(model, weights, inplace=True)
+            weights = self._strategy.extract_weights(model)
+        if weights is None:
+            return
+        model_id = self._model_id or "policy"
+        if self.context is not None and hasattr(self.context, "update_policy_weights_"):
+            self.context.update_policy_weights_(
+                model_id=model_id, policy_or_weights=weights
+            )
+
+    def receive(self, timeout: float | None = None) -> Any | None:
+        """Receive the next weights from the queue and apply them to the model.
+
+        The queue is read without holding the weight-update lock, so a policy
+        call is only blocked while the weights are copied.
+        """
+        if not self.initialized_on_receiver:
+            raise RuntimeError(
+                "Must be initialized on receiver before receiving weights"
+            )
+        if not self.synchronized_on_receiver:
+            raise RuntimeError(
+                "Must be synchronized on receiver before receiving weights"
+            )
+        if self._receiver_transport is None:
+            return None
+        weights = self._receiver_transport.receive_weights(timeout=timeout)
+        with self._weight_update_lock():
+            self._apply_received_weights(weights)
+        return weights
 
     def _background_receive_loop(self):
         """Background thread loop that waits for instructions and receives weights.
@@ -457,12 +549,10 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         This loop:
         1. Waits for a "receive" instruction from the sender
         2. Receives weights from the weight queue
-        3. Applies them to the model
+        3. Copies them into the model while holding the weight-update lock
         4. Sends an acknowledgment back to the sender
         5. Repeats until stop event is set or "stop" instruction received
         """
-        from torchrl._utils import logger as torchrl_logger
-
         while not self._stop_event.is_set():
             try:
                 instruction = self._wait_for_instruction()
@@ -470,28 +560,10 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                     # Stop event was set or timeout
                     continue
                 if instruction == "receive":
-                    # Receive weights from transport (blocking)
                     if self._receiver_transport is not None:
-                        weights = self._receiver_transport.receive_weights(
-                            model=self.model,
-                            strategy=self._strategy,
-                        )
-
-                        if weights is not None:
-                            # Cascade weight update to sub-collectors if context supports it.
-                            # When the context is a leaf Collector, its
-                            # update_policy_weights_ also bumps the local
-                            # PolicyVersion transform — so we don't need a
-                            # separate increment_version() call here.
-                            model_id = self._model_id or "policy"
-                            if self.context is not None and hasattr(
-                                self.context, "update_policy_weights_"
-                            ):
-                                self.context.update_policy_weights_(
-                                    model_id=model_id, policy_or_weights=weights
-                                )
-
-                    # Send acknowledgment
+                        weights = self._receiver_transport.receive_weights()
+                        with self._weight_update_lock():
+                            self._apply_received_weights(weights)
                     self._send_ack("updated")
 
                 elif instruction == "stop":
