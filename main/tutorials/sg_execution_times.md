@@ -1,6 +1,6 @@
 # Computation times
 
-**07:03.081** total execution time for 32 files **from tutorials**:
+**07:03.738** total execution time for 32 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -10,7 +10,7 @@
 | [TorchRL objectives: Coding a DDPG loss](coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`coding_ddpg.py`) | 00:29.722 | 0.0 |
 | [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`multiagent_ppo.py`) | 00:29.481 | 0.0 |
 | [LLM Wrappers in TorchRL](llm_wrappers.html#sphx-glr-tutorials-llm-wrappers-py) (`llm_wrappers.py`) | 00:29.455 | 0.0 |
-| [Exporting Rollout data to LeRobot](lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`lerobot_export.py`) | 00:27.534 | 0.0 |
+| [Exporting Rollout data to LeRobot](lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`lerobot_export.py`) | 00:28.191 | 0.0 |
 | [TorchRL envs](torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`torchrl_envs.py`) | 00:27.228 | 0.0 |
 | [Exporting TorchRL modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:25.316 | 0.0 |
 | [Reinforcement Learning (PPO) with TorchRL Tutorial](coding_ppo.html#sphx-glr-tutorials-coding-ppo-py) (`coding_ppo.py`) | 00:24.108 | 0.0 |
