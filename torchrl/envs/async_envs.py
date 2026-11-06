@@ -556,8 +556,19 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         data written by :meth:`reset`, :meth:`step` and
         :meth:`step_and_maybe_reset` all share one type and can be stacked
         together (e.g. by a collector writing into a preallocated rollout).
+
+        The stack is built fresh on each call, so the caller owns the entry
+        and may modify it, with its items created directly on the
+        tensordict's device: moving a stack to a device while ``set``
+        validates it costs more than the step of a light environment.
         """
-        env_idx_nt = NonTensorStack(*range(tensordict.shape[0]))
+        device = tensordict.device
+        env_idx_nt = NonTensorStack(
+            *(
+                NonTensorData(index, device=device)
+                for index in range(tensordict.shape[0])
+            )
+        )
         if env_idx_nt.shape != tensordict.shape:
             env_idx_nt = expand_as_right(env_idx_nt, tensordict)
         tensordict.set(self._env_idx_key, env_idx_nt)
@@ -629,6 +640,8 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                     )
             tensordict[self._env_idx_key] = NonTensorStack(*env_index)
             env_idx = env_index
+        if tensordict is not None and self._env_idx_key in tensordict.keys():
+            tensordict = tensordict.exclude(self._env_idx_key)
         return tensordict, env_idx
 
     @abc.abstractmethod
