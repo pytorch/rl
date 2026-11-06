@@ -96,7 +96,7 @@ def example_multi_collector_shared_memory(smoke: bool = False):
     env.close()
 
     # Shared memory is more efficient for frequent updates
-    scheme = SharedMemWeightSyncScheme(strategy="tensordict")
+    scheme = SharedMemWeightSyncScheme(strategy="tensordict", atomic=True)
 
     print("Creating multi-collector with shared memory...")
     collector = Collector(
@@ -110,7 +110,6 @@ def example_multi_collector_shared_memory(smoke: bool = False):
         auto_register_policy_transforms=True,
     )
 
-    # Workers automatically see weight updates via shared memory
     print("Collecting data...")
     for i, data in enumerate(collector):
         print(f"Iteration {i}: Collected {data.numel()} transitions")
@@ -148,7 +147,7 @@ def main(smoke: bool = False):
     print("\nKey takeaways:")
     print("  • MultiProcessWeightSyncScheme: Good for general multiprocess scenarios")
     print(
-        "  • SharedMemWeightSyncScheme: Fast zero-copy updates for same-machine workers"
+        "  • SharedMemWeightSyncScheme: Fast updates for same-machine workers, no pickling"
     )
     print("=" * 70 + "\n")
 

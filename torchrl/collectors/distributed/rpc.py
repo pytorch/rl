@@ -476,7 +476,7 @@ class RPCCollector(BaseCollector):
                 from torchrl.weight_update import SharedMemWeightSyncScheme
 
                 collector_kwarg["weight_sync_schemes"] = {
-                    "policy": SharedMemWeightSyncScheme()
+                    "policy": SharedMemWeightSyncScheme(atomic=False)
                 }
 
         self.postproc = postproc

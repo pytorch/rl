@@ -58,6 +58,7 @@ class SharedMemWeightSyncSchemeConfig(ConfigBase):
     strategy: str = "tensordict"  # "tensordict" or "state_dict"
     sync: bool = True
     per_worker_weights: bool = False
+    atomic: bool | None = None
 
     def __post_init__(self) -> None:
         """Post-initialization hook for shared memory weight sync scheme configurations."""

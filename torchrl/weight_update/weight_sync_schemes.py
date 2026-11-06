@@ -998,8 +998,9 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         Returns:
             The received weights if available, None otherwise.
 
-        Note: For SharedMemWeightSyncScheme, this always returns None
-        since workers automatically see updates via shared memory.
+        Note: For SharedMemWeightSyncScheme, this applies the current shared
+        buffer to the model; the background receiver thread already does so on
+        every ``send()``.
         """
         if not self.initialized_on_receiver:
             raise RuntimeError(
