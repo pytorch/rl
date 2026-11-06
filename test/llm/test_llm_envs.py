@@ -618,6 +618,8 @@ class TestCountdownRewardParser:
             pytest.param("7//2", 3, [7, 2], id="floor_division"),
             # "2.5" would otherwise consume 2 and 5 as two separate source numbers
             pytest.param("2.5*4", 10, [2, 5, 4], id="decimal_point"),
+            # ".5" would otherwise use the source number 5 as 0.5
+            pytest.param(".5*4", 2, [5, 4], id="leading_decimal_point"),
             pytest.param("...", 0, [1, 2], id="ellipsis"),
             pytest.param("()", 0, [1, 2], id="empty_tuple"),
             # int() refuses strings over sys.get_int_max_str_digits() (4300)
@@ -628,6 +630,23 @@ class TestCountdownRewardParser:
         # Each expression either reaches the target through a construct the
         # validator forbids, or makes an unguarded check raise; it must be
         # rejected with False, never raise.
+        assert (
+            CountdownRewardParser.validate_expression(expression, target, numbers)
+            is False
+        )
+
+    @pytest.mark.parametrize(
+        "expression,target,numbers",
+        [
+            pytest.param("10 / 0", 0, [10, 0], id="zero_division"),
+            pytest.param("3 * * 2", 9, [3, 2], id="spaced_power"),
+            pytest.param("7 / / 2", 3, [7, 2], id="spaced_floor_division"),
+        ],
+    )
+    def test_validate_expression_malformed_returns_false(
+        self, expression, target, numbers
+    ):
+        # Already False before this change; these pin the never-raises contract.
         assert (
             CountdownRewardParser.validate_expression(expression, target, numbers)
             is False
