@@ -547,6 +547,11 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
             suffix. Defaults to ``"checkpoint.h5"``.
         h5_kwargs (Dict[str, Any] or Tuple[Tuple[str, Any], ...]): kwargs to be
             passed to :meth:`h5py.File.create_dataset`.
+        auto_batch_size (bool or None, optional): controls batch-size inference
+            when loading the HDF5 checkpoint. Defaults to ``None``, which leaves
+            the argument unset in :meth:`tensordict.PersistentTensorDict.from_h5`
+            and follows TensorDict's default and metadata warnings. ``True`` or
+            ``False`` explicitly selects TensorDict's inference mode.
 
     .. note:: To prevent out-of-memory issues, the data of the H5 file will be temporarily written
         on memory-mapped tensors stored in shared file system. The physical memory usage may increase
@@ -564,6 +569,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
         done_keys=None,
         reward_keys=None,
         h5_kwargs=None,
+        auto_batch_size: bool | None = None,
         **kwargs,
     ):
         StorageCheckpointerBase.__init__(self)
@@ -576,6 +582,7 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
         self._load_hooks = [H5Combine(), Nested2TED(**ted2_kwargs)]
         self.kwargs = {} if h5_kwargs is None else dict(h5_kwargs)
         self.checkpoint_file = checkpoint_file
+        self.auto_batch_size = auto_batch_size
 
     def dumps(self, storage, path):
         path = self._get_path(path)
@@ -600,7 +607,12 @@ class H5StorageCheckpointer(NestedStorageCheckpointer):
 
     def loads(self, storage, path):
         path = self._get_path(path)
-        data = PersistentTensorDict.from_h5(path, auto_batch_size=True)
+        if self.auto_batch_size is None:
+            data = PersistentTensorDict.from_h5(path)
+        else:
+            data = PersistentTensorDict.from_h5(
+                path, auto_batch_size=self.auto_batch_size
+            )
         _len = data["_len"]
         if not _len:
             storage._len = 0

@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import functools
 import threading
+import warnings
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from unittest import mock
 
@@ -18,6 +19,7 @@ from _rb_common import _has_gym, _has_h5py, _has_tv
 from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
+    PersistentTensorDict,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -73,6 +75,9 @@ from torchrl.envs.transforms.transforms import (
 from torchrl.modules import RandomPolicy
 from torchrl.testing import CARTPOLE_VERSIONED, get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv
+
+if _has_h5py:
+    import h5py
 
 
 class TestEnsemble:
@@ -1205,6 +1210,58 @@ class TestCheckpointRoundTrip:
         rb_test.storage.checkpointer = checkpointer()
         rb_test.loads(tmpdir)
         assert_allclose_td(rb_test[:], rb[:])
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py required")
+class TestH5CheckpointInference:
+    @pytest.mark.parametrize("auto_batch_size", [None, False, True])
+    @pytest.mark.parametrize("legacy", [False, True])
+    def test_round_trip(self, auto_batch_size, legacy, tmp_path):
+        """Inference choices preserve transitions and propagate TensorDict warnings."""
+        rb = ReplayBuffer(storage=LazyTensorStorage(18, ndim=2))
+        rb.storage.checkpointer = H5StorageCheckpointer()
+        rb.extend(TestCheckpointRoundTrip._ted_batch(5, done=True))
+        rb.dumps(tmp_path)
+        path = tmp_path / "storage" / "checkpoint.h5"
+
+        if legacy:
+            with h5py.File(path, "r+") as file:
+
+                def remove_metadata(name, group):
+                    group.attrs.pop("__tensordict__", None)
+
+                remove_metadata("", file)
+                file.visititems(remove_metadata)
+
+        kwargs = {} if auto_batch_size is None else {"auto_batch_size": auto_batch_size}
+        with warnings.catch_warnings(record=True) as expected_warnings:
+            warnings.simplefilter("always", FutureWarning)
+            data = PersistentTensorDict.from_h5(path, **kwargs)
+            data.close()
+
+        restored = ReplayBuffer(storage=LazyTensorStorage(18, ndim=2))
+        restored.storage.checkpointer = H5StorageCheckpointer(**kwargs)
+        with (
+            warnings.catch_warnings(record=True) as actual_warnings,
+            mock.patch.object(
+                PersistentTensorDict, "from_h5", wraps=PersistentTensorDict.from_h5
+            ) as from_h5,
+        ):
+            warnings.simplefilter("always", FutureWarning)
+            restored.loads(tmp_path)
+
+        from_h5.assert_called_once_with(str(path), **kwargs)
+        assert len(restored) == len(rb) == 15
+        assert_allclose_td(restored[:], rb[:])
+        assert [
+            str(w.message)
+            for w in actual_warnings
+            if issubclass(w.category, FutureWarning)
+        ] == [
+            str(w.message)
+            for w in expected_warnings
+            if issubclass(w.category, FutureWarning)
+        ]
 
 
 @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
