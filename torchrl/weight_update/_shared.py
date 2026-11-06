@@ -54,6 +54,28 @@ def _synchronize_cuda(weights: TensorDictBase) -> None:
         torch.cuda.synchronize(device)
 
 
+_ACK_UPDATED = "updated"
+_ACK_FAILED = "failed"
+
+
+def _failed_ack(error: BaseException) -> str:
+    """Return the acknowledgment a receiver sends when it could not apply weights."""
+    return f"{_ACK_FAILED}: {type(error).__name__}: {error}"
+
+
+def _raise_on_failed_acks(model_id: str | None, failures: dict[int, str]) -> None:
+    """Raise if any worker acknowledged a weight update it could not apply."""
+    if not failures:
+        return
+    details = "; ".join(
+        f"worker {worker_idx}: {ack}" for worker_idx, ack in sorted(failures.items())
+    )
+    raise RuntimeError(
+        f"Weight update for model_id={model_id!r} failed on the receiver side "
+        f"({details})."
+    )
+
+
 def _log_weight_sync(
     *,
     model_id: str | None,
@@ -915,6 +937,10 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         Args:
             worker_ids: Which workers to wait for (None = all workers).
             timeout: Maximum time to wait (seconds). None means block indefinitely.
+
+        Raises:
+            RuntimeError: If a worker reports that it could not apply the
+                weights, once every targeted worker has answered.
         """
         if not self._ack_queues:
             return  # No ack queues, nothing to wait for
@@ -926,19 +952,24 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         else:
             target_workers = list(worker_ids)
 
+        failures = {}
         for worker_idx in target_workers:
             if worker_idx not in self._ack_queues:
                 raise ValueError(f"Worker {worker_idx} not registered")
             try:
                 ack = self._ack_queues[worker_idx].get(timeout=timeout)
-                if ack != "updated":
-                    torchrl_logger.warning(
-                        f"Unexpected ack from worker {worker_idx}: {ack}"
-                    )
             except Exception as e:
                 torchrl_logger.warning(
                     f"Timeout waiting for ack from worker {worker_idx}: {e}"
                 )
+                continue
+            if isinstance(ack, str) and ack.startswith(_ACK_FAILED):
+                failures[worker_idx] = ack
+            elif ack != _ACK_UPDATED:
+                torchrl_logger.warning(
+                    f"Unexpected ack from worker {worker_idx}: {ack}"
+                )
+        _raise_on_failed_acks(self._model_id, failures)
 
     def create_transport(self, **kwargs) -> TransportBackend:
         """Create shared memory transport.
@@ -1105,12 +1136,17 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         sends only collect whatever it has acknowledged in the meantime, without
         waiting, until it catches up. A dead worker therefore does not block
         the sender.
+
+        Raises:
+            RuntimeError: If a worker reports that it could not apply an
+                update, once every pending acknowledgment has been collected.
         """
+        failures = {}
         for worker_idx, pending in list(self._pending_acks.items()):
             stalled = worker_idx in self._stalled_workers
             while pending:
                 try:
-                    self._ack_queues[worker_idx].get(
+                    ack = self._ack_queues[worker_idx].get(
                         timeout=0 if stalled else WEIGHT_SYNC_TIMEOUT
                     )
                 except Empty:
@@ -1123,11 +1159,14 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                         self._stalled_workers.add(worker_idx)
                     break
                 pending -= 1
+                if isinstance(ack, str) and ack.startswith(_ACK_FAILED):
+                    failures[worker_idx] = ack
             if pending:
                 self._pending_acks[worker_idx] = pending
             else:
                 del self._pending_acks[worker_idx]
                 self._stalled_workers.discard(worker_idx)
+        _raise_on_failed_acks(self._model_id, failures)
 
     @property
     def weights(self) -> Any | None:
@@ -1220,9 +1259,17 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                     # Stop event was set or timeout
                     continue
                 if instruction == "receive":
-                    with self._weight_update_lock():
-                        self._apply_shared_weights()
-                    self._send_ack("updated")
+                    try:
+                        with self._weight_update_lock():
+                            self._apply_shared_weights()
+                    except Exception as error:
+                        torchrl_logger.exception(
+                            "SharedMemWeightSyncScheme: could not apply the weights "
+                            f"of model_id={self._model_id!r}."
+                        )
+                        self._send_ack(_failed_ack(error))
+                    else:
+                        self._send_ack(_ACK_UPDATED)
                 elif instruction == "stop":
                     break
                 else:

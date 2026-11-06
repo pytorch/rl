@@ -8,7 +8,11 @@ import torch
 from tensordict import TensorDictBase
 from torch import multiprocessing as mp, nn
 from torchrl._utils import logger as torchrl_logger
-from torchrl.weight_update._shared import SharedMemWeightSyncScheme
+from torchrl.weight_update._shared import (
+    _ACK_UPDATED,
+    _failed_ack,
+    SharedMemWeightSyncScheme,
+)
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
     register_weight_sync_backend,
@@ -58,7 +62,9 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
     from the sender. When an instruction arrives, the thread receives the weights
     from the weight queue and copies them into the model while holding the lock
     that the receiving collector holds around each policy call, so a policy
-    call always reads a single, complete version of the weights.
+    call always reads a single, complete version of the weights. If the weights
+    cannot be applied, the worker reports it and ``send()`` raises a
+    ``RuntimeError`` instead of waiting for an acknowledgment that never comes.
 
     It follows the same two-phase pattern as SharedMemWeightSyncScheme:
 
@@ -550,7 +556,8 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         1. Waits for a "receive" instruction from the sender
         2. Receives weights from the weight queue
         3. Copies them into the model while holding the weight-update lock
-        4. Sends an acknowledgment back to the sender
+        4. Sends an acknowledgment back to the sender, which reports a failure
+           if the weights could not be received or applied
         5. Repeats until stop event is set or "stop" instruction received
         """
         while not self._stop_event.is_set():
@@ -560,11 +567,19 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                     # Stop event was set or timeout
                     continue
                 if instruction == "receive":
-                    if self._receiver_transport is not None:
-                        weights = self._receiver_transport.receive_weights()
-                        with self._weight_update_lock():
-                            self._apply_received_weights(weights)
-                    self._send_ack("updated")
+                    try:
+                        if self._receiver_transport is not None:
+                            weights = self._receiver_transport.receive_weights()
+                            with self._weight_update_lock():
+                                self._apply_received_weights(weights)
+                    except Exception as error:
+                        torchrl_logger.exception(
+                            "MultiProcessWeightSyncScheme: could not apply the "
+                            f"weights of model_id={self._model_id!r}."
+                        )
+                        self._send_ack(_failed_ack(error))
+                    else:
+                        self._send_ack(_ACK_UPDATED)
 
                 elif instruction == "stop":
                     break
