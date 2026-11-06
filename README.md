@@ -65,13 +65,14 @@ more ways to turn experience into intelligent behavior.**
   components. [TD-MPC2](sota-implementations/tdmpc2_trainer/) ·
   [FQL](sota-implementations/fql/) ·
   [Transitive RL](sota-implementations/transitive_rl/)
-- **PyTorch and dataset interoperability.** Read replay-buffer samples and
-  storage through PyTorch's `Dataset` and `DataLoader` APIs, and exchange
-  trajectory data with LeRobot and Hugging Face Datasets.
+- **PyTorch and dataset interoperability.** Use `buffer.as_dataset()` with a
+  PyTorch `DataLoader`, or `buffer.export(...)` to exchange trajectory data
+  with LeRobot and Hugging Face Datasets.
   [PyTorch data integration](docs/source/reference/data_replaybuffers.rst) ·
   [LeRobot tutorial](tutorials/sphinx-tutorials/lerobot_export.py)
-- **Data collection.** Coordinate asynchronous collection and replay with new
-  controls for policy versions, replay readiness, and trajectory data. See
+- **Data collection.** Use `replay_write_mode="trajectory"` to write complete
+  episodes to replay and coordinate collection and learning with replay
+  readiness and policy-version controls. See
   [collectors and execution models](#collectors-and-execution-models).
 - **Evaluation and checkpointing.** Evaluate policies across environments,
   schedule evaluation during training, and resume supported recipes from
@@ -205,64 +206,70 @@ env = TransformedEnv(
 
 ### Collectors and execution models
 
-Collectors are the bridge between policies and environments. A collector owns
-the execution loop, batches trajectories, handles devices, and can update policy
-weights while environments keep running.
-
-TorchRL includes single-process, async, multiprocess, and distributed
-collectors. This lets the same policy and loss code be used across small smoke
-tests, GPU-heavy simulation, CPU environment farms, or asynchronous evaluation
-setups.
+Collectors run policies in environments and return batches of experience as
+TensorDicts. TorchRL 0.14 unified construction across local and distributed
+collectors: use `Collector` and choose how the work runs.
 
 ```python
 from torchrl.collectors import Collector
+from torchrl.envs import PendulumEnv
 
-collector = Collector(
-    create_env_fn=env,
-    policy=policy,
-    frames_per_batch=1024,
-    total_frames=1_000_000,
-)
+if __name__ == "__main__":  # Required for multiprocessing on some platforms
+    direct = Collector(PendulumEnv, frames_per_batch=32, total_frames=32)
+    direct_batch = next(iter(direct))
+    direct.shutdown()
 
-for data in collector:
-    # data is a TensorDict with time, environment, and key structure preserved.
-    train_step(data)
+    parallel = Collector(
+        PendulumEnv, num_collectors=2, sync=True, frames_per_batch=32, total_frames=32
+    )
+    parallel_batch = next(iter(parallel))
+    parallel.shutdown()
 ```
 
-TorchRL 0.14 substantially expanded the collector architecture for local and
-distributed workloads. `Collector` is the common construction entry point for
-direct collection, local worker processes, and distributed backends such as Ray,
-RPC, and PyTorch distributed. The concrete collector classes remain available
-when an application needs an implementation-specific API. Collectors can also
-integrate replay buffers, policy weight updates, evaluation, and profiling.
+The first collector runs in the current process; the second uses two worker
+processes and waits for both when forming each batch. Both use random actions
+because no policy is supplied; pass a TensorDict policy as `policy` to collect
+with it. Use `sync=False` to receive data as workers finish; with Ray
+installed, `backend="ray"` selects Ray-managed workers.
 
-For asynchronous workloads, `AsyncEnvPool` executes environments using process
-or thread backends. `AsyncBatchedCollector` combines an asynchronous environment
-pool with an inference server that batches policy requests: environments can
-progress independently while environment stepping and policy inference overlap.
-It can also write to replay in the background while a learner samples data.
-Depending on the configuration, inference can run in a separate process and
-workers can send transitions in chunks to reduce communication overhead.
+The selected backend determines the implementation returned by `Collector`.
+For example, the synchronous two-worker call above returns a
+`MultiSyncCollector`, the class that implements synchronous multiprocess
+collection. These implementation classes are also available directly for
+type checks, subclassing, or backend-specific features.
 
-**Data collection updates in 0.15:**
+For environments with different step times, `AsyncBatchedCollector` lets each
+environment progress independently and batches observations from ready
+environments into policy calls. This overlaps environment stepping with policy
+inference. For example, collect from two threaded environments with a simple
+TensorDict policy:
 
-- **Policy version visibility.** With tracking enabled, collected frames carry
-  the version of the policy that produced them. Multiprocess collectors can
-  now report each worker's version and report a shared version when all
-  workers have confirmed the same synchronous weight updates. This helps
-  identify which policy produced data during asynchronous training.
-- **Complete trajectories in replay.** Set `replay_write_mode="trajectory"` to
-  write complete trajectories to replay. This preserves episode boundaries
-  when sampling sequences from multiple workers. `SliceSampler` can also
-  return slices with explicit batch and time dimensions.
-- **Replay readiness and rate control.** Learners can wait until replay can
-  supply a batch, inspect collection and sampling counters, and use a
-  rate-limited buffer to control the number of samples per inserted item.
-- **Collection progress.** Collector statistics distinguish frames being
-  assembled into unfinished trajectories from completed trajectories and
-  frames written to replay, making asynchronous pipelines easier to monitor.
+```python
+from tensordict.nn import TensorDictModule
+from torchrl.collectors import AsyncBatchedCollector
+from torchrl.envs import PendulumEnv
 
-See the [collector API](docs/source/reference/collectors_single.rst),
+if __name__ == "__main__":
+    policy = TensorDictModule(
+        lambda angle: angle.tanh().unsqueeze(-1), in_keys=["th"], out_keys=["action"]
+    )
+    collector = AsyncBatchedCollector(
+        [PendulumEnv, PendulumEnv], policy=policy, env_backend="threading",
+        frames_per_batch=32, total_frames=32,
+    )
+    batch = next(iter(collector))
+    collector.shutdown()
+```
+
+An `AsyncEnvPool` runs the environments, while an inference server batches
+their policy calls. The collector can also write into replay in the background.
+
+In 0.15, `replay_write_mode="trajectory"` writes complete episodes to replay,
+`buffer.sample(wait=True)` waits until a batch can be sampled on supported
+buffers, and `collector.worker_policy_versions()` reports each multiprocess
+worker's current policy version when tracking is enabled.
+
+See [collector APIs](docs/source/reference/collectors_single.rst),
 [distributed collectors](docs/source/reference/collectors_distributed.rst),
 [async environments](docs/source/reference/envs_vectorized.rst), and
 [collectors and replay](docs/source/reference/collectors_replay.rst).
