@@ -3259,6 +3259,40 @@ def test_prioritized_slice_sampler_doc_example():
     # print("weight", info["priority_weight"].tolist())
 
 
+@pytest.mark.parametrize("strict_length", [True, False])
+def test_prioritized_slice_sampler_slice_len_one(strict_length):
+    """With ``slice_len=1`` every transition, including an episode's last step, is a valid start."""
+    torch.manual_seed(0)
+    step = torch.arange(4).repeat(2)
+    data = TensorDict(
+        {
+            "episode": torch.arange(2).repeat_interleave(4),
+            "step": step,
+            ("next", "done"): (step == 3).unsqueeze(-1),
+        },
+        [8],
+    )
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(8),
+        sampler=PrioritizedSliceSampler(
+            max_capacity=8,
+            alpha=1.0,
+            beta=1.0,
+            slice_len=1,
+            traj_key="episode",
+            strict_length=strict_length,
+        ),
+        batch_size=8,
+    )
+    index = rb.extend(data)
+    priority = torch.zeros(8)
+    priority[3] = 1.0
+    rb.update_priority(index, priority)
+    sample = rb.sample()
+    assert sample["episode"].tolist() == [0] * 8
+    assert sample["step"].tolist() == [3] * 8
+
+
 @pytest.mark.parametrize("device", get_default_devices())
 def test_prioritized_slice_sampler_episodes(device):
     num_slices = 10

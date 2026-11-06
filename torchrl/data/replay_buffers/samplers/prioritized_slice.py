@@ -364,7 +364,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             preceding_stop_idx = pad[:, -1:]
         else:
             # Mask the rightmost values of that padded tensor
-            preceding_stop_idx = pad[:, -seq_length + 1 + span_right :]
+            num_forbidden = seq_length - 1 - span_right
+            preceding_stop_idx = pad[:, max(pad.shape[1] - num_forbidden, 0) :]
         preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
         if storage._is_full:
             preceding_stop_idx = self._wrap_within_columns(
