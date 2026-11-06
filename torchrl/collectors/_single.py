@@ -548,7 +548,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             is spec-based and idempotent, so passing an env that was already
             wrapped via :class:`~torchrl.envs.EnvBase`'s ``policy=``
             constructor argument is safe. If ``False``, the collector never
-            modifies the env. Defaults to ``None`` through v0.14, which
+            modifies the env. Defaults to ``None`` through v0.15, which
             preserves the pre-v0.16 behavior (no auto-registration) but emits
             a :class:`FutureWarning` if the env was missing transforms the
             policy needed. The default flips to ``True`` in v0.16.
@@ -932,7 +932,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
 
         * ``True``  → spec-based detection + idempotent append.
         * ``False`` → no-op (silent).
-        * ``None``  (default through v0.14) → no-op, but emit a
+        * ``None``  (default through v0.15) → no-op, but emit a
           :class:`FutureWarning` if the env was missing transforms the policy
           needs. Default flips to ``True`` in v0.16.
         """

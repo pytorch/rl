@@ -323,7 +323,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             workers append :class:`~torchrl.envs.transforms.InitTracker` and
             recurrent-state :class:`~torchrl.envs.transforms.TensorDictPrimer`
             transforms to their envs if the env specs don't already provide
-            them. ``False`` disables it; ``None`` (default through v0.14)
+            them. ``False`` disables it; ``None`` (default through v0.15)
             preserves pre-v0.16 behavior and emits a
             :class:`FutureWarning` when wrapping would have been needed.
             Default flips to ``True`` in v0.16.
