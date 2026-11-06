@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import warnings
 from copy import copy
 from importlib import import_module
@@ -940,8 +941,8 @@ class TestTimeitMark:
 @pytest.mark.parametrize("cuda_available", [False, True])
 def test_timeit_cuda_sync_boundaries(monkeypatch, cuda_available):
     events = mock.Mock()
-    events.time.side_effect = [1.0, 3.0]
-    monkeypatch.setattr(_utils.time, "time", events.time)
+    events.perf_counter.side_effect = [1.0, 3.0]
+    monkeypatch.setattr(_utils.time, "perf_counter", events.perf_counter)
     monkeypatch.setattr(
         torch.cuda, "is_available", mock.Mock(return_value=cuda_available)
     )
@@ -954,13 +955,41 @@ def test_timeit_cuda_sync_boundaries(monkeypatch, cuda_available):
     if cuda_available:
         assert events.mock_calls == [
             mock.call.synchronize(),
-            mock.call.time(),
+            mock.call.perf_counter(),
             mock.call.synchronize(),
-            mock.call.time(),
+            mock.call.perf_counter(),
         ]
     else:
-        assert events.mock_calls == [mock.call.time(), mock.call.time()]
+        assert events.mock_calls == [
+            mock.call.perf_counter(),
+            mock.call.perf_counter(),
+        ]
     assert _utils.timeit._REG["cuda_sync"] == [2.0, 2.0, 1]
+
+
+def test_timeit_measures_intervals_below_wall_clock_resolution(monkeypatch):
+    """Intervals shorter than the wall clock's tick still measure as positive.
+
+    On Windows with Python 3.10, ``time.time()`` advances in steps of about
+    15.6 ms, so a 2 ms interval read from it measures as zero. A wall clock
+    that never advances models that resolution.
+    """
+    monkeypatch.setattr(_utils.time, "time", lambda: 1_000_000.0)
+    _utils.timeit._REG.pop("short_interval", None)
+    _utils.timeit._MARKS.pop("short_mark", None)
+
+    timer = _utils.timeit("short_interval").start()
+    time.sleep(0.002)
+    elapsed = timer.elapsed()
+    with _utils.timeit("short_interval"):
+        time.sleep(0.002)
+    _utils.timeit.mark_start("short_mark")
+    time.sleep(0.002)
+    _utils.timeit.mark_end("short_mark")
+
+    assert elapsed >= 0.001
+    assert _utils.timeit._REG["short_interval"][1] >= 0.001
+    assert _utils.timeit._REG["short_mark"][1] >= 0.001
 
 
 if __name__ == "__main__":
