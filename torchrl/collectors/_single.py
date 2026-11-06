@@ -549,9 +549,9 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             wrapped via :class:`~torchrl.envs.EnvBase`'s ``policy=``
             constructor argument is safe. If ``False``, the collector never
             modifies the env. Defaults to ``None`` through v0.14, which
-            preserves the pre-v0.15 behavior (no auto-registration) but emits
+            preserves the pre-v0.16 behavior (no auto-registration) but emits
             a :class:`FutureWarning` if the env was missing transforms the
-            policy needed. The default flips to ``True`` in v0.15.
+            policy needed. The default flips to ``True`` in v0.16.
 
             .. seealso:: :ref:`Auto-wrapping recurrent transforms via the
                 policy= argument <Environment-policy-arg>`.
@@ -934,15 +934,15 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         * ``False`` → no-op (silent).
         * ``None``  (default through v0.14) → no-op, but emit a
           :class:`FutureWarning` if the env was missing transforms the policy
-          needs. Default flips to ``True`` in v0.15.
+          needs. Default flips to ``True`` in v0.16.
         """
         flag = self._auto_register_policy_transforms
         if flag is True:
             return _maybe_append_env_transforms_from_module(env, policy)
         if flag is False:
             return env
-        # flag is None — preserve the pre-v0.15 behavior but warn that this
-        # will change in v0.15.
+        # flag is None — preserve the pre-v0.16 behavior but warn that this
+        # will change in v0.16.
         from torchrl.modules.utils.utils import _compute_missing_env_transforms
 
         missing = _compute_missing_env_transforms(env, policy)
@@ -951,7 +951,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             warnings.warn(
                 f"The env passed to {type(self).__name__} is missing "
                 f"transforms required by the policy ({missing_names}). "
-                "From torchrl v0.15 the collector will append them "
+                "From torchrl v0.16 the collector will append them "
                 "automatically. To enable that behavior now (and silence "
                 "this warning), pass `auto_register_policy_transforms=True`. "
                 "To opt out permanently, pass "

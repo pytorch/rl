@@ -172,7 +172,7 @@ policy.eval()
 # Forgetting either of these is the most common source of silent
 # hidden-state bugs. The collector now detects recurrent submodules in the
 # policy and auto-appends both transforms when ``auto_register_policy_transforms=True``
-# is passed. As of v0.15 this becomes the default; for earlier versions you
+# is passed. As of v0.16 this becomes the default; for earlier versions you
 # need to opt in explicitly.
 
 env = GymEnv("CartPole-v1", device=device)

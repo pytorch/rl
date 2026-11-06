@@ -129,7 +129,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
 
             .. warning::
                 The default will change from ``"queue"`` to ``"auto"`` in
-                v0.15 for the multiprocessing backend. A ``FutureWarning`` is
+                v0.16 for the multiprocessing backend. A ``FutureWarning`` is
                 emitted when the default is relied upon.
         worker_affinity (Sequence[Sequence[int]] or Callable[[int], Sequence[int]], optional):
             Optional Linux CPU placement for multiprocessing workers. This is
@@ -340,7 +340,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                 warnings.warn(
                     "The default exchange of AsyncEnvPool with the "
                     "multiprocessing backend will change from 'queue' to "
-                    "'auto' in v0.15. Pass exchange='queue' to keep the "
+                    "'auto' in v0.16. Pass exchange='queue' to keep the "
                     "current behavior, or exchange='auto' to adopt the "
                     "future default now.",
                     FutureWarning,

@@ -497,7 +497,7 @@ points; either is fine:
 The detection reads the env's ``full_observation_spec`` and
 ``full_state_spec``, so it sees through
 :class:`~torchrl.envs.SerialEnv` / :class:`~torchrl.envs.ParallelEnv`
-where transforms live in child envs. Limitations and the v0.15 default
+where transforms live in child envs. Limitations and the v0.16 default
 flip are documented in the
 :ref:`policy= argument page <Environment-policy-arg>`.
 
