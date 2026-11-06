@@ -55,24 +55,29 @@ shared-memory support, memmaps, lazy views, and `nn.Module` wrappers.
 **From robot simulation to offline RL and deployment, TorchRL 0.15 gives you
 more ways to turn experience into intelligent behavior.**
 
-- **Bring robots to life.** Train and explore policies with MuJoCo Menagerie
-  robots and MicroDuck, compose low-level skills into high-level control, and
-  export TensorDict policies to ONNX. [Explore Menagerie](examples/menagerie/)
+- **Robotics and policy deployment.** Train and explore policies with
+  MuJoCo Menagerie robots and MicroDuck, compose low-level skills into
+  high-level control, and export TensorDict policies to ONNX. [Explore Menagerie](examples/menagerie/)
   · [Low-level control tutorial](tutorials/sphinx-tutorials/low_level_controller.py)
-- **Train with powerful new algorithms.** Plan with **TD-MPC2**, learn from
+- **Model-based and offline RL.** Plan with **TD-MPC2**, learn from
   offline data with **Flow Q-Learning**, and tackle goal-conditioned learning
   with **Transitive RL**. Use the implementations or build with their modular
   components. [TD-MPC2](sota-implementations/tdmpc2_trainer/) ·
   [FQL](sota-implementations/fql/) ·
   [Transitive RL](sota-implementations/transitive_rl/)
-- **Put your experience to work.** Collect trajectories with TorchRL, exchange
-  datasets with **LeRobot** and **Hugging Face**, and bring recorded data back
-  into your PyTorch workflows. [See the LeRobot tutorial](tutorials/sphinx-tutorials/lerobot_export.py)
-- **Run experiments with confidence.** Evaluate policies across environments,
+- **PyTorch and dataset interoperability.** Read replay-buffer samples and
+  storage through PyTorch's `Dataset` and `DataLoader` APIs, and exchange
+  trajectory data with LeRobot and Hugging Face Datasets.
+  [PyTorch data integration](docs/source/reference/data_replaybuffers.rst) ·
+  [LeRobot tutorial](tutorials/sphinx-tutorials/lerobot_export.py)
+- **Data collection.** Coordinate asynchronous collection and replay with new
+  controls for policy versions, replay readiness, and trajectory data. See
+  [collectors and execution models](#collectors-and-execution-models).
+- **Evaluation and checkpointing.** Evaluate policies across environments,
   schedule evaluation during training, and resume supported recipes from
   checkpoints. [Evaluation](docs/source/reference/collectors_eval.rst) ·
   [Checkpointing](docs/source/reference/checkpoint.rst)
-- **Go further with sequences and language.** Build Transformer-based policies
+- **Sequence models and RLHF.** Build Transformer-based policies
   and train reward models from preference data for RLHF workflows.
   [Transformer example](examples/agents/transformer_actor.py) ·
   [Reward-model recipe](sota-implementations/reward_model_training/)
@@ -224,9 +229,19 @@ for data in collector:
     train_step(data)
 ```
 
-For larger jobs, the collector family adds async execution, multiple worker
-processes, weight updaters, evaluator loops, profiling hooks, and fake-data
-helpers for testing downstream code without stepping an expensive environment.
+For larger jobs, the collector family adds multiple worker processes, weight
+updaters, evaluator loops, profiling hooks, and fake-data helpers. For
+asynchronous execution, `AsyncEnvPool` supports stepping and resetting
+environments with process or thread backends. `AsyncBatchedCollector` combines
+an async environment pool with batched policy inference and supports background
+collection into replay. See the [async environment API](docs/source/reference/envs_vectorized.rst)
+and [async collector API](docs/source/reference/collectors_single.rst).
+
+**What's new in 0.15:** Multiprocess collectors expose acknowledged policy
+versions, and collectors support explicit trajectory writes to replay. Replay
+buffers provide readiness waits and counters, plus structured batch-time
+sampling. These controls help coordinate collection and learning and preserve
+trajectory structure.
 
 ### Replay buffers and offline data
 
