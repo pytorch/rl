@@ -569,7 +569,8 @@ class TorchDistributedTransport(RequestReplyTransport):
         timeout (float, optional): rendezvous and store timeout in seconds.
             Defaults to ``300.0``.
         host (str, optional): interface for the rendezvous store. Defaults
-            to the local hostname address.
+            to the address the local hostname resolves to, or ``127.0.0.1``
+            when the hostname does not resolve (common in containers).
         port (int, optional): port for the rendezvous store. Defaults to an
             OS-assigned free port.
         metadata_spec (MetadataSpec, optional): flat scalar control metadata
@@ -650,7 +651,16 @@ class TorchDistributedTransport(RequestReplyTransport):
         if _store_info is not None:
             host, port = _store_info
         elif host is None:
-            host = socket.gethostbyname(socket.gethostname())
+            try:
+                host = socket.gethostbyname(socket.gethostname())
+            except socket.gaierror:
+                host = "127.0.0.1"
+                torchrl_logger.warning(
+                    f"Hostname {socket.gethostname()!r} does not resolve; the "
+                    "TorchDistributedTransport store listens on 127.0.0.1, so "
+                    "only clients on this machine can connect. Pass host= to "
+                    "reach clients on other machines."
+                )
         # Let TCPStore bind the ephemeral port itself. Probing with a temporary
         # socket and closing it before constructing the store leaves a race in
         # which another process can claim the advertised port.

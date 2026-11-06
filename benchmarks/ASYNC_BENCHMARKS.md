@@ -81,9 +81,12 @@ write throughput.
 comparison for `async-shm` and `async-process-slots`: 64 environments, one per
 worker, with the same CNN plus two 1024-wide layers, one-millisecond environment
 steps, batches, warm-up and measured rounds described above. It runs in the
-same three fresh-process repetitions. Compare those two series with each other;
-they keep worker count fixed and do not replace the existing 32-environment
-trends. The policy is a pixel-collection proxy, not the complete DreamerV3 actor.
+same three fresh-process repetitions of the merge-triggered async suite. The
+nightly full suite and the PR benchmark comparison skip it, together with
+`test_async_env_pool_multi_env_workers[64-processes]`: on the nightly PyTorch
+build their 64 worker processes push the CPU and GPU runners out of memory.
+Compare those two series with each other; they keep worker count fixed and do
+not replace the existing 32-environment trends. The policy is a pixel-collection proxy, not the complete DreamerV3 actor.
 
 Follow **`async-shm-integrated`** for the cumulative performance curve. It starts
 with eager inference and one environment per worker, enables static inference

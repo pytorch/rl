@@ -256,7 +256,8 @@ jobs:
             done
           else
             python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only \
-              --benchmark-json output.json --ignore test_llm.py .
+              --benchmark-json output.json --ignore test_llm.py \
+              -k 'not async_collection_pixels_64_envs and not 64-processes' .
           fi
           touch success.txt
 

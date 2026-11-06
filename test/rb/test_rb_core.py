@@ -3368,7 +3368,9 @@ class TestUpdateIfPresent:
         assert not result.updated.item()
         assert result.stale_count == 1
         assert len(rb) == 5
-        torch.testing.assert_close(rb._storage._storage["obs"][index], before)
+        torch.testing.assert_close(
+            rb._storage._storage["obs"][index], before, equal_nan=True
+        )
 
     def test_sampled_handles_roundtrip(self):
         rb, _, _, _ = self._make_rb()

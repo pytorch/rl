@@ -1762,6 +1762,19 @@ class TestGrayScale(TransformBase):
 
 
 class TestObservationNorm(TransformBase):
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    def test_python_number_loc_scale_on_cuda(self, standard_normal):
+        """Python-number loc and scale apply to CUDA observations."""
+        transform = ObservationNorm(
+            loc=0.5, scale=2.0, in_keys=["obs"], standard_normal=standard_normal
+        )
+        obs = torch.arange(6.0, device="cuda").reshape(2, 3)
+        out = transform(TensorDict({"obs": obs}, [2]))["obs"]
+        expected = (obs - 0.5) / 2.0 if standard_normal else obs * 2.0 + 0.5
+        torch.testing.assert_close(out, expected)
+
     @pytest.mark.parametrize(
         "out_keys", [None, ["stuff"], [("some_other", "nested_key")]]
     )

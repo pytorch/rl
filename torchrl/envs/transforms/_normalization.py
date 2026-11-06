@@ -305,7 +305,9 @@ class ObservationNorm(ObservationTransform):
         Both maps are written as ``(value * mul - sub) / div + add`` and only
         the coefficients are selected, so each mode performs the same float
         operations as its plain formula and no unused branch divides by
-        ``scale``.
+        ``scale``. Each step is a binary op, so ``loc`` and ``scale`` can be
+        0-dim CPU tensors while ``value`` lives on an accelerator; fused ops
+        such as ``addcmul`` accept at most one CPU scalar operand.
         """
         one = torch.ones_like(self.scale)
         zero = torch.zeros_like(self.loc)
@@ -313,7 +315,7 @@ class ObservationNorm(ObservationTransform):
         sub = torch.where(normalize, self.loc, zero)
         div = torch.where(normalize, self.scale, one)
         add = torch.where(normalize, zero, self.loc)
-        return torch.addcdiv(add, torch.addcmul(-sub, value, mul), div)
+        return (value * mul - sub) / div + add
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
