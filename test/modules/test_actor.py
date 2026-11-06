@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import sys
 import warnings
 
 import numpy as np
@@ -70,6 +71,8 @@ from torchrl.modules.vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv, NestedCountingEnv
+
+_compile_backend = "eager" if sys.platform == "win32" else "inductor"
 
 _has_onnx_export = all(
     importlib.util.find_spec(name) is not None
@@ -636,7 +639,11 @@ class TestFlow:
             policy.module.low.to(expected), policy.module.high.to(expected)
         )
         torch._dynamo.reset()
-        call = torch.compile(policy, fullgraph=True) if compiled else policy
+        call = (
+            torch.compile(policy, backend=_compile_backend, fullgraph=True)
+            if compiled
+            else policy
+        )
         with torch.set_grad_enabled(grad):
             actual = call(
                 TensorDict({"observation": observation, "noise": noise}, [2, 3])

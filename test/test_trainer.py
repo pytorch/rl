@@ -9,6 +9,7 @@ import contextlib
 import importlib.util
 import inspect
 import os
+import shutil
 import signal
 import sys
 import tempfile
@@ -4383,7 +4384,19 @@ def fql_matmul_precision():
         ),
     ],
 )
-@pytest.mark.parametrize("compile_loss", [False, True])
+@pytest.mark.parametrize(
+    "compile_loss",
+    [
+        False,
+        pytest.param(
+            True,
+            marks=pytest.mark.skipif(
+                sys.platform == "win32" and shutil.which("cl") is None,
+                reason="Inductor needs the MSVC compiler (cl) on Windows.",
+            ),
+        ),
+    ],
+)
 def test_fql_update_matches_recipe(
     device, compile_loss, monkeypatch, fql_matmul_precision
 ):

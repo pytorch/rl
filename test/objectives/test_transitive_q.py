@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 
 import pytest
 import torch
@@ -17,6 +18,8 @@ from torchrl.data import LazyTensorStorage, SubgoalTriplet, TensorDictReplayBuff
 from torchrl.envs.utils import ExplorationType
 from torchrl.modules import IndependentNormal, ProbabilisticActor
 from torchrl.objectives import SoftUpdate, TransitiveQLoss
+
+_compile_backend = "eager" if sys.platform == "win32" else "inductor"
 
 OBS, ACT = 3, 2
 
@@ -255,7 +258,10 @@ class TestTransitiveQLoss:
         updaters = [SoftUpdate(loss, tau=0.05) for loss in losses]
         optimizers = [torch.optim.Adam(loss.parameters(), lr=1e-2) for loss in losses]
         torch._dynamo.reset()
-        calls = (losses[0], torch.compile(losses[1], fullgraph=True))
+        calls = (
+            losses[0],
+            torch.compile(losses[1], backend=_compile_backend, fullgraph=True),
+        )
         for _ in range(3):
             batch = make_batch([0, 1, 2, 3], [1, 3, 5, 7], torch.randn(4, 4, OBS))
             results, gradients = [], []

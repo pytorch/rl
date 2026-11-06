@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import sys
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -12,6 +14,8 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl.modules import FlowMatchingPolicy, MLP, OneStepPolicy, ValueOperator
 from torchrl.objectives import FQLLoss, SoftUpdate
 from torchrl.testing import get_default_devices
+
+_compile_backend = "eager" if sys.platform == "win32" else "inductor"
 
 
 def make_loss(device, dtype=torch.float32, *, routing=None, **kwargs):
@@ -153,7 +157,11 @@ class TestFQL:
         expected = reference(batch)
         if compile_loss:
             torch._dynamo.reset()
-        call = torch.compile(routed, fullgraph=True) if compile_loss else routed
+        call = (
+            torch.compile(routed, backend=_compile_backend, fullgraph=True)
+            if compile_loss
+            else routed
+        )
         actual = call(data)
         torch.testing.assert_close(actual, expected)
         torch.testing.assert_close(data["td_error"], batch["td_error"])
@@ -222,7 +230,10 @@ class TestFQL:
         updaters = [SoftUpdate(loss, tau=0.05) for loss in losses]
         optimizers = [torch.optim.Adam(loss.parameters(), lr=1e-3) for loss in losses]
         torch._dynamo.reset()
-        calls = (eager, torch.compile(compiled, fullgraph=True))
+        calls = (
+            eager,
+            torch.compile(compiled, backend=_compile_backend, fullgraph=True),
+        )
         for step in range(3):
             batch = make_batch(device, dtype)
             if step == 0:
@@ -269,7 +280,7 @@ class TestFQL:
         optimizer = torch.optim.Adam(loss.parameters(), lr=1e-3)
         initial = {key: value.clone() for key, value in loss.state_dict().items()}
         torch._dynamo.reset()
-        call = torch.compile(loss, fullgraph=True)
+        call = torch.compile(loss, backend=_compile_backend, fullgraph=True)
         batch = make_batch(device)
         first = call(batch.clone())["loss_flow"].detach().clone()
         second = call(batch.clone())["loss_flow"].detach()
