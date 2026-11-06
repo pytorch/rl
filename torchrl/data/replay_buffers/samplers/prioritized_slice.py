@@ -11,7 +11,6 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict.utils import NestedKey
-from torchrl._utils import _replace_last
 from torchrl.data.replay_buffers.storages import Storage
 from torchrl.data.replay_buffers.utils import unravel_index
 
@@ -443,39 +442,16 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             info["priority_weight"], seq_length
         )
 
-        if self.truncated_key is not None:
-            # following logics borrowed from SliceSampler
-            truncated_key = self.truncated_key
-
-            done_key = _replace_last(truncated_key, "done")
-            terminated_key = _replace_last(truncated_key, "terminated")
-
-            truncated = torch.zeros(
-                (index.shape[0], 1), dtype=torch.bool, device=index.device
-            )
-            if isinstance(seq_length, int):
-                truncated.view(num_slices, -1)[:, -1] = 1
-            else:
-                truncated[seq_length.cumsum(0) - 1] = 1
-            index = index.to(torch.long).unbind(-1)
-            st_index = storage[index]
-            try:
-                done = st_index[done_key] | truncated
-            except KeyError:
-                done = truncated.clone()
-            try:
-                terminated = st_index[terminated_key]
-            except KeyError:
-                terminated = torch.zeros_like(truncated)
-            info.update(
-                {
-                    truncated_key: truncated,
-                    done_key: done,
-                    terminated_key: terminated,
-                }
-            )
-            return index, info
-        return index.to(torch.long).unbind(-1), info
+        index, slice_info = self._finalize_index(
+            index=index,
+            num_slices=num_slices,
+            seq_length=seq_length,
+            target_seq_length=None,
+            mask_flat=None,
+            storage=storage,
+        )
+        info.update(slice_info)
+        return index, info
 
     def _empty(self):
         # no op for SliceSampler

@@ -1829,7 +1829,8 @@ class TestSamplers:
         """Slices from a wrapped storage stay within one env and one episode.
 
         A slice shorter than ``slice_len`` must end where its episode ends (or
-        at the newest stored step), not earlier.
+        at the newest stored step), not earlier. Every slice starts with
+        ``is_init=True``, and no other step of the slice is an episode start.
         """
         torch.manual_seed(0)
         rows_per_env, slice_len, num_steps = 20, 4, 45
@@ -1842,6 +1843,7 @@ class TestSamplers:
                 "env": env,
                 "step": step,
                 "episode": step // episode_len + 1000 * env,
+                "is_init": (step % episode_len == 0)[..., None],
                 ("next", "done"): (step % episode_len == episode_len - 1)[..., None],
             },
             [num_envs, num_steps],
@@ -1883,6 +1885,8 @@ class TestSamplers:
                 assert (slc["env"] == slc["env"][0]).all()
                 assert (slc["episode"] == slc["episode"][0]).all()
                 assert (slc["step"].diff() == 1).all()
+                assert slc["is_init"][0].item()
+                assert not slc["is_init"][1:].any()
 
     @pytest.mark.parametrize(
         "end_kwargs",
