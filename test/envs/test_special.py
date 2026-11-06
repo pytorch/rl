@@ -42,7 +42,7 @@ from torchrl.envs.batched_envs import (
     _to_device_mps_safe,
 )
 from torchrl.envs.env_creator import get_env_metadata
-from torchrl.envs.transforms import StepCounter, TransformedEnv
+from torchrl.envs.transforms import RewardScaling, StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import Tokenizer
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import RandomPolicy
@@ -53,6 +53,7 @@ from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     CountingEnvWithString,
     DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -82,6 +83,14 @@ class _DelayedCountingEnv(CountingEnv):
     def _step(self, tensordict):
         threading.Event().wait(self.delay)
         return super()._step(tensordict)
+
+
+def _rewarded_counting_env(index: int) -> TransformedEnv:
+    """A CountingEnv whose reward is ``index + 1`` at every step and which is done after 3 steps."""
+    return TransformedEnv(
+        CountingEnv(max_steps=3, start_val=index),
+        RewardScaling(loc=float(index + 1), scale=1.0),
+    )
 
 
 class _DifferentSpecCountingEnv(CountingEnv):
@@ -1144,6 +1153,41 @@ class TestAsyncEnvPool:
             env.check_env_specs(break_when_any_done="both")
         finally:
             base_env._maybe_shutdown()
+
+    @pytest.mark.parametrize(
+        "backend,exchange",
+        [
+            ("threading", None),
+            ("multiprocessing", "queue"),
+        ],
+    )
+    @set_capture_non_tensor_stack(False)
+    def test_collector_matches_serial_env(self, backend, exchange):
+        """A Collector over an AsyncEnvPool yields the batches of a SerialEnv.
+
+        The pool wrote ``"env_index"`` as a tensor on step but as a
+        ``NonTensorStack`` on reset, so the collector could not stack its
+        rollout.
+        """
+        makers = [partial(_rewarded_counting_env, index) for index in range(3)]
+        kwargs = {} if exchange is None else {"exchange": exchange}
+        pool = AsyncEnvPool(makers, backend=backend, **kwargs)
+        serial = SerialEnv(3, makers)
+        policy = CountingEnvCountPolicy(serial.action_spec)
+        try:
+            pool_batches = list(
+                Collector(pool, policy, frames_per_batch=15, total_frames=30)
+            )
+            serial_batches = list(
+                Collector(serial, policy, frames_per_batch=15, total_frames=30)
+            )
+            assert len(pool_batches) == len(serial_batches) == 2
+            for pool_batch, serial_batch in zip(pool_batches, serial_batches):
+                assert pool_batch["env_index"] == [[index] * 5 for index in range(3)]
+                assert_allclose_td(pool_batch.exclude("env_index"), serial_batch)
+        finally:
+            pool.close(raise_if_closed=False)
+            serial.close(raise_if_closed=False)
 
     @set_capture_non_tensor_stack(False)
     def test_shared_memory_exchange(self, make_envs):

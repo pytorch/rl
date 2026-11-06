@@ -481,10 +481,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                 tensordict = TensorDict(
                     batch_size=(self.num_envs,) + self.env_batch_sizes[0]
                 )
-        env_idx_nt = NonTensorStack(*range(tensordict.shape[0]))
-        while env_idx_nt.batch_dims < tensordict.batch_dims:
-            env_idx_nt = expand_as_right(env_idx_nt, tensordict)
-        tensordict[self._env_idx_key] = env_idx_nt
+        self._set_env_index(tensordict)
         self._async_private_reset_send(tensordict)
         tensordict = self._async_private_reset_recv(min_get=self.num_envs)
         return tensordict
@@ -492,7 +489,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._current_step > 0:
             raise RuntimeError("Some envs are still processing a step.")
-        tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
+        self._set_env_index(tensordict)
         self._async_private_step_send(tensordict)
         tensordict = self._async_private_step_recv(min_get=self.num_envs)
         # Using pop instead of del to account for tensorclasses
@@ -504,7 +501,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if self._current_step_reset > 0:
             raise RuntimeError("Some envs are still processing a step.")
-        tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
+        self._set_env_index(tensordict)
         self.async_step_and_maybe_reset_send(tensordict)
         tensordict, tensordict_ = self.async_step_and_maybe_reset_recv(
             min_get=self.num_envs
@@ -514,7 +511,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._current_step > 0:
             raise RuntimeError("Some envs are still processing a step.")
-        tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
+        self._set_env_index(tensordict)
         self.async_step_send(tensordict)
         tensordict = self.async_step_recv(min_get=self.num_envs)
         return tensordict
@@ -543,13 +540,24 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                 tensordict = TensorDict(
                     batch_size=(self.num_envs,) + self.env_batch_sizes[0]
                 )
-        indices = NonTensorStack(*range(tensordict.shape[0]))
-        if indices.shape != tensordict.shape:
-            indices = expand_as_right(indices, tensordict)
-        tensordict[self._env_idx_key] = indices
+        self._set_env_index(tensordict)
         self.async_reset_send(tensordict)
         tensordict = self.async_reset_recv(min_get=self.num_envs)
         return tensordict
+
+    def _set_env_index(self, tensordict: TensorDictBase) -> None:
+        """Writes the pool-wide ``"env_index"`` entry into ``tensordict`` in place.
+
+        The entry is a :class:`~tensordict.NonTensorStack` matching the
+        ``NonTensor`` spec registered in :attr:`full_state_spec`, so that the
+        data written by :meth:`reset`, :meth:`step` and
+        :meth:`step_and_maybe_reset` all share one type and can be stacked
+        together (e.g. by a collector writing into a preallocated rollout).
+        """
+        env_idx_nt = NonTensorStack(*range(tensordict.shape[0]))
+        if env_idx_nt.shape != tensordict.shape:
+            env_idx_nt = expand_as_right(env_idx_nt, tensordict)
+        tensordict.set(self._env_idx_key, env_idx_nt)
 
     def _sort_results(self, results, *other_results):
         # Extract env indices from results. When child envs have a batch dimension
