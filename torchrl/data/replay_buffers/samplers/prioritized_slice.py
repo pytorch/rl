@@ -319,6 +319,29 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
 
         return pad
 
+    @staticmethod
+    def _wrap_within_columns(
+        flat_index: torch.Tensor, start_idx: torch.Tensor, time_length: int
+    ) -> torch.Tensor:
+        """Shifts column-relative flat indices by the start of each column's first trajectory.
+
+        ``flat_index`` points into the ``[*batch, time]`` flattened storage in
+        which the trajectories of each batch column are laid out back to back,
+        counted from the start of that column's first trajectory. Once a
+        circular storage has wrapped, that start is no longer time step ``0``
+        and differs across columns, so the time coordinate is shifted by the
+        start of its own column and wrapped modulo ``time_length`` without
+        leaving the column.
+        """
+        is_first_in_column = torch.ones(
+            start_idx.shape[0], dtype=torch.bool, device=start_idx.device
+        )
+        is_first_in_column[1:] = (start_idx[1:, 1:] != start_idx[:-1, 1:]).any(-1)
+        column_start = start_idx[is_first_in_column, 0].to(flat_index.device)
+        column = flat_index // time_length
+        time = flat_index % time_length
+        return column * time_length + (time + column_start[column]) % time_length
+
     def _preceding_stop_idx(self, storage, lengths, seq_length, start_idx):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
         if preceding_stop_idx is not None:
@@ -345,12 +368,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             preceding_stop_idx = pad[:, -seq_length + 1 + span_right :]
         preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
         if storage._is_full:
-            preceding_stop_idx = (
-                preceding_stop_idx
-                + np.ravel_multi_index(
-                    tuple(start_idx[0].tolist()), storage._total_shape
-                )
-            ) % storage._total_shape.numel()
+            preceding_stop_idx = self._wrap_within_columns(
+                preceding_stop_idx, start_idx, time_length=storage.shape[0]
+            )
         if self.cache_values:
             self._cache["preceding_stop_idx"] = preceding_stop_idx
         return preceding_stop_idx
@@ -393,28 +413,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # Find the stop that comes after the start index
             # say start_tensor has shape [N, X] and stop_idx has shape [M, X]
             # diff will have shape [M, N, X]
-            stop_idx_corr = stop_idx.clone()
-            stop_idx_corr[:, 0] = torch.where(
-                stop_idx[:, 0] < start_idx[:, 0],
-                stop_idx[:, 0] + storage._len_along_dim0,
-                stop_idx[:, 0],
-            )
-            diff = stop_idx_corr.unsqueeze(1) - starts_tensor.unsqueeze(0)
+            diff = stop_idx.unsqueeze(1) - starts_tensor.unsqueeze(0)
             # filter out all items that don't belong to the same dim in the storage
             mask = (diff[:, :, 1:] != 0).any(-1)
-            diff = diff[:, :, 0]
+            diff = diff[:, :, 0] % storage._len_along_dim0
             diff[mask] = diff.max() + 1
-            diff = diff.reshape(-1, starts_tensor.shape[0])
-            # We remove all neg values from consideration
-            diff[diff < 0] = diff.max() + 1
             # Take the arg min along dim 0 (thereby reducing dim M)
-            idx = diff.argmin(dim=0)
-            stops = stop_idx_corr[idx, 0]
-            # TODO: here things may not work bc we could have spanning trajs,
-            #  though I cannot show that it breaks in the tests
-            if starts_tensor.ndim > 1:
-                starts_tensor = starts_tensor[:, 0]
-            seq_length = (stops - starts_tensor + 1).clamp_max(seq_length)
+            steps_to_stop = diff.min(dim=0).values
+            seq_length = (steps_to_stop + 1).clamp_max(seq_length)
             if (seq_length <= 0).any():
                 raise RuntimeError(
                     "failed to compute seq_length, please report this bug"
