@@ -672,6 +672,9 @@ class TED2Flat:
         output.set_non_tensor("_storage_shape", tuple(data.shape))
         output.memmap_(path)
 
+        if not is_full:
+            data = self._clear_unwritten_done(data, shift)
+
         # Preallocate the output
         done = data.get(self.done_key).squeeze(-1).clone()
         if not is_full:
@@ -761,6 +764,23 @@ class TED2Flat:
                     keys_to_expand=keys_to_expand,
                 )
         return output
+
+    def _clear_unwritten_done(self, data: TensorDictBase, shift: int) -> TensorDictBase:
+        """Returns a shallow copy of ``data`` whose done flags are ``False`` past the cursor.
+
+        Rows past the cursor of a storage that is not full have never been
+        written and may hold arbitrary values. A done flag read there would
+        add trajectory boundaries that the saved data does not have.
+        """
+        data = data.copy()
+        for done_key in self.done_keys:
+            for key in (done_key, unravel_key(("next", done_key))):
+                entry = data.get(key, None)
+                if entry is not None:
+                    entry = entry.clone()
+                    entry[shift:] = False
+                    data.set(key, entry)
+        return data
 
     def _call(self, *, data, output, is_full, shift, done, total_keys, keys_to_expand):
         # capture for each item in data where the observation should be written

@@ -238,6 +238,8 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
         "SamplerEnsembleConfig",
+        "SubgoalTripletConfig",
+        "TransitiveQLossConfig",
     }
 )
 
@@ -675,11 +677,12 @@ class TestDataConfigs:
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_sample_unit_configs(self):
-        """Test TransitionConfig and SequenceConfig."""
+        """Test TransitionConfig, SequenceConfig and SubgoalTripletConfig."""
         from hydra.utils import instantiate
-        from torchrl.data.replay_buffers import Sequence, Transition
+        from torchrl.data.replay_buffers import Sequence, SubgoalTriplet, Transition
         from torchrl.trainers.algorithms.configs.data import (
             SequenceConfig,
+            SubgoalTripletConfig,
             TransitionConfig,
         )
 
@@ -693,6 +696,13 @@ class TestDataConfigs:
         assert isinstance(unit, Sequence)
         assert unit.length == 8
         assert unit.episode_boundary == "stop"
+        assert unit.done_key == ("next", "done")
+
+        cfg = SubgoalTripletConfig(goal_discount=None, policy_goal_discount=0.9)
+        unit = instantiate(cfg)
+        assert isinstance(unit, SubgoalTriplet)
+        assert unit.goal_discount is None
+        assert unit.policy_goal_discount == 0.9
         assert unit.done_key == ("next", "done")
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
@@ -2173,7 +2183,13 @@ class TestCollectorsConfig:
             frames_per_batch=10,
             total_frames=10,
         )
-        collector_instance = instantiate(cfg)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="SharedMemWeightSyncScheme was created without",
+                category=FutureWarning,
+            )
+            collector_instance = instantiate(cfg)
         try:
             assert next(iter(collector_instance)).numel() == 10
         finally:
@@ -2241,7 +2257,13 @@ class TestCollectorsConfig:
         else:
             assert not cfg.policy._partial_
 
-        collector_instance = instantiate(cfg)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="SharedMemWeightSyncScheme was created without",
+                category=FutureWarning,
+            )
+            collector_instance = instantiate(cfg)
         try:
             if collector == "async":
                 assert isinstance(collector_instance, AsyncCollector)
@@ -2327,7 +2349,13 @@ class TestCollectorsConfig:
         else:
             cfg = cfg_cls(policy=exploratory_policy_cfg, **kwargs)
 
-        collector_instance = instantiate(cfg)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="SharedMemWeightSyncScheme was created without",
+                category=FutureWarning,
+            )
+            collector_instance = instantiate(cfg)
 
         try:
             assert isinstance(collector_instance, expected_cls)
@@ -2577,6 +2605,56 @@ class TestLossConfigs:
         else:
             assert type(loss) is SACLoss
 
+    def test_transitive_q_loss_config(self):
+        from hydra.utils import instantiate
+        from torchrl.modules import (
+            IndependentNormal,
+            MLP,
+            NormalParamExtractor,
+            ProbabilisticActor,
+        )
+        from torchrl.objectives import TransitiveQLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import TransitiveQLossConfig
+
+        actor = ProbabilisticActor(
+            TensorDictSequential(
+                TensorDictModule(
+                    MLP(in_features=6, out_features=4, num_cells=[8]),
+                    in_keys=["observation", "goal"],
+                    out_keys=["param"],
+                ),
+                TensorDictModule(
+                    NormalParamExtractor(),
+                    in_keys=["param"],
+                    out_keys=["loc", "scale"],
+                ),
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=IndependentNormal,
+        )
+        critic = TensorDictModuleConfig(
+            module=MLPConfig(in_features=8, out_features=1, num_cells=[8]),
+            in_keys=["observation", "goal", "action"],
+            out_keys=["state_action_value"],
+        )
+        cfg = TransitiveQLossConfig(
+            actor_network=actor,
+            qvalue_network=[critic, critic],
+            discount=0.9,
+            expectile=0.6,
+        )
+        loss = instantiate(cfg)
+        assert type(loss) is TransitiveQLoss
+        assert loss.discount == 0.9
+        assert loss.expectile == 0.6
+        weights = loss.qvalue_network_params["module", "0", "weight"]
+        assert weights.shape[0] == 2
+        assert not torch.equal(weights[0], weights[1])
+
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_dqn_loss_config(self):
         from torchrl.trainers.algorithms.configs.objectives import DQNLossConfig
@@ -2602,6 +2680,33 @@ class TestLossConfigs:
         assert cfg.loss_function == "l2"
         assert cfg.delay_value is True
         assert cfg.gamma == 0.9
+
+    def test_qmixer_loss_config_priority_weight_key(self):
+        from torchrl.data import OneHot
+        from torchrl.modules import QMixer, QValueActor
+        from torchrl.trainers.algorithms.configs.objectives import (
+            _make_qmixer_loss,
+            QMixerLossConfig,
+        )
+
+        assert QMixerLossConfig().priority_weight_key is None
+        local_value_network = QValueActor(
+            torch.nn.Linear(3, 2),
+            in_keys=[("agents", "observation")],
+            spec=OneHot(2),
+            action_space="one-hot",
+        )
+        mixer_network = TensorDictModule(
+            QMixer(state_shape=(3,), mixing_embed_dim=4, n_agents=2, device="cpu"),
+            in_keys=[("agents", "chosen_action_value"), "state"],
+            out_keys=["chosen_action_value"],
+        )
+        loss = _make_qmixer_loss(
+            local_value_network=local_value_network,
+            mixer_network=mixer_network,
+            priority_weight_key=["sampler", "weight"],
+        )
+        assert loss.tensor_keys.priority_weight == ("sampler", "weight")
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ddpg_loss_config(self):
@@ -3866,7 +3971,8 @@ trainer:
 )
 class TestHydraParsing:
     @pytest.fixture(autouse=True, scope="module")
-    def init_hydra(self):
+    @classmethod
+    def init_hydra(cls):
         from hydra.core.global_hydra import GlobalHydra
 
         GlobalHydra.instance().clear()

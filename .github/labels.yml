@@ -220,6 +220,10 @@
   description: "Triggers gen-dgrl data tests only"
   color: "1D76DB"
 
+- name: Data/lerobot
+  description: "Triggers LeRobot data tests only"
+  color: "1D76DB"
+
 - name: Data/minari
   description: "Triggers minari data tests only"
   color: "1D76DB"

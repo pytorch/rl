@@ -1385,7 +1385,7 @@ def save_checkpoint(path, policy: torch.nn.Module, optim, scheduler, iteration: 
 
 
 def load_checkpoint(path, policy: torch.nn.Module, optim, scheduler, device) -> int:
-    checkpoint = TensorDict.load(path)
+    checkpoint = TensorDict.load(path, allow_pickle=True)
     apply_policy_weights(policy, checkpoint["policy"], device)
     optim.load_state_dict(checkpoint["optim"])
     scheduler.load_state_dict(checkpoint["scheduler"])

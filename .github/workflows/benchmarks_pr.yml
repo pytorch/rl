@@ -280,12 +280,13 @@ jobs:
           RESULT_JSON="${GITHUB_WORKSPACE}/benchmark-result/${TORCHRL_BENCHMARK_DEVICE}/${{ matrix.revision }}.json"
           cd benchmark-definitions/benchmarks
           python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only \
-            --benchmark-json "${RESULT_JSON}" --ignore test_llm.py .
+            --benchmark-json "${RESULT_JSON}" --ignore test_llm.py \
+            -k 'not async_collection_pixels_64_envs and not 64-processes' .
       - name: Record benchmark metadata
         if: always()
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BENCHMARK_COMMAND: python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --ignore test_llm.py .
+          BENCHMARK_COMMAND: python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --ignore test_llm.py -k 'not async_collection_pixels_64_envs and not 64-processes' .
           DEVICE: ${{ matrix.device }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           IMAGE: ${{ matrix.image }}

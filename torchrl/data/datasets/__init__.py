@@ -12,6 +12,7 @@ from .atari_dqn import AtariDQNExperienceReplay
 from .common import BaseDatasetExperienceReplay
 from .huggingface import HuggingFaceDatasetAdapter
 from .lerobot import lerobot_columns_to_tensordict, LeRobotExperienceReplay
+from .lerobot_adapter import LeRobotDatasetAdapter
 from .utils import load_dataset, register_dataset
 
 # Conditional imports for classes with external dependencies
@@ -52,6 +53,7 @@ except ImportError:
 
 __all__ = [
     "HuggingFaceDatasetAdapter",
+    "LeRobotDatasetAdapter",
     "ReplayDatasetAdapter",
     "ReplayDatasetExporter",
     "ReplayDatasetImporter",

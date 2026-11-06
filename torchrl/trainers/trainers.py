@@ -179,7 +179,8 @@ def _state_dict_to_td(sd: dict) -> TensorDict:
 
     Tensor values are stored directly; everything else is wrapped in
     :class:`~tensordict.NonTensorData` so that :meth:`~tensordict.TensorDict.dumps`
-    can persist the whole state without pickle dependencies.
+    can persist the whole state. Values that are not JSON-serializable are
+    pickled by tensordict.
     """
     return TensorDict(
         {
@@ -1180,8 +1181,8 @@ class Trainer:
             path.mkdir(parents=True, exist_ok=True)
             # Persist all module state dicts using TensorDict memmap.
             # Non-tensor values (scalars, bools, nested dicts) are wrapped in
-            # NonTensorData automatically by _state_dict_to_td, so no pickle
-            # dependency is needed.
+            # NonTensorData automatically by _state_dict_to_td. Values that are
+            # not JSON-serializable (e.g. a dict holding tensors) are pickled.
             for key in dict.fromkeys(
                 ("loss_module", "collector", "optimizer", *self._modules)
             ):
@@ -1394,7 +1395,7 @@ class Trainer:
                 key_path = path / key
                 if key_path.exists():
                     state[key] = _td_to_state_dict(
-                        TensorDict.load_memmap(str(key_path))
+                        TensorDict.load_memmap(str(key_path), allow_pickle=True)
                     )
                 else:
                     state[key] = {}

@@ -46,7 +46,7 @@ python -c "import functorch"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-    pip install git+https://github.com/pytorch/tensordict@$(cat .github/ci_commit_pins/tensordict.txt)
+    pip install git+https://github.com/pytorch/tensordict
 else
     pip install tensordict
 fi

@@ -13,6 +13,7 @@ import math
 import os
 import shutil
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -156,8 +157,21 @@ class TestMujoco:
         env.close()
 
     @staticmethod
-    def _write_microduck_fixture(tmp_path: Path) -> Path:
-        """A 14-actuator stand-in for the MicroDuck MJCF that rests on two feet."""
+    def _write_microduck_fixture(
+        tmp_path: Path,
+        joint_names: Sequence[str] | None = None,
+        actuated_joints: Sequence[str] | None = None,
+    ) -> Path:
+        """A 14-actuator stand-in for the MicroDuck MJCF that rests on two feet.
+
+        ``joint_names`` are the joints in definition (qpos) order and
+        ``actuated_joints`` the joint driven by each actuator, in actuator
+        order; it defaults to ``joint_names``.
+        """
+        if joint_names is None:
+            joint_names = [f"joint{index}" for index in range(14)]
+        if actuated_joints is None:
+            actuated_joints = joint_names
         lines = [
             '<mujoco model="microduck-test">',
             '  <option timestep="0.002"/>',
@@ -187,7 +201,7 @@ class TestMujoco:
             lines.extend(
                 (
                     f'{indent}<body name="link{index}">',
-                    f'{indent}  <joint name="joint{index}" axis="{" ".join(axis)}"/>',
+                    f'{indent}  <joint name="{joint_names[index]}" axis="{" ".join(axis)}"/>',
                     f'{indent}  <geom type="sphere" size="0.005" mass="0.01"/>',
                 )
             )
@@ -201,7 +215,7 @@ class TestMujoco:
                 "  </worldbody>",
                 "  <actuator>",
                 *(
-                    f'    <position name="actuator{index}" joint="joint{index}" '
+                    f'    <position name="actuator{index}" joint="{actuated_joints[index]}" '
                     'kp="5" ctrlrange="-1 1"/>'
                     for index in range(14)
                 ),
@@ -345,6 +359,66 @@ class TestMujoco:
         start = MicroDuckEnv.GAIT_PHASE_START + 3
         torch.testing.assert_close(
             transition["next", "observation"][..., start : start + 14], action
+        )
+        env.close()
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_microduck_policy_observation_follows_robot_layout(self, tmp_path, backend):
+        robot_joints = (
+            "left_hip_yaw",
+            "left_hip_roll",
+            "left_hip_pitch",
+            "left_knee",
+            "left_ankle",
+            "neck_pitch",
+            "head_pitch",
+            "head_yaw",
+            "head_roll",
+            "right_hip_yaw",
+            "right_hip_roll",
+            "right_hip_pitch",
+            "right_knee",
+            "right_ankle",
+        )
+        assert MicroDuckEnv.JOINT_NAMES == robot_joints
+        swapped = (robot_joints[1], robot_joints[0], *robot_joints[2:])
+        for name, fixture in (
+            ("unnamed", {}),
+            ("reordered", {"joint_names": swapped, "actuated_joints": robot_joints}),
+            ("actuators", {"joint_names": robot_joints, "actuated_joints": swapped}),
+        ):
+            (tmp_path / name).mkdir()
+            with pytest.raises(ValueError, match="robot's joint order"):
+                MicroDuckEnv(
+                    self._write_microduck_fixture(tmp_path / name, **fixture),
+                    backend=backend,
+                    policy_observation=True,
+                )
+        (tmp_path / "robot").mkdir()
+        num_envs = 1 if backend == "mujoco" else 2
+        env = MicroDuckEnv(
+            self._write_microduck_fixture(tmp_path / "robot", robot_joints),
+            backend=backend,
+            tasks=MicroDuckEnv.sidestep_task(0.15),
+            num_envs=num_envs,
+            policy_observation=True,
+            seed=0,
+        )
+        check_env_specs(env)
+        td = env.reset()
+        action = torch.linspace(-0.5, 0.5, 14).expand(num_envs, -1)
+        for _ in range(3):
+            td = env.step(td.set("action", action))["next"]
+        full, robot = td["observation"], td["policy_observation"]
+        assert MicroDuckEnv.POLICY_OBSERVATION_DIM == 61
+        assert robot.shape == (num_envs, 61)
+        torch.testing.assert_close(robot[..., 0:3], full[..., 3:6])
+        torch.testing.assert_close(robot[..., 3:6], full[..., 0:3])
+        torch.testing.assert_close(robot[..., 6:34], full[..., 11:39])
+        torch.testing.assert_close(robot[..., 34:48], action)
+        torch.testing.assert_close(
+            robot[..., 48:61],
+            torch.tensor([0.0, 0.15] + [0.0] * 11).expand(num_envs, -1),
         )
         env.close()
 

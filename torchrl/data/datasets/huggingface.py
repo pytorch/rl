@@ -23,6 +23,7 @@ from tensordict import (
 )
 from torch.utils.data import DataLoader, Dataset
 
+from torchrl.data.datasets._adapter_utils import _validate_export_dtypes
 from torchrl.data.replay_buffers.dataloader import tensordict_collate
 
 if TYPE_CHECKING:
@@ -52,20 +53,7 @@ def _column_keys(batch: TensorDictBase) -> dict[str, Any]:
 
 
 def _collate_for_export(batch: Any, *, dtypes: dict[NestedKey, torch.dtype]) -> Any:
-    # Validate before stacking: torch.stack can silently round mixed dtypes.
-    items = batch if isinstance(batch, list) else (batch,)
-    for item in items:
-        if not isinstance(item, TensorDictBase):
-            continue
-        for key, value in item.items(include_nested=True, leaves_only=True):
-            if isinstance(value, torch.Tensor):
-                expected = dtypes.setdefault(key, value.dtype)
-                if value.dtype != expected:
-                    raise ValueError(
-                        f"Tensor at key {key!r} has dtype {value.dtype}, but "
-                        f"previous rows have dtype {expected}. Hugging Face "
-                        "export requires a consistent tensor dtype per key."
-                    )
+    _validate_export_dtypes(batch, dtypes=dtypes)
     return tensordict_collate(batch)
 
 
@@ -160,11 +148,37 @@ def _feature_dtype(feature: Any) -> np.dtype | None:
 def _contains_null(value: Any) -> bool:
     if value is None:
         return True
+    if isinstance(value, np.ndarray):
+        return value.dtype.hasobject and any(
+            _contains_null(item) for item in value.flat
+        )
     if isinstance(value, (list, tuple)):
         return any(_contains_null(item) for item in value)
     if isinstance(value, Mapping):
         return any(_contains_null(item) for item in value.values())
     return False
+
+
+def _as_numeric_array(value: Any, dtype: np.dtype | None) -> np.ndarray | None:
+    """Convert numeric data without rounding uint64 or replacing nulls.
+
+    Return None for missing data; unsupported or ragged values raise NumPy's
+    conversion error. Dense arrays avoid a Python scan of their elements.
+    """
+    if value is None:
+        return None
+    array = None
+    if isinstance(value, (list, tuple, np.ndarray)):
+        # Integer conversion rejects None and avoids rounding large uint64 values.
+        # Infer other dtypes first so None cannot become NaN or False.
+        array_dtype = dtype if dtype is not None and dtype.kind in "iu" else None
+        try:
+            array = np.asarray(value, dtype=array_dtype)
+        except (TypeError, ValueError):
+            pass
+        if (array is None or array.dtype.hasobject) and _contains_null(value):
+            return None
+    return np.asarray(array if array is not None else value, dtype=dtype)
 
 
 def _array_shape(value: Any, feature: Any) -> tuple[int, ...] | None:
@@ -202,24 +216,14 @@ def _decode_feature(value: Any, feature: Any) -> Any:
             key: _decode_feature(item, feature.get(key)) for key, item in value.items()
         }
     dtype = _feature_dtype(feature)
-    array = None
-    if isinstance(value, (list, tuple)):
-        # Integer conversion rejects None and avoids rounding large uint64 values.
-        # Infer other dtypes first so None cannot become NaN or False.
-        array_dtype = dtype if dtype is not None and dtype.kind in "iu" else None
-        try:
-            array = np.asarray(value, dtype=array_dtype)
-        except (TypeError, ValueError):
-            pass
-        if (array is None or array.dtype.hasobject) and _contains_null(value):
+    try:
+        array = _as_numeric_array(value, dtype)
+        if array is None:
             # Dense tensors have no validity bitmap. Keep nulls and NaNs intact.
             return NonTensorData(value)
-    if dtype is None:
-        return value
-    try:
-        tensor = torch.as_tensor(
-            np.asarray(array if array is not None else value, dtype=dtype)
-        )
+        if dtype is None:
+            return value
+        tensor = torch.as_tensor(array)
     except (TypeError, ValueError):
         return value
     shape = _array_shape(value, feature)

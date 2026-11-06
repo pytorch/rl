@@ -1037,6 +1037,27 @@ class TestCroSeq:
         assert tensordict_crop.shape == torch.Size([3, 4, 13, 2])
         assert tensordict_crop[mask_key].all()
 
+    def test_crop_full_length(self):
+        tensordict = TensorDict({"a": torch.arange(5).expand(3, 5)}, [3, 5])
+        t = RandomCropTensorDict(5)
+        tensordict_crop = t(tensordict)
+        assert (tensordict_crop["a"] == tensordict["a"]).all()
+
+    @pytest.mark.parametrize("use_mask", [False, True])
+    def test_crop_samples_every_window(self, use_mask):
+        # A sequence of length 4 has 3 windows of length 2, starting at 0, 1 and 2.
+        tensordict = TensorDict(
+            {
+                "a": torch.arange(4).expand(1000, 4),
+                "mask": torch.ones(1000, 4, dtype=torch.bool),
+            },
+            [1000, 4],
+        )
+        t = RandomCropTensorDict(2, mask_key="mask" if use_mask else None)
+        torch.manual_seed(0)
+        starts = t(tensordict)["a"][:, 0]
+        assert set(starts.tolist()) == {0, 1, 2}
+
 
 class TestMultiStepTransform:
     def test_multistep_transform(self):

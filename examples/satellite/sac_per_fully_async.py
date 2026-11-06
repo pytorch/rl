@@ -33,7 +33,10 @@ from torchrl.data import (
 from torchrl.envs.utils import ExplorationType
 from torchrl.objectives import SACLoss, SoftUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.weight_update import MultiProcessWeightSyncScheme
+from torchrl.weight_update import (
+    MultiProcessWeightSyncScheme,
+    SharedMemWeightSyncScheme,
+)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 if str(PACKAGE_DIR.parent.parent) not in sys.path:
@@ -423,6 +426,7 @@ def main(argv: list[str] | None = None) -> int:
         exploration_type=ExplorationType.RANDOM,
         update_at_each_batch=True,
         sync=False,
+        weight_sync_schemes={"policy": SharedMemWeightSyncScheme(atomic=True)},
     )
     torchrl_logger.info(
         "Collector(num_collectors=1, sync=False, replay_buffer=rb) ready -- starting "
@@ -576,6 +580,7 @@ def main(argv: list[str] | None = None) -> int:
 
         for sched in schedulers:
             sched.step()
+        collector.update_policy_weights_()
 
         # Per-outer-iter logging.
         now = time.perf_counter()

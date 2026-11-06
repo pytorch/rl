@@ -53,6 +53,8 @@ from torchrl.modules.models.model_based import (
 from torchrl.testing import get_default_devices
 from torchrl.trainers.algorithms import DreamerV3UpdateRatio
 
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _compile_backend = "eager" if sys.platform == "win32" else "inductor"
@@ -1436,6 +1438,11 @@ def test_public_block_gru_triton_frozen_parameter_gradients():
 @pytest.mark.skipif(
     not torch.cuda.is_available() or not _has_dreamer_v3_triton,
     reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+)
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.12.0"),
+    reason="Dynamo cannot trace an autotuned Triton kernel with prune_configs_by "
+    "that is called twice before PyTorch 2.12 (pytorch/pytorch#177874).",
 )
 def test_public_block_gru_triton_compile_recurrent_loss():
     torch.manual_seed(1)
