@@ -31,6 +31,11 @@ def _is_exporting() -> bool:  # noqa: F811
     return torch.compiler.is_exporting()
 
 
+def _is_non_strict_exporting() -> bool:
+    """Whether a non-strict :func:`torch.export.export` trace runs this code as plain Python."""
+    return torch.compiler.is_exporting() and not torch.compiler.is_dynamo_compiling()
+
+
 class MultiAgentNetBase(nn.Module):
     """A base class for multi-agent networks.
 
@@ -219,8 +224,13 @@ class MultiAgentNetBase(nn.Module):
 
         # If parameters are shared, agents use the same network
         else:
-            with self.params.to_module(self._empty_net, preserve_module_state=False):
-                output = self._empty_net(inputs)
+            if _is_non_strict_exporting():
+                output = self._shared_forward_non_strict_export(inputs)
+            else:
+                with self.params.to_module(
+                    self._empty_net, preserve_module_state=False
+                ):
+                    output = self._empty_net(inputs)
 
             if self.centralized:
                 # If the parameters are shared, and it is centralized, all agents will have the same output
@@ -241,6 +251,29 @@ class MultiAgentNetBase(nn.Module):
             )
 
         return output
+
+    def _shared_forward_non_strict_export(self, inputs: torch.Tensor) -> torch.Tensor:
+        """Runs the shared network on ``self.params`` with :func:`torch.func.functional_call`.
+
+        A non-strict export trace makes :meth:`~tensordict.TensorDictBase.to_module`
+        take its compile path, whose restore leaves the meta placeholders of
+        ``self._empty_net`` in its ``_parameters``. The network then gains
+        ``_empty_net.*`` entries in its ``state_dict`` and computes eager outputs
+        from the placeholders. The placeholders are taken out of the template for
+        the call and put back afterwards instead.
+        """
+        flat_params = self.params.flatten_keys(".").to_dict()
+        placeholders = []
+        try:
+            for key in flat_params:
+                path, _, name = key.rpartition(".")
+                submodule = self._empty_net.get_submodule(path)
+                if name in submodule.__dict__:
+                    placeholders.append((submodule, name, submodule.__dict__.pop(name)))
+            return torch.func.functional_call(self._empty_net, flat_params, (inputs,))
+        finally:
+            for submodule, name, value in reversed(placeholders):
+                submodule.__dict__[name] = value
 
     def get_stateful_net(self, copy: bool = True):
         """Returns a stateful version of the network.
