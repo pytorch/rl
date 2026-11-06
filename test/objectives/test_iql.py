@@ -966,6 +966,53 @@ class TestIQL(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("mask", [None, "partial", "all_invalid"])
+    def test_iql_priority_weights(self, mask):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_iql(batch=8)
+        weights = torch.arange(1.0, 9.0)
+        if mask == "partial":
+            mask = torch.tensor([True, False, True, True, False, True, True, True])
+        elif mask == "all_invalid":
+            mask = torch.zeros(8, dtype=torch.bool)
+        effective_weights = weights if mask is None else weights * mask
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+        torch.manual_seed(self.seed)
+        per_sample_loss_fn = IQLLoss(
+            actor,
+            qvalue,
+            value,
+            reduction="none",
+            scalar_output_mode="exclude",
+        )
+        torch.manual_seed(self.seed)
+        weighted_loss_fn = IQLLoss(actor, qvalue, value)
+        SoftUpdate(per_sample_loss_fn, eps=0.5)
+        SoftUpdate(weighted_loss_fn, eps=0.5)
+        per_sample = per_sample_loss_fn(td.clone())
+        weighted_td = td.clone().set("priority_weight", weights)
+        if mask is not None:
+            weighted_td.set(("collector", "mask"), mask)
+        weighted = weighted_loss_fn(weighted_td)
+
+        loss_keys = ["loss_actor", "loss_qvalue", "loss_value"]
+        per_sample = per_sample.select(*loss_keys)
+        if effective_weights.any():
+            expected = per_sample.apply(
+                lambda loss: (loss * effective_weights).sum() / effective_weights.sum(),
+                batch_size=[],
+            )
+        else:
+            expected = per_sample.apply(
+                lambda loss: torch.zeros((), dtype=loss.dtype), batch_size=[]
+            )
+        unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
+        assert_allclose_td(weighted.select(*loss_keys), expected)
+        for key in loss_keys:
+            assert not torch.isclose(expected[key], unweighted[key])
+
 
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
@@ -1808,6 +1855,39 @@ class TestDiscreteIQL(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    def test_discrete_iql_priority_weights(self):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_discrete_iql(batch=8)
+        weights = torch.arange(1.0, 9.0)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+        torch.manual_seed(self.seed)
+        per_sample_loss_fn = DiscreteIQLLoss(
+            actor,
+            qvalue,
+            value,
+            action_space="one-hot",
+            reduction="none",
+            scalar_output_mode="exclude",
+        )
+        torch.manual_seed(self.seed)
+        weighted_loss_fn = DiscreteIQLLoss(actor, qvalue, value, action_space="one-hot")
+        SoftUpdate(per_sample_loss_fn, eps=0.5)
+        SoftUpdate(weighted_loss_fn, eps=0.5)
+        per_sample = per_sample_loss_fn(td.clone())
+        weighted = weighted_loss_fn(td.clone().set("priority_weight", weights))
+
+        loss_keys = ["loss_actor", "loss_qvalue", "loss_value"]
+        per_sample = per_sample.select(*loss_keys)
+        expected = per_sample.apply(
+            lambda loss: (loss * weights).sum() / weights.sum(), batch_size=[]
+        )
+        unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
+        assert_allclose_td(weighted.select(*loss_keys), expected)
+        for key in loss_keys:
+            assert not torch.isclose(expected[key], unweighted[key])
+
 
 @pytest.mark.parametrize("create_target_params", [True, False])
 @pytest.mark.parametrize(
@@ -1895,3 +1975,7 @@ def test_param_buffer_types(create_target_params, cast):
     assert not isinstance(
         loss.target_actor_network_params["module", "1", "running_var"], nn.Parameter
     )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

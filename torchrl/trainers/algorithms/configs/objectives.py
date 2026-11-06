@@ -664,6 +664,8 @@ class QMixerLossConfig(LossConfig):
     reward_key: Any = None
     done_key: Any = None
     terminated_key: Any = None
+    priority_weight_key: Any = None
+    use_prioritized_weights: str | bool = "auto"
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_qmixer_loss"
 
     def __post_init__(self) -> None:
@@ -681,6 +683,7 @@ def _make_qmixer_loss(*args, **kwargs) -> QMixerLoss:
         "done_key",
         "terminated_key",
         "priority_key",
+        "priority_weight_key",
     ):
         if key in kwargs:
             value = kwargs.pop(key)
@@ -763,6 +766,7 @@ class IQLLossConfig(LossConfig):
     reduction: str | None = None
     deactivate_vmap: bool = False
     scalar_output_mode: str | None = None
+    use_prioritized_weights: str | bool = "auto"
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_iql_loss"
 
     def __post_init__(self) -> None:
@@ -824,6 +828,7 @@ class CQLLossConfig(LossConfig):
     reduction: str | None = None
     deactivate_vmap: bool = False
     scalar_output_mode: str | None = None
+    use_prioritized_weights: str | bool = "auto"
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_cql_loss"
 
     def __post_init__(self) -> None:

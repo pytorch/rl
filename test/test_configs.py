@@ -2663,6 +2663,33 @@ class TestLossConfigs:
         assert cfg.delay_value is True
         assert cfg.gamma == 0.9
 
+    def test_qmixer_loss_config_priority_weight_key(self):
+        from torchrl.data import OneHot
+        from torchrl.modules import QMixer, QValueActor
+        from torchrl.trainers.algorithms.configs.objectives import (
+            _make_qmixer_loss,
+            QMixerLossConfig,
+        )
+
+        assert QMixerLossConfig().priority_weight_key is None
+        local_value_network = QValueActor(
+            torch.nn.Linear(3, 2),
+            in_keys=[("agents", "observation")],
+            spec=OneHot(2),
+            action_space="one-hot",
+        )
+        mixer_network = TensorDictModule(
+            QMixer(state_shape=(3,), mixing_embed_dim=4, n_agents=2, device="cpu"),
+            in_keys=[("agents", "chosen_action_value"), "state"],
+            out_keys=["chosen_action_value"],
+        )
+        loss = _make_qmixer_loss(
+            local_value_network=local_value_network,
+            mixer_network=mixer_network,
+            priority_weight_key=["sampler", "weight"],
+        )
+        assert loss.tensor_keys.priority_weight == ("sampler", "weight")
+
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ddpg_loss_config(self):
         from torchrl.trainers.algorithms.configs.objectives import DDPGLossConfig

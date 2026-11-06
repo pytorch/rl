@@ -356,14 +356,11 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        # Extract weights for prioritized replay buffer
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-        loss = self._reduce_loss(loss, tensordict=tensordict, weights=weights)
+        loss = self._reduce_loss(
+            loss,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         td_out = TensorDict(loss=loss)
 
         self._clear_weakrefs(
@@ -622,14 +619,11 @@ class DistributionalDQNLoss(LossModule):
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
-        # Extract weights for prioritized replay buffer
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-        loss = self._reduce_loss(loss, tensordict=tensordict, weights=weights)
+        loss = self._reduce_loss(
+            loss,
+            tensordict=tensordict,
+            weights=self._maybe_get_priority_weight(tensordict),
+        )
         td_out = TensorDict(loss=loss)
         self._clear_weakrefs(
             tensordict,

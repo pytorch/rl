@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import contextlib
+import math
 
 import numpy as np
 import pytest
@@ -725,6 +726,124 @@ class TestCQL(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    @pytest.mark.parametrize("num_random", [1, 4])
+    def test_cql_regularizer_matches_cql_h(self, num_random):
+        """The conservative term is one logsumexp over all 3N sampled actions of the current state.
+
+        The policy's spread depends on the observation, so the log-densities
+        of the current-state and next-state policy actions differ: the
+        next-state actions must carry the next-state log-probability while
+        being scored by the Q-function at the current state.
+        """
+        obs_dim, action_dim, temperature, min_q_weight = 3, 4, 2.0, 0.5
+
+        class UniformParams(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.log_half_width = nn.Linear(obs_dim, action_dim)
+
+            def forward(self, obs):
+                high = self.log_half_width(obs).exp()
+                return -high, high
+
+        def uniform(low, high):
+            return torch.distributions.Independent(
+                torch.distributions.Uniform(low, high, validate_args=False), 1
+            )
+
+        class StateValue(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim, 1)
+
+            def forward(self, obs, act):
+                return self.linear(obs)
+
+        uniform_params = UniformParams()
+        actor = ProbabilisticActor(
+            TensorDictModule(
+                uniform_params, in_keys=["observation"], out_keys=["low", "high"]
+            ),
+            in_keys=["low", "high"],
+            spec=Bounded(-torch.ones(action_dim), torch.ones(action_dim)),
+            distribution_class=uniform,
+        )
+        qvalue = ValueOperator(StateValue(), in_keys=["observation", "action"])
+        loss_fn = CQLLoss(
+            actor,
+            qvalue,
+            num_random=num_random,
+            temperature=temperature,
+            min_q_weight=min_q_weight,
+            delay_qvalue=False,
+            reduction="none",
+            scalar_output_mode="exclude",
+        )
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql(batch=8, obs_dim=obs_dim, action_dim=action_dim)
+        loss = loss_fn(td)
+
+        with torch.no_grad():
+            random_term = torch.full((8,), action_dim * math.log(2.0))
+            curr_term = random_term + uniform_params.log_half_width(
+                td["observation"]
+            ).sum(-1)
+            next_term = random_term + uniform_params.log_half_width(
+                td["next", "observation"]
+            ).sum(-1)
+            per_head = temperature * torch.log(
+                num_random
+                * (
+                    (random_term / temperature).exp()
+                    + (curr_term / temperature).exp()
+                    + (next_term / temperature).exp()
+                )
+            )
+        torch.testing.assert_close(loss["loss_cql"], 2 * min_q_weight * per_head)
+
+    def test_cql_priority_weights(self):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql(batch=8)
+        weights = torch.arange(1.0, 9.0)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        torch.manual_seed(self.seed)
+        per_sample_loss_fn = CQLLoss(
+            actor,
+            qvalue,
+            alpha_init=0.5,
+            delay_qvalue=False,
+            reduction="none",
+            scalar_output_mode="exclude",
+        )
+        torch.manual_seed(self.seed)
+        weighted_loss_fn = CQLLoss(
+            actor, qvalue, alpha_init=0.5, delay_qvalue=False, with_lagrange=True
+        )
+        torch.manual_seed(self.seed)
+        per_sample = per_sample_loss_fn(td.clone())
+        torch.manual_seed(self.seed)
+        weighted = weighted_loss_fn(td.clone().set("priority_weight", weights))
+
+        loss_keys = [
+            "loss_qvalue",
+            "loss_cql",
+            "loss_actor",
+            "loss_actor_bc",
+            "loss_alpha",
+        ]
+        per_sample = per_sample.select(*loss_keys)
+        expected = per_sample.apply(
+            lambda loss: (loss * weights).sum() / weights.sum(), batch_size=[]
+        )
+        unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
+        assert_allclose_td(weighted.select(*loss_keys), expected)
+        for key in loss_keys:
+            assert not torch.isclose(expected[key], unweighted[key])
+        torch.testing.assert_close(
+            weighted["loss_alpha_prime"], -0.5 * expected["loss_cql"]
+        )
+
 
 class TestDiscreteCQL(LossModuleTestBase):
     seed = 0
@@ -1140,3 +1259,27 @@ class TestDiscreteCQL(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    def test_dcql_priority_weights(self):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_spec_type="one_hot")
+        td = self._create_mock_data_dcql(action_spec_type="one_hot", batch=8)
+        weights = torch.arange(1.0, 9.0)
+        per_sample_loss_fn = DiscreteCQLLoss(actor, delay_value=False, reduction="none")
+        weighted_loss_fn = DiscreteCQLLoss(actor, delay_value=False)
+        per_sample = per_sample_loss_fn(td.clone())
+        weighted = weighted_loss_fn(td.clone().set("priority_weight", weights))
+
+        loss_keys = ["loss_qvalue", "loss_cql"]
+        per_sample = per_sample.select(*loss_keys)
+        expected = per_sample.apply(
+            lambda loss: (loss * weights).sum() / weights.sum(), batch_size=[]
+        )
+        unweighted = per_sample.apply(lambda loss: loss.mean(), batch_size=[])
+        assert_allclose_td(weighted.select(*loss_keys), expected)
+        for key in loss_keys:
+            assert not torch.isclose(expected[key], unweighted[key])
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
