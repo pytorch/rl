@@ -188,13 +188,13 @@ class MicroDuckSkillController(LowLevelController):
             )
         super().__init__(
             skill_policy,
-            decision_spec,
             adapter=_MicroDuckAdapter(
                 task_library, skill_ids, argument_key, control_period_s
             ),
             group_key=group_key,
             reset_key=reset_key,
         )
+        self.decision_spec = decision_spec
 
 
 class _MicroDuckSkillHistory(TensorDictPrimer):
@@ -374,7 +374,10 @@ class MicroDuckSkillEnv(TransformedEnv):
             )
         num_skills = controller.decision_spec["skill"].n
         inner = ClosedLoopMultiAction.from_env(
-            env, controller, steps=control_steps_per_decision
+            env,
+            controller,
+            steps=control_steps_per_decision,
+            decision_spec=controller.decision_spec,
         )
         inner.insert_transform(-1, _MicroDuckSkillHistory(env, group_key, num_skills))
         return cls(

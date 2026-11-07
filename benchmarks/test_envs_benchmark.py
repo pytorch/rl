@@ -49,10 +49,14 @@ def test_controller_deployment(benchmark, steps, closed_loop):
         controller = LowLevelController(
             TensorDictModule(
                 torch.nn.Identity(), in_keys=["command"], out_keys=["action"]
-            ),
-            Composite(command=Bounded(0, 1, shape=(1,))),
+            )
         )
-        env = ClosedLoopMultiAction.from_env(base, controller, steps=steps)
+        env = ClosedLoopMultiAction.from_env(
+            base,
+            controller,
+            steps=steps,
+            decision_spec=Composite(command=Bounded(0, 1, shape=(1,))),
+        )
     else:
         env = TransformedEnv(base, MultiAction(reward_aggregation="sum"))
     policy = WrapModule(
