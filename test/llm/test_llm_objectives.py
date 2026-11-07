@@ -36,6 +36,8 @@ from torchrl.objectives.llm.grpo import (
     DAPO,
     GRPOLoss,
     GRPOLossOutput,
+    GSPOLoss,
+    GSPOLossOutput,
     MCAdvantage,
     MCAdvantageSelector,
     RayMCAdvantage,
@@ -737,6 +739,43 @@ def _policy_loss_data(current_log_prob, sample_log_prob, advantage):
     )
 
 
+def _gspo_loss_data(seq_log_ratio, advantage, seed=0):
+    # Three rows with different padding; each row's mean log-ratio is seq_log_ratio[i].
+    generator = torch.Generator().manual_seed(seed)
+    mask = torch.tensor(
+        [[False, True, True, True, True], [False, False, True, True, True], [True] * 5]
+    )
+    sample_log_prob = -torch.rand(3, 5, generator=generator) - 0.5
+    noise = torch.where(mask, 0.3 * torch.randn(3, 5, generator=generator), 0.0)
+    noise = torch.where(
+        mask, noise - noise.sum(-1, keepdim=True) / mask.sum(-1, keepdim=True), 0.0
+    )
+    current_log_prob = (
+        sample_log_prob + torch.tensor(seq_log_ratio).unsqueeze(-1) + noise
+    )
+    advantage = torch.tensor(advantage).view(3, 1, 1).expand(3, 5, 1).clone()
+    data = TensorDict(
+        {
+            "current_log_prob": current_log_prob.requires_grad_(True),
+            "mask": mask,
+            ("tokens", "full"): torch.zeros(3, 5, dtype=torch.long),
+            ("log_probs", "full"): torch.where(mask, sample_log_prob, 0.0),
+            "advantage": advantage,
+        },
+        batch_size=[3],
+    )
+    return data, sample_log_prob
+
+
+def _gspo_reference_loss(current_log_prob, sample_log_prob, mask, advantage, eps):
+    # Sequence-level GSPO objective from the paper, written directly.
+    eps_low, eps_high = eps
+    log_ratio = torch.where(mask, current_log_prob - sample_log_prob, 0.0)
+    ratio = (log_ratio.sum(-1) / mask.sum(-1)).exp()
+    clipped = ratio.clamp(1 - eps_low, 1 + eps_high)
+    return -torch.minimum(ratio * advantage, clipped * advantage).mean()
+
+
 class TestLosses:
     def test_grpo_entropy_mc_when_analytic_is_nonfinite(self):
         loss_fn = GRPOLoss(actor_network=None)
@@ -912,6 +951,104 @@ class TestLosses:
         )
 
         torch.testing.assert_close(loss.loss_objective, torch.tensor(-0.8))
+
+    @pytest.mark.parametrize(
+        "seq_log_ratio,eps",
+        [
+            ([0.2, -0.25, 0.05], (0.2, 0.2)),
+            ([0.2, -0.25, 0.0001], (3e-4, 4e-4)),
+        ],
+    )
+    def test_gspo_matches_sequence_objective(self, seq_log_ratio, eps):
+        advantage = [1.0, -0.5, 2.0]
+        data, sample_log_prob = _gspo_loss_data(seq_log_ratio, advantage)
+        loss_fn = GSPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=eps,
+            aggregation="prompt_mean",
+            entropy_bonus=False,
+        )
+        loss = loss_fn(data)
+        assert isinstance(loss, GSPOLossOutput)
+        current_log_prob = data["current_log_prob"]
+        (grad,) = torch.autograd.grad(loss.loss_objective.sum(), current_log_prob)
+
+        current_ref = current_log_prob.detach().requires_grad_(True)
+        expected = _gspo_reference_loss(
+            current_ref, sample_log_prob, data["mask"], torch.tensor(advantage), eps
+        )
+        (expected_grad,) = torch.autograd.grad(expected, current_ref)
+
+        torch.testing.assert_close(loss.loss_objective.reshape(()), expected)
+        torch.testing.assert_close(grad, expected_grad)
+        assert (grad[~data["mask"]] == 0).all()
+
+    @pytest.mark.parametrize("bound", ["high", "low"])
+    def test_gspo_clips_whole_sequence(self, bound):
+        eps_low, eps_high = 3e-4, 4e-4
+        if bound == "high":
+            log_ratio = torch.tensor(eps_high).log1p().item() + 2e-5
+            clipped_sign = 1.0
+        else:
+            log_ratio = torch.tensor(-eps_low).log1p().item() - 2e-5
+            clipped_sign = -1.0
+        # Rows 0 and 1 are out of bounds; only row 0's advantage sign is clipped.
+        data, _ = _gspo_loss_data(
+            [log_ratio, log_ratio, 0.0], [clipped_sign, -clipped_sign, 1.0]
+        )
+        loss_fn = GSPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=(eps_low, eps_high),
+            aggregation="prompt_mean",
+            entropy_bonus=False,
+        )
+        loss = loss_fn(data)
+        (grad,) = torch.autograd.grad(
+            loss.loss_objective.sum(), data["current_log_prob"]
+        )
+        mask = data["mask"]
+        assert (grad[0] == 0).all()
+        assert (grad[1][mask[1]] != 0).all()
+        assert (grad[2][mask[2]] != 0).all()
+
+    def test_gspo_token_advantages(self):
+        # Each token's gradient follows its own advantage: -A_t * s_i / |y_i|.
+        data = _policy_loss_data(
+            current_log_prob=[0.0, 0.0],
+            sample_log_prob=[0.0, 0.0],
+            advantage=[1.0, -1.0],
+        )
+        data["current_log_prob"].requires_grad_(True)
+        loss = GSPOLoss(
+            _FixedLogProbPolicy(), aggregation="prompt_mean", entropy_bonus=False
+        )(data)
+        (grad,) = torch.autograd.grad(
+            loss.loss_objective.sum(), data["current_log_prob"]
+        )
+        torch.testing.assert_close(grad, torch.tensor([[-0.5, 0.5]]))
+
+    def test_gspo_half_precision_long_sequence(self):
+        # The per-sequence sum of log-ratios (3 * 32768) exceeds the fp16 range.
+        data = _policy_loss_data(
+            current_log_prob=[-1.0] * 32768,
+            sample_log_prob=[-4.0] * 32768,
+            advantage=[-0.01] * 32768,
+        ).apply(lambda x: x.half() if x.is_floating_point() else x)
+        loss = GSPOLoss(
+            _FixedLogProbPolicy(), aggregation="prompt_mean", entropy_bonus=False
+        )(data)
+        assert torch.isfinite(loss.loss_objective).all()
+
+    def test_gspo_paper_defaults(self):
+        loss_fn = GSPOLoss(_FixedLogProbPolicy())
+        assert loss_fn.aggregation == "prompt_mean"
+        torch.testing.assert_close(loss_fn.clip_epsilon_low, torch.tensor(3e-4))
+        torch.testing.assert_close(loss_fn.clip_epsilon_high, torch.tensor(4e-4))
+        assert GSPOLoss(aggregation=None).aggregation == "prompt_mean"
+
+    def test_gspo_rejects_kl_mask(self):
+        with pytest.raises(ValueError, match="kl_mask_threshold"):
+            GSPOLoss(_FixedLogProbPolicy(), kl_mask_threshold=0.1)
 
 
 class _FixedSFTPolicy(torch.nn.Module):
