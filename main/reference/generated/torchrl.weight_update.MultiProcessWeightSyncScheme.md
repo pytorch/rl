@@ -8,9 +8,17 @@ This scheme creates transports that communicate via multiprocessing queues.
 Unlike the parent SharedMemWeightSyncScheme which uses shared memory for in-place
 updates, this scheme sends actual weight copies through queues to workers.
 
+Each worker keeps its own copy of the weights: changes made to the sender's
+model (for instance an optimizer step) only reach the workers through
+`send()`, which copies the weights at the time it is called.
+
 A background thread on the receiver side listens for "receive" instructions
 from the sender. When an instruction arrives, the thread receives the weights
-from the weight queue and applies them to the model.
+from the weight queue and copies them into the model while holding the lock
+that the receiving collector holds around each policy call, so a policy
+call always reads a single, complete version of the weights. If the weights
+cannot be applied, the worker reports it and `send()` raises a
+`RuntimeError` instead of waiting for an acknowledgment that never comes.
 
 It follows the same two-phase pattern as SharedMemWeightSyncScheme:
 
@@ -161,13 +169,12 @@ Returns:
 
 Shared memory weights ready to send
 
-receive(*timeout: float | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None
+receive(*timeout: float | None = None*) → Any | None[[source]](../../_modules/torchrl/weight_update/_mp.html#MultiProcessWeightSyncScheme.receive)
 
-Apply the shared buffer to the model, as the background thread does.
+Receive the next weights from the queue and apply them to the model.
 
-The application holds the receiving context's weight-update lock, so a
-manual call cannot race with a policy call or with the background
-receiver thread.
+The queue is read without holding the weight-update lock, so a policy
+call is only blocked while the weights are copied.
 
 *property*receiver_transport*: [TransportBackend](torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend) | None*
 
@@ -200,7 +207,9 @@ Parameters:
 - list[int]: Send to specific workers
 
 Note: If sync=True (default), this is a blocking call that ensures
-specified workers are updated before returning.
+specified workers are updated before returning. The weights are copied
+before they are queued, so changes made to them after `send()`
+returns never reach the workers.
 
 *property*sender_transports*: dict[int, [TransportBackend](torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend)]*
 
