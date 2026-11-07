@@ -175,18 +175,22 @@ job runs for hours.
 
 Environment support includes:
 
-- PyTorch-native environments such as `PendulumEnv` and custom MuJoCo tasks.
+- PyTorch-native environments such as `PendulumEnv`, and MuJoCo tasks built
+  on `MujocoEnv`, including `SatelliteEnv` and `CubeBowlEnv`.
 - Wrappers for Gymnasium, Gym, DM Control, Brax, Jumanji, PettingZoo, VMAS,
   OpenSpiel, Safety-Gymnasium, Isaac Lab, and other optional libraries.
 - `SerialEnv`, `ParallelEnv`, and batched wrappers for local vectorization and
   multiprocessing.
 - Environment transforms for observation normalization, image conversion,
-  reward transforms, action masking, action scaling, auto-reset, frame stacking,
-  state reconstruction, and more.
+  reward transforms, action masking, action scaling (`ActionScaling`), action
+  flattening (`FlattenAction`), auto-reset, frame stacking, state reconstruction,
+  and more.
 
 Transforms are first-class TorchRL modules. They can run on-device, participate
 in specs, and be inserted, removed, or composed without wrapping the whole
 environment in opaque adapter layers.
+[Macro-control primitives](docs/source/reference/macro_primitives.rst) expand
+high-level commands into sequences of low-level actions.
 
 ```python
 from torchrl.envs import Compose, DoubleToFloat, ObservationNorm, TransformedEnv
@@ -286,7 +290,9 @@ TorchRL replay buffers are modular: storage, sampler, writer, collate function,
 transforms, prefetching, priority updates, and device movement are separate
 pieces. That makes it possible to use the same interface for simple in-memory
 replay, memmap-backed storage, prioritized replay, CUDA-aware sampling, offline
-datasets, HER, or custom storage layouts.
+datasets, or custom storage layouts. `HERReplayBuffer` relabels goals for
+goal-conditioned RL. For compact observations, `NextObservationDelta` and
+`NextStateReconstructor` support reconstruction when sampling from replay.
 
 ```python
 from torchrl.data import LazyMemmapStorage, TensorDictPrioritizedReplayBuffer
@@ -390,8 +396,9 @@ objectives including MAPPO and IPPO, as well as `MultiAgentGAE`, `ValueNorm`,
 
 The same component style also covers model-based and imitation-learning work:
 Dreamer/DreamerV3 objectives and RSSM modules, Decision Transformer components,
-behavior cloning losses, and ACT-style action chunking all share the same
-TensorDict and key-dispatch conventions as the online RL algorithms.
+`BCLoss` for behavior cloning, and `ACTModel` with `ACTLoss` for action chunking
+all share the same TensorDict and key-dispatch conventions as the online RL
+algorithms.
 
 ### Additional specialized workflows
 
@@ -412,7 +419,8 @@ Performance-sensitive areas include:
 
 - vectorized return and advantage computation;
 - recurrent GRU/LSTM reset handling with scan and Triton backends;
-- compact sequence layouts for recurrent value estimation;
+- compact sequence layouts for recurrent value estimation, shifted value
+  estimation, and chunked value-network forwards;
 - async collectors and policy weight synchronization;
 - prioritized replay and CUDA-aware replay-buffer paths;
 - memmap-backed data movement for large offline or distributed jobs.
