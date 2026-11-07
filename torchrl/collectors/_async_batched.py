@@ -172,7 +172,14 @@ def _env_loop(
                 action_td = action_td.to(env_device)
             pool.async_step_and_maybe_reset_send(action_td, env_index=env_id)
             cur_td, obs = pool.async_step_and_maybe_reset_recv(env_index=env_id)
-            cur_td.set(_ENV_IDX_KEY, env_id)
+            # The pool marks results with a NonTensorData index; store a tensor
+            # so batches concatenate and route like the other workers' batches.
+            cur_td.set(
+                _ENV_IDX_KEY,
+                torch.full(
+                    cur_td.batch_size, env_id, dtype=torch.long, device=cur_td.device
+                ),
+            )
             if storing_device is not None:
                 cur_td = cur_td.to(storing_device)
             if not _put_result(
