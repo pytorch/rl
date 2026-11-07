@@ -855,7 +855,7 @@ remain readable.
 The [`torchrl.render.save_render_checkpoint()`](generated/torchrl.render.save_render_checkpoint.html#torchrl.render.save_render_checkpoint) helper also keeps its legacy
 `torch.save` payload by default during the compatibility window. Pass
 `format="archive"` or `format="directory"` to opt into the unified format;
-the default changes in v0.15.
+the default changes in v0.16.
 
 ## API
 
@@ -2422,7 +2422,7 @@ the driver process and the reason is logged. A pre-built
 instead; it implies the process inference server and multiprocessing workers.
 `transport="driver"` keeps the driver-mediated path explicitly: coordinator
 threads relay requests to the transport derived from `policy_backend`. In
-v0.15 `transport="auto"` becomes the default; until then the collector emits
+v0.16 `transport="auto"` becomes the default; until then the collector emits
 a `FutureWarning` when the default would change its behavior.
 This mode bounds completed and in-flight transitions together to twice the
 environment count. Workers park before reserving capacity when the driver stops
@@ -4785,7 +4785,7 @@ no-op (no double-wrapping).
 The detection reads the env's `full_observation_spec` and
 `full_state_spec`, so it sees through
 [`SerialEnv`](generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv) / [`ParallelEnv`](generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv)
-where transforms live in child envs. Limitations and the v0.15 default
+where transforms live in child envs. Limitations and the v0.16 default
 flip are documented in the
 [policy= argument page](envs_api.html#environment-policy-arg).
 
@@ -11114,7 +11114,7 @@ driver's coordinator threads to the transport derived from
 with `service_backend="process"`). `None` (default) behaves like
 `"driver"` and emits a
 `FutureWarning` when `"auto"` would pick process slots:
-in v0.15 the default becomes `"auto"`.
+in v0.16 the default becomes `"auto"`.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device for policy inference
 (shorthand for `InferenceDeviceConfig(policy_device=...)`).
 Defaults to `None`.
@@ -11141,7 +11141,7 @@ environments and policy inference. Specific overrides
 `env_backend` and `policy_backend` take precedence when set.
 One of `"threading"`, `"multiprocessing"`, `"ray"`, or
 `"monarch"`. Defaults to `None`: environment workers run in
-threads and inference uses the threading transport. In v0.15 the
+threads and inference uses the threading transport. In v0.16 the
 environment-worker default changes to `"multiprocessing"`; a
 `FutureWarning` is emitted until then when neither
 `backend` nor `env_backend` is given.
@@ -13571,10 +13571,10 @@ the env if the env's specs don't already provide them. The check
 is spec-based and idempotent, so passing an env that was already
 wrapped via [`EnvBase`](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)'s `policy=`
 constructor argument is safe. If `False`, the collector never
-modifies the env. Defaults to `None` through v0.14, which
-preserves the pre-v0.15 behavior (no auto-registration) but emits
+modifies the env. Defaults to `None` through v0.15, which
+preserves the pre-v0.16 behavior (no auto-registration) but emits
 a `FutureWarning` if the env was missing transforms the
-policy needed. The default flips to `True` in v0.15.
+policy needed. The default flips to `True` in v0.16.
 
 See also
 
@@ -15138,10 +15138,10 @@ worker [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collec
 workers append [`InitTracker`](torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker) and
 recurrent-state [`TensorDictPrimer`](torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer)
 transforms to their envs if the env specs don't already provide
-them. `False` disables it; `None` (default through v0.14)
-preserves pre-v0.15 behavior and emits a
+them. `False` disables it; `None` (default through v0.15)
+preserves pre-v0.16 behavior and emits a
 `FutureWarning` when wrapping would have been needed.
-Default flips to `True` in v0.15.
+Default flips to `True` in v0.16.
 - **weight_updater** ([*WeightUpdaterBase*](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)*or**constructor**,**optional*) - An instance of [`WeightUpdaterBase`](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)
 or its subclass, responsible for updating the policy weights on remote inference workers.
 If not provided, a [`MultiProcessedWeightUpdater`](torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater) will be used by default,
@@ -16107,10 +16107,10 @@ worker [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collec
 workers append [`InitTracker`](torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker) and
 recurrent-state [`TensorDictPrimer`](torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer)
 transforms to their envs if the env specs don't already provide
-them. `False` disables it; `None` (default through v0.14)
-preserves pre-v0.15 behavior and emits a
+them. `False` disables it; `None` (default through v0.15)
+preserves pre-v0.16 behavior and emits a
 `FutureWarning` when wrapping would have been needed.
-Default flips to `True` in v0.15.
+Default flips to `True` in v0.16.
 - **weight_updater** ([*WeightUpdaterBase*](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)*or**constructor**,**optional*) - An instance of [`WeightUpdaterBase`](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)
 or its subclass, responsible for updating the policy weights on remote inference workers.
 If not provided, a [`MultiProcessedWeightUpdater`](torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater) will be used by default,
@@ -17293,10 +17293,10 @@ worker [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collec
 workers append [`InitTracker`](torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker) and
 recurrent-state [`TensorDictPrimer`](torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer)
 transforms to their envs if the env specs don't already provide
-them. `False` disables it; `None` (default through v0.14)
-preserves pre-v0.15 behavior and emits a
+them. `False` disables it; `None` (default through v0.15)
+preserves pre-v0.16 behavior and emits a
 `FutureWarning` when wrapping would have been needed.
-Default flips to `True` in v0.15.
+Default flips to `True` in v0.16.
 - **weight_updater** ([*WeightUpdaterBase*](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)*or**constructor**,**optional*) - An instance of [`WeightUpdaterBase`](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)
 or its subclass, responsible for updating the policy weights on remote inference workers.
 If not provided, a [`MultiProcessedWeightUpdater`](torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater) will be used by default,
@@ -78172,7 +78172,7 @@ selects `"shm"` when the env schema supports it and falls back to
 Warning
 
 The default will change from `"queue"` to `"auto"` in
-v0.15 for the multiprocessing backend. A `FutureWarning` is
+v0.16 for the multiprocessing backend. A `FutureWarning` is
 emitted when the default is relied upon.
 - **worker_affinity** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**] or**Callable**[**[**int**]**,*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**]**,**optional*) -
 
@@ -273192,9 +273192,29 @@ Default is `False`.
 - **deterministic_backup** (*bool**,**optional*) - Whether to use the deterministic. Default is `True`.
 - **num_random** (*int**,**optional*) - Number of random actions to sample for the CQL loss.
 Default is 10.
-- **with_lagrange** (*bool**,**optional*) - Whether to use the Lagrange multiplier.
-Default is `False`.
-- **lagrange_thresh** (`float`, optional) - Lagrange threshold. Default is 0.0.
+- **with_lagrange** (*bool**,**optional*) -
+
+Whether to tune the weight
+\(\alpha'\) of the conservative term by dual gradient descent,
+as in CQL(H) with a Lagrange multiplier. When `True`,
+`"loss_cql"` is \(\alpha' (c_1 + c_2 - 2 \tau)\), where
+\(c_i\) is the conservative term of the i-th Q-network and
+\(\tau\) is `lagrange_thresh`, with \(\alpha'\) treated as
+a constant, and `"loss_alpha_prime"` is
+\(-\alpha' ((c_1 + c_2) / 2 - \tau)\) with the conservative
+terms treated as constants, so that it only trains
+`log_alpha_prime`. The losses can be summed into a single
+optimization step. Default is `False`.
+
+Note
+
+Before v0.15, `"loss_cql"` was not scaled by
+\(\alpha'\) and `"loss_alpha_prime"` also sent gradients
+into the Q-networks.
+- **lagrange_thresh** (`float`, optional) - Lagrange threshold
+\(\tau\), the target value of the conservative term
+\((c_1 + c_2) / 2\). Only used when `with_lagrange=True`.
+Default is 0.0.
 - **reduction** (*str**,**optional*) - Specifies the reduction to apply to the output:
 `"none"` | `"mean"` | `"sum"`. `"none"`: no reduction will be applied,
 `"mean"`: the sum of the output will be divided by the number of
@@ -332564,7 +332584,7 @@ loss.set_keys(
 
 # Computation times
 
-**06:38.223** total execution time for 32 files **from all galleries**:
+**06:38.100** total execution time for 32 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -332572,7 +332592,7 @@ loss.set_keys(
 | [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`reference/generated/tutorials/mujoco_cube_bowl_macros.py`) | 00:57.152 | 0.0 |
 | [TorchRL objectives: Coding a DDPG loss](tutorials/coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`reference/generated/tutorials/coding_ddpg.py`) | 00:30.161 | 0.0 |
 | [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`reference/generated/tutorials/multiagent_ppo.py`) | 00:29.505 | 0.0 |
-| [Exporting Rollout data to LeRobot](tutorials/lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`reference/generated/tutorials/lerobot_export.py`) | 00:28.433 | 0.0 |
+| [Exporting Rollout data to LeRobot](tutorials/lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`reference/generated/tutorials/lerobot_export.py`) | 00:28.286 | 0.0 |
 | [Exporting TorchRL modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:27.113 | 0.0 |
 | [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](tutorials/multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`reference/generated/tutorials/multiagent_competitive_ddpg.py`) | 00:26.580 | 0.0 |
 | [TorchRL envs](tutorials/torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`reference/generated/tutorials/torchrl_envs.py`) | 00:25.462 | 0.0 |
@@ -332591,7 +332611,7 @@ loss.set_keys(
 | [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html#sphx-glr-tutorials-vla-py) (`reference/generated/tutorials/vla.py`) | 00:00.459 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.352 | 0.0 |
 | [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`reference/generated/tutorials/memory_efficient_rl.py`) | 00:00.236 | 0.0 |
-| [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.172 | 0.0 |
+| [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.197 | 0.0 |
 | [Get started with data collection and storage](tutorials/getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`reference/generated/tutorials/getting-started-3.py`) | 00:00.076 | 0.0 |
 | [Get started with logging](tutorials/getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`reference/generated/tutorials/getting-started-4.py`) | 00:00.075 | 0.0 |
 | [Get started with TorchRL's modules](tutorials/getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`reference/generated/tutorials/getting-started-1.py`) | 00:00.053 | 0.0 |
@@ -340419,7 +340439,7 @@ from heuristic_gait import MicroDuckGaitActor # noqa: E402
 ```
 
 ```
-/__w/_temp/lerobot-gallery-ozRKHZ/repo/torchrl/_utils.py:132: DeprecationWarning: TorchRL support for torch<2.13 (found torch 2.11.0+cpu) is deprecated and will be removed in v0.17. torch 2.11 and 2.12 remain supported until then for stacks that pin them, such as Isaac Lab 3.0. Upgrade to torch>=2.13 to silence this warning.
+/__w/_temp/lerobot-gallery-8kl5kt/repo/torchrl/_utils.py:132: DeprecationWarning: TorchRL support for torch<2.13 (found torch 2.11.0+cpu) is deprecated and will be removed in v0.17. torch 2.11 and 2.12 remain supported until then for stacks that pin them, such as Isaac Lab 3.0. Upgrade to torch>=2.13 to silence this warning.
  warnings.warn(
 ```
 
@@ -340507,13 +340527,13 @@ Video(filename=str(quick_video_paths[0]), embed=True, width=QUICK_WIDTH)
 ```
 
 ```
-2026-11-07 07:41:01,364 [torchrl][INFO] Downloading the MicroDuck assets from https://github.com/pollen-robotics/microduck_rl/archive/d424a0c899f6b33cbd3daeb279913134349c0b63.zip to /root/.cache/torchrl/microduck/microduck_rl-d424a0c899f6b33cbd3daeb279913134349c0b63 [END]
-/__w/_temp/lerobot-gallery-ozRKHZ/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
+2026-11-07 07:43:24,093 [torchrl][INFO] Downloading the MicroDuck assets from https://github.com/pollen-robotics/microduck_rl/archive/d424a0c899f6b33cbd3daeb279913134349c0b63.zip to /root/.cache/torchrl/microduck/microduck_rl-d424a0c899f6b33cbd3daeb279913134349c0b63 [END]
+/__w/_temp/lerobot-gallery-8kl5kt/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.16 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
  return super().__call__(*args, **kwargs)
-2026-11-07 07:41:04,604 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([250]) shape [END]
+2026-11-07 07:43:27,239 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([250]) shape [END]
 
 Map: 0%| | 0/250 [00:00<?, ? examples/s]
-Map: 100%|██████████| 250/250 [00:00<00:00, 2563.67 examples/s]
+Map: 100%|██████████| 250/250 [00:00<00:00, 2565.96 examples/s]
 ```
 
  Your browser does not support the video tag.
@@ -340633,7 +340653,7 @@ first_batch = next(collector_iterator)
 ```
 
 ```
-/__w/_temp/lerobot-gallery-ozRKHZ/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.15 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
+/__w/_temp/lerobot-gallery-8kl5kt/repo/torchrl/collectors/_single.py:255: FutureWarning: The env passed to Collector is missing transforms required by the policy (InitTracker). From torchrl v0.16 the collector will append them automatically. To enable that behavior now (and silence this warning), pass `auto_register_policy_transforms=True`. To opt out permanently, pass `auto_register_policy_transforms=False`.
  return super().__call__(*args, **kwargs)
 ```
 
@@ -340702,7 +340722,7 @@ frames = replay[:]
 ```
 
 ```
-2026-11-07 07:41:10,029 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([500]) shape [END]
+2026-11-07 07:43:32,631 [torchrl][INFO] Initialized LazyTensorStorage with torch.Size([500]) shape [END]
 ```
 
 During off-policy training, we would sample batches like this one to update a
@@ -340896,13 +340916,13 @@ assert loaded.num_frames == len(replay)
 
 ```
 Map: 0%| | 0/250 [00:00<?, ? examples/s]
-Map: 77%|███████▋ | 193/250 [00:00<00:00, 1907.59 examples/s]
-Map: 100%|██████████| 250/250 [00:00<00:00, 1833.25 examples/s]
+Map: 76%|███████▋ | 191/250 [00:00<00:00, 1892.69 examples/s]
+Map: 100%|██████████| 250/250 [00:00<00:00, 1826.47 examples/s]
 
 Map: 0%| | 0/250 [00:00<?, ? examples/s]
-Map: 77%|███████▋ | 192/250 [00:00<00:00, 1895.36 examples/s]
-Map: 100%|██████████| 250/250 [00:00<00:00, 1835.61 examples/s]
-2026-11-07 07:41:26,395 [torchrl][INFO] Saved the LeRobot recording to /tmp/torchrl-microduck-lerobot-ejeoroxh/dataset [END]
+Map: 76%|███████▋ | 191/250 [00:00<00:00, 1893.21 examples/s]
+Map: 100%|██████████| 250/250 [00:00<00:00, 1827.71 examples/s]
+2026-11-07 07:43:48,978 [torchrl][INFO] Saved the LeRobot recording to /tmp/torchrl-microduck-lerobot-xzal05dt/dataset [END]
 ```
 
 ## Loading the data back into TorchRL
@@ -341037,7 +341057,7 @@ sampling from LeRobot datasets in TorchRL.
 - [LeRobot dataset v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3)
 and [visualization tools](https://huggingface.co/docs/lerobot/using_dataset_tools).
 
-**Total running time of the script:** (0 minutes 28.433 seconds)
+**Total running time of the script:** (0 minutes 28.286 seconds)
 
 [`Download Jupyter notebook: lerobot_export.ipynb`](../_downloads/61d38028156aeff4fa28fed78de648c2/lerobot_export.ipynb)
 
@@ -349120,7 +349140,7 @@ TensorDictSequential(
  in_keys=['features'],
  out_keys=['logits'])
  (2): TensorDictModule(
- module=<function make_policy.<locals>.<lambda> at 0x7f9e9c260860>,
+ module=<function make_policy.<locals>.<lambda> at 0x7ffa51cd8540>,
  in_keys=['logits'],
  out_keys=['action'])
  ),
@@ -349140,7 +349160,7 @@ the initial `("rs_h", "rs_c")` recurrent state slots on reset.
 Forgetting either of these is the most common source of silent
 hidden-state bugs. The collector now detects recurrent submodules in the
 policy and auto-appends both transforms when `auto_register_policy_transforms=True`
-is passed. As of v0.15 this becomes the default; for earlier versions you
+is passed. As of v0.16 this becomes the default; for earlier versions you
 need to opt in explicitly.
 
 ```
@@ -349449,7 +349469,7 @@ print("Training loss trajectory:", [round(v, 4) for v in losses])
 ```
 
 ```
-Training loss trajectory: [0.4132, 0.4075, 0.4038, 0.4069]
+Training loss trajectory: [0.4141, 0.4048, 0.4058, 0.4074]
 ```
 
 ## Conclusion
@@ -349489,7 +349509,7 @@ recurrent state.
 `TensorDictPrimer`, `recurrent mode`, `set_keys`, and other
 shorthand that appears throughout the recurrent code paths.
 
-**Total running time of the script:** (0 minutes 0.172 seconds)
+**Total running time of the script:** (0 minutes 0.197 seconds)
 
 [`Download Jupyter notebook: recurrent_sequence_training.ipynb`](../_downloads/70bdaea647addd62eb8379f8c256e50b/recurrent_sequence_training.ipynb)
 
@@ -349637,7 +349657,7 @@ separate from policy observations. For API details, see
 
 # Computation times
 
-**06:38.223** total execution time for 32 files **from tutorials**:
+**06:38.100** total execution time for 32 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -349645,7 +349665,7 @@ separate from policy observations. For API details, see
 | [MuJoCo scripted manipulation with human-readable robot actions](mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`mujoco_cube_bowl_macros.py`) | 00:57.152 | 0.0 |
 | [TorchRL objectives: Coding a DDPG loss](coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`coding_ddpg.py`) | 00:30.161 | 0.0 |
 | [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`multiagent_ppo.py`) | 00:29.505 | 0.0 |
-| [Exporting Rollout data to LeRobot](lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`lerobot_export.py`) | 00:28.433 | 0.0 |
+| [Exporting Rollout data to LeRobot](lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`lerobot_export.py`) | 00:28.286 | 0.0 |
 | [Exporting TorchRL modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:27.113 | 0.0 |
 | [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`multiagent_competitive_ddpg.py`) | 00:26.580 | 0.0 |
 | [TorchRL envs](torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`torchrl_envs.py`) | 00:25.462 | 0.0 |
@@ -349664,7 +349684,7 @@ separate from policy observations. For API details, see
 | [Vision-Language-Action (VLA) policies with TorchRL](vla.html#sphx-glr-tutorials-vla-py) (`vla.py`) | 00:00.459 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`collector_trajectory_assembly.py`) | 00:00.352 | 0.0 |
 | [Memory-Efficient RL Training](memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`memory_efficient_rl.py`) | 00:00.236 | 0.0 |
-| [Recurrent training on sequence batches](recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`recurrent_sequence_training.py`) | 00:00.172 | 0.0 |
+| [Recurrent training on sequence batches](recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`recurrent_sequence_training.py`) | 00:00.197 | 0.0 |
 | [Get started with data collection and storage](getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`getting-started-3.py`) | 00:00.076 | 0.0 |
 | [Get started with logging](getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`getting-started-4.py`) | 00:00.075 | 0.0 |
 | [Get started with TorchRL's modules](getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`getting-started-1.py`) | 00:00.053 | 0.0 |

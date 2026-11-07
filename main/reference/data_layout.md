@@ -467,7 +467,7 @@ no-op (no double-wrapping).
 The detection reads the env's `full_observation_spec` and
 `full_state_spec`, so it sees through
 [`SerialEnv`](generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv) / [`ParallelEnv`](generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv)
-where transforms live in child envs. Limitations and the v0.15 default
+where transforms live in child envs. Limitations and the v0.16 default
 flip are documented in the
 [policy= argument page](envs_api.html#environment-policy-arg).
 

@@ -212,7 +212,7 @@ linear head that maps the LSTM output to the action logits. We pick
               in_keys=['features'],
               out_keys=['logits'])
           (2): TensorDictModule(
-              module=<function make_policy.<locals>.<lambda> at 0x7f9e9c260860>,
+              module=<function make_policy.<locals>.<lambda> at 0x7ffa51cd8540>,
               in_keys=['logits'],
               out_keys=['action'])
         ),
@@ -236,7 +236,7 @@ A recurrent policy needs two env-side transforms to behave correctly:
 Forgetting either of these is the most common source of silent
 hidden-state bugs. The collector now detects recurrent submodules in the
 policy and auto-appends both transforms when ``auto_register_policy_transforms=True``
-is passed. As of v0.15 this becomes the default; for earlier versions you
+is passed. As of v0.16 this becomes the default; for earlier versions you
 need to opt in explicitly.
 
 .. GENERATED FROM PYTHON SOURCE LINES 177-191
@@ -630,7 +630,7 @@ context manager.
 
  .. code-block:: none
 
-    Training loss trajectory: [0.4132, 0.4075, 0.4038, 0.4069]
+    Training loss trajectory: [0.4141, 0.4048, 0.4058, 0.4074]
 
 
 
@@ -681,7 +681,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.172 seconds)
+   **Total running time of the script:** (0 minutes 0.197 seconds)
 
 
 .. _sphx_glr_download_tutorials_recurrent_sequence_training.py:

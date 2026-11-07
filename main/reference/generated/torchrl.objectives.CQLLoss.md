@@ -57,9 +57,29 @@ Default is `False`.
 - **deterministic_backup** (*bool**,**optional*) - Whether to use the deterministic. Default is `True`.
 - **num_random** (*int**,**optional*) - Number of random actions to sample for the CQL loss.
 Default is 10.
-- **with_lagrange** (*bool**,**optional*) - Whether to use the Lagrange multiplier.
-Default is `False`.
-- **lagrange_thresh** (`float`, optional) - Lagrange threshold. Default is 0.0.
+- **with_lagrange** (*bool**,**optional*) -
+
+Whether to tune the weight
+\(\alpha'\) of the conservative term by dual gradient descent,
+as in CQL(H) with a Lagrange multiplier. When `True`,
+`"loss_cql"` is \(\alpha' (c_1 + c_2 - 2 \tau)\), where
+\(c_i\) is the conservative term of the i-th Q-network and
+\(\tau\) is `lagrange_thresh`, with \(\alpha'\) treated as
+a constant, and `"loss_alpha_prime"` is
+\(-\alpha' ((c_1 + c_2) / 2 - \tau)\) with the conservative
+terms treated as constants, so that it only trains
+`log_alpha_prime`. The losses can be summed into a single
+optimization step. Default is `False`.
+
+Note
+
+Before v0.15, `"loss_cql"` was not scaled by
+\(\alpha'\) and `"loss_alpha_prime"` also sent gradients
+into the Q-networks.
+- **lagrange_thresh** (`float`, optional) - Lagrange threshold
+\(\tau\), the target value of the conservative term
+\((c_1 + c_2) / 2\). Only used when `with_lagrange=True`.
+Default is 0.0.
 - **reduction** (*str**,**optional*) - Specifies the reduction to apply to the output:
 `"none"` | `"mean"` | `"sum"`. `"none"`: no reduction will be applied,
 `"mean"`: the sum of the output will be divided by the number of

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**06:38.223** total execution time for 32 files **from tutorials**:
+**06:38.100** total execution time for 32 files **from tutorials**:
 
 .. container::
 
@@ -45,7 +45,7 @@ Computation times
      - 00:29.505
      - 0.0
    * - :ref:`sphx_glr_tutorials_lerobot_export.py` (``lerobot_export.py``)
-     - 00:28.433
+     - 00:28.286
      - 0.0
    * - :ref:`sphx_glr_tutorials_export.py` (``export.py``)
      - 00:27.113
@@ -102,7 +102,7 @@ Computation times
      - 00:00.236
      - 0.0
    * - :ref:`sphx_glr_tutorials_recurrent_sequence_training.py` (``recurrent_sequence_training.py``)
-     - 00:00.172
+     - 00:00.197
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-3.py` (``getting-started-3.py``)
      - 00:00.076

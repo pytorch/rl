@@ -1,6 +1,6 @@
 # Computation times
 
-**06:38.223** total execution time for 32 files **from all galleries**:
+**06:38.100** total execution time for 32 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -8,7 +8,7 @@
 | [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`reference/generated/tutorials/mujoco_cube_bowl_macros.py`) | 00:57.152 | 0.0 |
 | [TorchRL objectives: Coding a DDPG loss](tutorials/coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`reference/generated/tutorials/coding_ddpg.py`) | 00:30.161 | 0.0 |
 | [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`reference/generated/tutorials/multiagent_ppo.py`) | 00:29.505 | 0.0 |
-| [Exporting Rollout data to LeRobot](tutorials/lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`reference/generated/tutorials/lerobot_export.py`) | 00:28.433 | 0.0 |
+| [Exporting Rollout data to LeRobot](tutorials/lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`reference/generated/tutorials/lerobot_export.py`) | 00:28.286 | 0.0 |
 | [Exporting TorchRL modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:27.113 | 0.0 |
 | [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](tutorials/multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`reference/generated/tutorials/multiagent_competitive_ddpg.py`) | 00:26.580 | 0.0 |
 | [TorchRL envs](tutorials/torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`reference/generated/tutorials/torchrl_envs.py`) | 00:25.462 | 0.0 |
@@ -27,7 +27,7 @@
 | [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html#sphx-glr-tutorials-vla-py) (`reference/generated/tutorials/vla.py`) | 00:00.459 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.352 | 0.0 |
 | [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`reference/generated/tutorials/memory_efficient_rl.py`) | 00:00.236 | 0.0 |
-| [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.172 | 0.0 |
+| [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.197 | 0.0 |
 | [Get started with data collection and storage](tutorials/getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`reference/generated/tutorials/getting-started-3.py`) | 00:00.076 | 0.0 |
 | [Get started with logging](tutorials/getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`reference/generated/tutorials/getting-started-4.py`) | 00:00.075 | 0.0 |
 | [Get started with TorchRL's modules](tutorials/getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`reference/generated/tutorials/getting-started-1.py`) | 00:00.053 | 0.0 |

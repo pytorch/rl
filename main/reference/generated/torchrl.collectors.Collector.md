@@ -275,10 +275,10 @@ the env if the env's specs don't already provide them. The check
 is spec-based and idempotent, so passing an env that was already
 wrapped via [`EnvBase`](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)'s `policy=`
 constructor argument is safe. If `False`, the collector never
-modifies the env. Defaults to `None` through v0.14, which
-preserves the pre-v0.15 behavior (no auto-registration) but emits
+modifies the env. Defaults to `None` through v0.15, which
+preserves the pre-v0.16 behavior (no auto-registration) but emits
 a `FutureWarning` if the env was missing transforms the
-policy needed. The default flips to `True` in v0.15.
+policy needed. The default flips to `True` in v0.16.
 
 See also
 

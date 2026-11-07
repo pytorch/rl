@@ -41,7 +41,7 @@ selects `"shm"` when the env schema supports it and falls back to
 Warning
 
 The default will change from `"queue"` to `"auto"` in
-v0.15 for the multiprocessing backend. A `FutureWarning` is
+v0.16 for the multiprocessing backend. A `FutureWarning` is
 emitted when the default is relied upon.
 - **worker_affinity** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**] or**Callable**[**[**int**]**,*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**]**,**optional*) -
 

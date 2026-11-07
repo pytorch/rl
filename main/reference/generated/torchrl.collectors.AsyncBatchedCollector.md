@@ -85,7 +85,7 @@ driver's coordinator threads to the transport derived from
 with `service_backend="process"`). `None` (default) behaves like
 `"driver"` and emits a
 `FutureWarning` when `"auto"` would pick process slots:
-in v0.15 the default becomes `"auto"`.
+in v0.16 the default becomes `"auto"`.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device for policy inference
 (shorthand for `InferenceDeviceConfig(policy_device=...)`).
 Defaults to `None`.
@@ -112,7 +112,7 @@ environments and policy inference. Specific overrides
 `env_backend` and `policy_backend` take precedence when set.
 One of `"threading"`, `"multiprocessing"`, `"ray"`, or
 `"monarch"`. Defaults to `None`: environment workers run in
-threads and inference uses the threading transport. In v0.15 the
+threads and inference uses the threading transport. In v0.16 the
 environment-worker default changes to `"multiprocessing"`; a
 `FutureWarning` is emitted until then when neither
 `backend` nor `env_backend` is given.

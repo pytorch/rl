@@ -150,7 +150,7 @@ TensorDictSequential(
  in_keys=['features'],
  out_keys=['logits'])
  (2): TensorDictModule(
- module=<function make_policy.<locals>.<lambda> at 0x7f9e9c260860>,
+ module=<function make_policy.<locals>.<lambda> at 0x7ffa51cd8540>,
  in_keys=['logits'],
  out_keys=['action'])
  ),
@@ -170,7 +170,7 @@ the initial `("rs_h", "rs_c")` recurrent state slots on reset.
 Forgetting either of these is the most common source of silent
 hidden-state bugs. The collector now detects recurrent submodules in the
 policy and auto-appends both transforms when `auto_register_policy_transforms=True`
-is passed. As of v0.15 this becomes the default; for earlier versions you
+is passed. As of v0.16 this becomes the default; for earlier versions you
 need to opt in explicitly.
 
 ```
@@ -479,7 +479,7 @@ print("Training loss trajectory:", [round(v, 4) for v in losses])
 ```
 
 ```
-Training loss trajectory: [0.4132, 0.4075, 0.4038, 0.4069]
+Training loss trajectory: [0.4141, 0.4048, 0.4058, 0.4074]
 ```
 
 ## Conclusion
@@ -519,7 +519,7 @@ recurrent state.
 `TensorDictPrimer`, `recurrent mode`, `set_keys`, and other
 shorthand that appears throughout the recurrent code paths.
 
-**Total running time of the script:** (0 minutes 0.172 seconds)
+**Total running time of the script:** (0 minutes 0.197 seconds)
 
 [`Download Jupyter notebook: recurrent_sequence_training.ipynb`](../_downloads/70bdaea647addd62eb8379f8c256e50b/recurrent_sequence_training.ipynb)
 

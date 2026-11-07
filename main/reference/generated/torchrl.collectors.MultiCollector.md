@@ -264,10 +264,10 @@ worker [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collec
 workers append [`InitTracker`](torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker) and
 recurrent-state [`TensorDictPrimer`](torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer)
 transforms to their envs if the env specs don't already provide
-them. `False` disables it; `None` (default through v0.14)
-preserves pre-v0.15 behavior and emits a
+them. `False` disables it; `None` (default through v0.15)
+preserves pre-v0.16 behavior and emits a
 `FutureWarning` when wrapping would have been needed.
-Default flips to `True` in v0.15.
+Default flips to `True` in v0.16.
 - **weight_updater** ([*WeightUpdaterBase*](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)*or**constructor**,**optional*) - An instance of [`WeightUpdaterBase`](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)
 or its subclass, responsible for updating the policy weights on remote inference workers.
 If not provided, a [`MultiProcessedWeightUpdater`](torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater) will be used by default,
