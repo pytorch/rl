@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig
+=================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.data
+
+.. autoclass:: PrioritizedSamplerConfig

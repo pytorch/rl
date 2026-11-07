@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.data.vla
+
+
+OpenVLAImagePreprocessor
+========================
+
+.. autoclass:: OpenVLAImagePreprocessor
+    :members:

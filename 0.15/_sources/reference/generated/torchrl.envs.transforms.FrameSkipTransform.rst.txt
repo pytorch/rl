@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+FrameSkipTransform
+==================
+
+.. autoclass:: FrameSkipTransform
+    :members:

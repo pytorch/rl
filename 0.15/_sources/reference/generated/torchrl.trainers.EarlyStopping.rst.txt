@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers
+
+
+EarlyStopping
+=============
+
+.. autoclass:: EarlyStopping
+    :members:
+    :inherited-members:

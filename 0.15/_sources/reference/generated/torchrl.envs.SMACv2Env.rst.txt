@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+SMACv2Env
+=========
+
+.. autofunction:: SMACv2Env

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.modules.distributions.utils
+
+
+rsample_and_log_prob
+====================
+
+.. autofunction:: rsample_and_log_prob

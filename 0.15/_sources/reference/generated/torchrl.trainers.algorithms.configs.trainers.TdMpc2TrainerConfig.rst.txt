@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig
+================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: TdMpc2TrainerConfig

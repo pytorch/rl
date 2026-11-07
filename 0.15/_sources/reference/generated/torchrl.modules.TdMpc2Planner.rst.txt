@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+TdMpc2Planner
+=============
+
+.. autoclass:: TdMpc2Planner
+    :members:

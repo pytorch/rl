@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+SymExpTwoHot
+============
+
+.. autoclass:: SymExpTwoHot
+    :members:

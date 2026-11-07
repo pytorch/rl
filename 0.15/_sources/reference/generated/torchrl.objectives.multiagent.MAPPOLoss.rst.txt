@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.multiagent
+
+
+MAPPOLoss
+=========
+
+.. autoclass:: MAPPOLoss
+    :members:

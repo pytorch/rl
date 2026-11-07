@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+TimeMaxPool
+===========
+
+.. autoclass:: TimeMaxPool
+    :members:

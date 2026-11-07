@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+Transition
+==========
+
+.. autoclass:: Transition
+    :members:
+    :inherited-members:

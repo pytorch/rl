@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.modules.NetworkConfig
+=========================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.modules
+
+.. autoclass:: NetworkConfig

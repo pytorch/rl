@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+positions_from_is_init
+======================
+
+.. autoclass:: positions_from_is_init
+    :members:

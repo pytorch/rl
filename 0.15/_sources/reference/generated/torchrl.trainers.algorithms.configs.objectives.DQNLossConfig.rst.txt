@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.DQNLossConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: DQNLossConfig

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms.configs
+
+
+DreamerV3UpdateRatioConfig
+==========================
+
+.. autoclass:: DreamerV3UpdateRatioConfig
+    :members:

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+TransformerModule
+=================
+
+.. autoclass:: TransformerModule
+    :members:

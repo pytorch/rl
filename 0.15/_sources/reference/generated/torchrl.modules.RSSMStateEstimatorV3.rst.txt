@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+RSSMStateEstimatorV3
+====================
+
+.. autoclass:: RSSMStateEstimatorV3
+    :members:

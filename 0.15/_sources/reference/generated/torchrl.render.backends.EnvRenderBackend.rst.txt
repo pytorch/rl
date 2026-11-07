@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.render.backends
+
+
+EnvRenderBackend
+================
+
+.. autoclass:: EnvRenderBackend
+    :members:
+    :inherited-members:

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.data.datasets
+
+
+register_dataset
+================
+
+.. autofunction:: register_dataset

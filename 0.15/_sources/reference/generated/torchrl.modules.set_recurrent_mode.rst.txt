@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+set_recurrent_mode
+==================
+
+.. autoclass:: set_recurrent_mode
+    :members:

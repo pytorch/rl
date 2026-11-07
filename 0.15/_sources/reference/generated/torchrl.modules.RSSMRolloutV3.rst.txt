@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+RSSMRolloutV3
+=============
+
+.. autoclass:: RSSMRolloutV3
+    :members:

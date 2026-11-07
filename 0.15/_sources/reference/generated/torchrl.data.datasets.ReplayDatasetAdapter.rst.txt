@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.datasets
+
+
+ReplayDatasetAdapter
+====================
+
+.. autoclass:: ReplayDatasetAdapter
+    :members:
+    :inherited-members:

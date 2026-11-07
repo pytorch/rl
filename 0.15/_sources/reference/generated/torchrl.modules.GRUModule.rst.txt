@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+GRUModule
+=========
+
+.. autoclass:: GRUModule
+    :members:

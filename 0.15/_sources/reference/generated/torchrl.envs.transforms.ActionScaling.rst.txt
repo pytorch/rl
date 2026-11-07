@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+ActionScaling
+=============
+
+.. autoclass:: ActionScaling
+    :members:

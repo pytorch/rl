@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms
+
+
+A2CTrainer
+==========
+
+.. autoclass:: A2CTrainer
+    :members:
+    :inherited-members:

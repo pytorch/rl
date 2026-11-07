@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+canonicalize_rnn_subset
+=======================
+
+.. autoclass:: canonicalize_rnn_subset
+    :members:

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig
+===============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.logging
+
+.. autoclass:: TrackioLoggerConfig

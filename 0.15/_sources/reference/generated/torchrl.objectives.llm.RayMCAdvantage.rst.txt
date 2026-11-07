@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.objectives.llm
+
+
+RayMCAdvantage
+==============
+
+.. autoclass:: RayMCAdvantage
+    :members:
+    :inherited-members:

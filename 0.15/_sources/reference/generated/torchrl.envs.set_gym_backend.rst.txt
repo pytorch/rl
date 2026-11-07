@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+set_gym_backend
+===============
+
+.. autofunction:: set_gym_backend

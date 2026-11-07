@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.objectives.llm
+
+
+MCAdvantageSelector
+===================
+
+.. autoclass:: MCAdvantageSelector
+    :members:
+    :inherited-members:

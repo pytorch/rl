@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+normalize_policy
+================
+
+.. autofunction:: normalize_policy

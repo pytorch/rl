@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.modules.llm
+
+
+TorchRLBufferDataset
+====================
+
+.. autoclass:: TorchRLBufferDataset
+    :members:
+    :inherited-members:

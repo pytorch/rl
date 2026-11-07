@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.objectives.llm
+
+
+DistillationLossOutput
+======================
+
+.. autoclass:: DistillationLossOutput
+    :members:
+    :inherited-members:

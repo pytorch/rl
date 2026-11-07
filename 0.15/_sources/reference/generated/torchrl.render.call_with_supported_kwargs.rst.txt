@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+call_with_supported_kwargs
+==========================
+
+.. autofunction:: call_with_supported_kwargs

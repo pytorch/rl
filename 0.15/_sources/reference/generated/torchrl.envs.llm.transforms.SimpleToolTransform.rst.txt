@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs.llm.transforms
+
+
+SimpleToolTransform
+===================
+
+.. autoclass:: SimpleToolTransform
+    :members:
+    :inherited-members:

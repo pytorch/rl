@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.RemoveEmptySpecsConfig
+=====================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: RemoveEmptySpecsConfig

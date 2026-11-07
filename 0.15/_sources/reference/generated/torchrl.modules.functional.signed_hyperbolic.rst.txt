@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.functional
+
+
+signed_hyperbolic
+=================
+
+.. autoclass:: signed_hyperbolic
+    :members:

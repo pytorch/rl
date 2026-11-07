@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+DreamerV3BlockGRUCell
+=====================
+
+.. autoclass:: DreamerV3BlockGRUCell
+    :members:

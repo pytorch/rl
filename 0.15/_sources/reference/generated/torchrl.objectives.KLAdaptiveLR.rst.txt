@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+KLAdaptiveLR
+============
+
+.. autoclass:: KLAdaptiveLR
+    :members:

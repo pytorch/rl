@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.value
+
+
+GAE
+===
+
+.. autoclass:: GAE
+    :members:

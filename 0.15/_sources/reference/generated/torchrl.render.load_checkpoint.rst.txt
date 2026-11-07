@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+load_checkpoint
+===============
+
+.. autofunction:: load_checkpoint

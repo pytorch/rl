@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+Walker2dEnv
+===========
+
+.. autoclass:: Walker2dEnv
+    :members:
+    :inherited-members:

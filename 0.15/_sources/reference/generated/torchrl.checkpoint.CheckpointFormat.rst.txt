@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+CheckpointFormat
+================
+
+.. autoclass:: CheckpointFormat
+    :members:
+    :inherited-members:

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.GAEConfig
+========================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: GAEConfig

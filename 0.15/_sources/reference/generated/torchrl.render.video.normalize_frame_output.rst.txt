@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render.video
+
+
+normalize_frame_output
+======================
+
+.. autofunction:: normalize_frame_output

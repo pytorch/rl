@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+play_mujoco_wasm_trajectory
+===========================
+
+.. autofunction:: play_mujoco_wasm_trajectory

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.objectives.llm
+
+
+reward_model_loss
+=================
+
+.. autoclass:: reward_model_loss
+    :members:
+    :inherited-members:

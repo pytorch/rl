@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.TdMpc2LossConfig
+===============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: TdMpc2LossConfig

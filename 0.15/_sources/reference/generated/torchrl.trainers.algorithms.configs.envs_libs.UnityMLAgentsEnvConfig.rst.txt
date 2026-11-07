@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.envs\_libs.UnityMLAgentsEnvConfig
+=====================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.envs_libs
+
+.. autoclass:: UnityMLAgentsEnvConfig

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.helpers
+
+
+make_replay_buffer
+==================
+
+.. autofunction:: make_replay_buffer

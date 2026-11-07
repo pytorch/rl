@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+TensorDictPrioritizedReplayBuffer
+=================================
+
+.. autoclass:: TensorDictPrioritizedReplayBuffer
+    :members:
+    :inherited-members:

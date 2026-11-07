@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+SubgoalTriplet
+==============
+
+.. autoclass:: SubgoalTriplet
+    :members:
+    :inherited-members:

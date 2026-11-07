@@ -1,0 +1,9 @@
+# torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig
+
+*class*torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig(*collector: Any*, *total_frames: int | None*, *loss_module: Any = None*, *world_model: Any = None*, *policy_prior: Any = None*, *q_ensemble: Any = None*, *planner: Any = None*, *optimizer_model: Any | None = None*, *optimizer_actor: Any | None = None*, *optimization_stepper: Any | None = None*, *replay_buffer: Any = None*, *batch_size: int | None = None*, *logger: Any = None*, *save_trainer_file: Any = None*, *optim_steps_per_batch: int = 1*, *frame_skip: int = 1*, *seed_pretrain_steps: int = 0*, *clip_grad_norm: bool = True*, *clip_norm: float | None = 20.0*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *num_epochs: int = 1*, *async_collection: bool = False*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *learner_backend: str = 'local'*, *learner_backend_options: dict[str, Any] | None = None*, *learner_poll_interval: float = 0.05*, *lr: float = 0.0003*, *encoder_lr_scale: float = 0.3*, *actor_eps: float = 1e-05*, *weight_decay: float = 0.0*, *capturable: bool | None = None*, *target_tau: float = 0.01*, *zero_grad_set_to_none: bool = True*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_tdmpc2_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#TdMpc2TrainerConfig)
+
+Hydra configuration for [`TdMpc2Trainer`](torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer).
+
+See also
+
+[`TdMpc2Trainer`](torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer)

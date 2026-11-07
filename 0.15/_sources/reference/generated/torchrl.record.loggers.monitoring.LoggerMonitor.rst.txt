@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.record.loggers.monitoring
+
+
+LoggerMonitor
+=============
+
+.. autofunction:: LoggerMonitor

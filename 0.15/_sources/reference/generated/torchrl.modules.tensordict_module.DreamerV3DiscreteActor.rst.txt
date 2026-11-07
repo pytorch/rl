@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.tensordict_module
+
+
+DreamerV3DiscreteActor
+======================
+
+.. autoclass:: DreamerV3DiscreteActor
+    :members:

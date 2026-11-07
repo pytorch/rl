@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig
+================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.hooks
+
+.. autoclass:: RewardNormalizerConfig

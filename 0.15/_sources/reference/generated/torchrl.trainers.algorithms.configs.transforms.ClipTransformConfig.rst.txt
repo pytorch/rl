@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.ClipTransformConfig
+==================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: ClipTransformConfig

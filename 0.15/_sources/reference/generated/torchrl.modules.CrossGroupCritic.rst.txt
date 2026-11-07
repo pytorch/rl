@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+CrossGroupCritic
+================
+
+.. autoclass:: CrossGroupCritic
+    :members:

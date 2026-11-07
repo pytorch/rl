@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+FlowMatchingModel
+=================
+
+.. autoclass:: FlowMatchingModel
+    :members:
