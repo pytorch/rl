@@ -1234,6 +1234,34 @@ class TestAsyncEnvPool:
             pool_env.close(raise_if_closed=False)
             serial_env.close(raise_if_closed=False)
 
+    @pytest.mark.parametrize("exchange", ["queue", "shm"])
+    @set_capture_non_tensor_stack(False)
+    def test_step_and_maybe_reset_extra_inputs_match_serial_env(self, exchange):
+        """Entries outside the env specs come back where a SerialEnv puts them.
+
+        The root output keeps the extra root and ``"next"`` entries of the
+        input, and the next root keeps only the extra root entries.
+        """
+        makers = [CountingEnv, CountingEnv]
+        pool = AsyncEnvPool(makers, backend="multiprocessing", exchange=exchange)
+        serial = SerialEnv(2, makers)
+        try:
+            outputs = []
+            for env in (pool, serial):
+                td = env.reset()
+                td["action"] = env.full_action_spec["action"].one()
+                td["tag"] = torch.tensor([3.0, 4.0])
+                td["next", "tag"] = torch.tensor([7.0, 8.0])
+                outputs.append(env.step_and_maybe_reset(td))
+            (pool_root, pool_next), (serial_root, serial_next) = outputs
+            assert_allclose_td(pool_root.exclude("env_index"), serial_root)
+            assert_allclose_td(pool_next.exclude("env_index"), serial_next)
+            assert "next" not in serial_next.keys()
+            torch.testing.assert_close(serial_next["tag"], torch.tensor([3.0, 4.0]))
+        finally:
+            pool.close(raise_if_closed=False)
+            serial.close(raise_if_closed=False)
+
     @set_capture_non_tensor_stack(False)
     def test_shared_memory_exchange(self, make_envs):
         env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")

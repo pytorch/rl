@@ -243,14 +243,17 @@ class _SharedSlotExchange:
         """Merges the extra inputs kept for ``env_index`` into ``results``.
 
         Each result gets its own copy so that the root and ``"next"`` outputs
-        of ``step_and_maybe_reset`` never alias each other.
+        of ``step_and_maybe_reset`` never alias each other. The next root of
+        ``step_and_maybe_reset`` does not receive extra ``"next"`` entries,
+        as :func:`~torchrl.envs.utils.step_mdp` drops them with the queue
+        exchange.
         """
         extra = self._extra_inputs.pop(env_index, None)
         if extra is None:
             return results
         merged = [results[0].update(extra)]
         for result in results[1:]:
-            merged.append(result.update(extra.clone()))
+            merged.append(result.update(extra.exclude("next").clone()))
         return tuple(merged)
 
     @staticmethod
