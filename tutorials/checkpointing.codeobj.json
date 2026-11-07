@@ -1,0 +1,832 @@
+{
+ "Checkpoint": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  }
+ ],
+ "Checkpoint.manifest": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint.manifest"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint.manifest"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Checkpoint.manifest"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint.Checkpoint",
+   "module_short": "torchrl.checkpoint.Checkpoint",
+   "name": "manifest"
+  }
+ ],
+ "CheckpointAdapter": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointAdapter"
+  }
+ ],
+ "CheckpointOptions": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointOptions"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointOptions"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "CheckpointOptions"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointOptions"
+  }
+ ],
+ "Cursor": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "__main__",
+   "module_short": "__main__",
+   "name": "Cursor"
+  }
+ ],
+ "CursorAdapter": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "__main__",
+   "module_short": "__main__",
+   "name": "CursorAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  }
+ ],
+ "GlobalRNGState": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "GlobalRNGState"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "GlobalRNGState"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "GlobalRNGState"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "GlobalRNGState"
+  }
+ ],
+ "Path": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "Path"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PurePath"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "Path"
+  }
+ ],
+ "StateDictCheckpointAdapter": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "StateDictCheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "StateDictCheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "StateDictCheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "CheckpointAdapter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "StateDictCheckpointAdapter"
+  }
+ ],
+ "archive_manifest": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "archive_path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "checkpoint": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Checkpoint"
+  }
+ ],
+ "checkpoint.save": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint.save"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint.save"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Checkpoint.save"
+  }
+ ],
+ "consolidated_policy_path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "cursor_path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "directory_path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "json.dumps": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "json",
+   "module_short": "json",
+   "name": "dumps"
+  }
+ ],
+ "json.loads": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "json",
+   "module_short": "json",
+   "name": "loads"
+  }
+ ],
+ "load_result": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointLoadResult"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "CheckpointLoadResult"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "CheckpointLoadResult"
+  }
+ ],
+ "load_result.loaded": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "set"
+  }
+ ],
+ "load_result.unrequested": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "set"
+  }
+ ],
+ "optimizer": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam"
+  }
+ ],
+ "policy": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.linear",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Linear"
+  }
+ ],
+ "policy.parameters": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.linear",
+   "module_short": "torch.nn",
+   "name": "Linear.parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Linear.parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Linear.parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Linear.parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module.parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module.parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module.parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module.parameters"
+  }
+ ],
+ "progress": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "restored_cursor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "__main__",
+   "module_short": "__main__",
+   "name": "Cursor"
+  }
+ ],
+ "restored_cursor.offset": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "restored_policy": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.linear",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Linear"
+  }
+ ],
+ "root": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "tempfile.TemporaryDirectory": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory"
+  }
+ ],
+ "temporary_directory": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory"
+  }
+ ],
+ "temporary_directory.cleanup": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory.cleanup"
+  }
+ ],
+ "temporary_directory.name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "torch.nn.Linear": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.linear",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Linear"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Linear"
+  }
+ ],
+ "torch.optim.Adam": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.optim.optimizer",
+   "module_short": "torch.optim",
+   "name": "Optimizer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Optimizer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Optimizer"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  }
+ ],
+ "torch_policy_checkpoint": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Checkpoint"
+  }
+ ],
+ "trainer_checkpoint": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint._checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.checkpoint",
+   "module_short": "torchrl.checkpoint",
+   "name": "Checkpoint"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Checkpoint"
+  }
+ ]
+}
