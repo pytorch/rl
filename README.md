@@ -50,21 +50,36 @@ shared-memory support, memmaps, lazy views, and `nn.Module` wrappers.
 [Examples](examples/) |
 [SOTA implementations](sota-implementations/)
 
-## Recent highlights
+## What's new in TorchRL 0.15
 
-TorchRL 0.13 and the preceding development cycle bring several user-visible
-improvements that are worth surfacing up front:
+TorchRL 0.15 introduces powerful new capabilities for robot learning, offline
+RL, data interoperability, and training at scale.
 
-- faster recurrent RL paths, including scan and Triton GRU/LSTM reset handling;
-- custom MuJoCo environments, satellite examples, and macro-control policies;
-- stronger multi-agent coverage through MAPPO, IPPO, `MultiAgentGAE`,
-  value-normalization utilities, and mixer configs;
-- better collector and replay-buffer ergonomics, including async prioritized
-  writes, ordered storage access, compact observations, HER, and optional CUDA
-  wheels for CUDA-based prioritized replay-buffer kernels;
-- new transforms and value-estimator improvements such as `ActionScaling`,
-  `FlattenAction`, `NextObservationDelta`, compact shifted estimators, and
-  chunked forwards.
+- **Robotics and deployment.** Use MuJoCo Menagerie and MicroDuck environments,
+  compose low-level controllers, and export TensorDict policies to ONNX.
+  [Menagerie example](examples/menagerie/) ·
+  [Low-level control tutorial](tutorials/sphinx-tutorials/low_level_controller.py)
+- **Model-based and offline RL.** TD-MPC2, Flow Q-Learning, and Transitive RL
+  provide components and training implementations for control and offline RL.
+  [TD-MPC2](sota-implementations/tdmpc2_trainer/) ·
+  [FQL](sota-implementations/fql/) ·
+  [Transitive RL](sota-implementations/transitive_rl/)
+- **PyTorch and dataset interoperability.** Use `buffer.as_dataset()` with a
+  PyTorch `DataLoader`, or `buffer.export(...)` to exchange trajectory data
+  with LeRobot and Hugging Face Datasets.
+  [PyTorch data integration](docs/source/reference/data_replaybuffers.rst) ·
+  [LeRobot tutorial](tutorials/sphinx-tutorials/lerobot_export.py)
+- **Data collection.** Use `replay_write_mode="trajectory"` to write complete
+  episodes to replay, with new readiness and policy-version controls.
+  [Collectors and execution models](#collectors-and-execution-models)
+- **Evaluation and checkpointing.** Evaluate across environments, schedule
+  evaluation during training, and resume supported recipes from checkpoints.
+  [Evaluation](docs/source/reference/collectors_eval.rst) ·
+  [Checkpointing](docs/source/reference/checkpoint.rst)
+- **Sequence models and RLHF.** Build Transformer-based policies and train
+  reward models from preference data.
+  [Transformer example](examples/agents/transformer_actor.py) ·
+  [Reward-model recipe](sota-implementations/reward_model_training/)
 
 ## A quick mental model
 
@@ -216,6 +231,54 @@ for data in collector:
 For larger jobs, the collector family adds async execution, multiple worker
 processes, weight updaters, evaluator loops, profiling hooks, and fake-data
 helpers for testing downstream code without stepping an expensive environment.
+
+TorchRL 0.14 made it easier to scale data collection across local processes and
+distributed workers through a shared `Collector` API. For example, if `make_env`
+creates an environment, use multiple local processes with:
+
+```python
+multi_collector = Collector(
+    make_env, policy, num_collectors=4, sync=True, frames_per_batch=1024
+)
+```
+
+Here `sync=True` waits for all four workers. This call returns a
+`MultiSyncCollector`, the implementation that manages synchronous worker
+processes.
+
+The same `Collector` API supports several execution modes:
+
+- **Single process:** `Collector(make_env, policy, ...)` collects in the current
+  process.
+- **Synchronous workers:** `num_collectors=4, sync=True` collects across four
+  local workers and waits for each when forming a batch.
+- **Asynchronous workers:** `num_collectors=4, sync=False` receives data as
+  workers finish.
+- **Distributed workers:** `backend="ray"`, `"rpc"`, or `"distributed"` selects
+  a distributed execution backend.
+
+For asynchronous environment stepping and batched policy inference,
+`AsyncBatchedCollector` combines an `AsyncEnvPool`, which runs environments
+independently, with an inference server that groups their policy requests:
+
+```python
+from torchrl.collectors import AsyncBatchedCollector
+
+collector = AsyncBatchedCollector(
+    [make_env] * 4, policy=policy, frames_per_batch=1024, env_backend="threading"
+)
+```
+
+The async collector can also write to replay in the background. In 0.15,
+`replay_write_mode="trajectory"` writes complete episodes to replay,
+`buffer.sample(wait=True)` waits for sampleable data on supported buffers, and
+`multi_collector.worker_policy_versions()` reports each worker's policy version
+when `track_policy_version=True`.
+
+See [collector APIs](docs/source/reference/collectors_single.rst),
+[distributed collectors](docs/source/reference/collectors_distributed.rst),
+[async environments](docs/source/reference/envs_vectorized.rst), and
+[collectors and replay](docs/source/reference/collectors_replay.rst).
 
 ### Replay buffers and offline data
 
