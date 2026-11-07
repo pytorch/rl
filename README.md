@@ -52,7 +52,8 @@ shared-memory support, memmaps, lazy views, and `nn.Module` wrappers.
 
 ## What's new in TorchRL 0.15
 
-TorchRL 0.15 adds algorithms, robotics tools, and data and training APIs:
+TorchRL 0.15 introduces powerful new capabilities for robot learning, offline
+RL, data interoperability, and training at scale.
 
 - **Robotics and deployment.** Use MuJoCo Menagerie and MicroDuck environments,
   compose low-level controllers, and export TensorDict policies to ONNX.
