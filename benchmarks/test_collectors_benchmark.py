@@ -49,6 +49,7 @@ from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     MockBatchedLockedEnv,
 )
+from torchrl.weight_update import MultiProcessWeightSyncScheme
 
 
 class _ResetLatencyPixelEnv(PixelMockEnv):
@@ -676,6 +677,37 @@ def test_async_weight_update(benchmark):
             args=(c, collector, policy),
             iterations=10,
             rounds=10,
+        )
+    finally:
+        collector.shutdown()
+
+
+def test_multiprocess_weight_update(benchmark):
+    """Benchmark pushing a 130-tensor policy through ``MultiProcessWeightSyncScheme``.
+
+    Every send copies the weights into fresh shared memory and each worker
+    opens that memory, so the cost depends on the number of tensors as well as
+    on their size.
+    """
+    policy = TensorDictModule(
+        MLP(in_features=7, out_features=7, num_cells=[64] * 64),
+        in_keys=["observation"],
+        out_keys=["action"],
+    )
+    collector = MultiSyncCollector(
+        [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+        policy,
+        total_frames=-1,
+        frames_per_batch=20,
+        weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+    )
+    try:
+        next(iter(collector))
+        benchmark.pedantic(
+            collector.update_policy_weights_,
+            iterations=10,
+            rounds=5,
+            warmup_rounds=1,
         )
     finally:
         collector.shutdown()

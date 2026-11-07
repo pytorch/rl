@@ -20,6 +20,15 @@ from torchrl.weight_update.weight_sync_schemes import (
 )
 
 
+def _all_cpu_tensors(weights: TensorDictBase) -> bool:
+    found = False
+    for leaf in weights.values(include_nested=True, leaves_only=True):
+        if not isinstance(leaf, torch.Tensor) or leaf.device.type != "cpu":
+            return False
+        found = True
+    return found
+
+
 def _copy_weights(
     weights: TensorDictBase | dict | None, share: bool = False
 ) -> TensorDictBase | dict | None:
@@ -27,9 +36,14 @@ def _copy_weights(
 
     With ``share=True``, CPU tensors of the copy are moved to shared memory, so
     that pickling them through a queue to several workers neither moves the
-    original tensors to shared memory nor races to move the copy.
+    original tensors to shared memory nor races to move the copy. A tensordict
+    whose leaves are all CPU tensors is copied into a single consolidated
+    shared-memory buffer, so that each send creates and each worker opens one
+    shared segment rather than one per tensor.
     """
     if isinstance(weights, TensorDictBase):
+        if share and _all_cpu_tensors(weights):
+            return weights.detach().consolidate(share_memory=True)
         copy = weights.detach().clone()
         if share:
             copy.share_memory_()
