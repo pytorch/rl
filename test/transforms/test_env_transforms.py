@@ -1517,6 +1517,42 @@ class TestFrameSkipTransform(TransformBase):
         (td[0] == 0).all()
         (td[1] == skip).all()
 
+    @pytest.mark.parametrize("nest_done", [False, True])
+    def test_frame_skip_stops_at_done(self, nest_done):
+        """Regression: like the built-in frame_skip of gym-like envs, the
+        transform must stop repeating the action once the episode is done."""
+        # The base env is done after its 2nd step, and its observation counts
+        # the steps that were taken.
+        if nest_done:
+            base_env = NestedCountingEnv(max_steps=1, nest_obs_action=False)
+        else:
+            base_env = CountingEnv(max_steps=1)
+        env = TransformedEnv(base_env, FrameSkipTransform(4))
+        td = env.reset()
+        td["action"] = torch.ones_like(env.action_spec.zero())
+        td = env.step(td)
+        assert (td["next", "observation"] == 2).all()
+        for done_key in env.done_keys:
+            assert td["next", done_key].all()
+
+    @pytest.mark.skipif(not _has_gym, reason="gym not installed")
+    def test_transform_env_episode_end(self):
+        """Tests that the built-in frame_skip and the transform still lead to
+        the same results when an episode ends between two repeats."""
+        # Pendulum truncates after 200 steps, which is not a multiple of 3, so
+        # the 67th step ends the episode on its 2nd repeat.
+        base_env = GymEnv(PENDULUM_VERSIONED(), frame_skip=3)
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), FrameSkipTransform(3))
+        policy = CountingEnvCountPolicy(env.action_spec)
+        base_env.set_seed(0)
+        env.base_env.set_seed(0)
+        # Expected values: the built-in frame_skip, run past the episode end.
+        expected = base_env.rollout(70, policy, break_when_any_done=False)
+        assert expected["next", "done"].nonzero()[:, 0].tolist() == [66]
+        out = env.rollout(70, policy, break_when_any_done=False)
+        for key in expected.keys(True, True):
+            torch.testing.assert_close(out[key], expected[key])
+
     def test_transform_model(self):
         t = FrameSkipTransform(2)
         t = nn.Sequential(t, nn.Identity())

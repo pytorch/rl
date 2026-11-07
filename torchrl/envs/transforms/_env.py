@@ -34,7 +34,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.utils import _get_reset
-from torchrl.envs.utils import step_mdp
+from torchrl.envs.utils import _terminated_or_truncated, step_mdp
 
 try:
     from torch.compiler import is_compiling
@@ -76,6 +76,8 @@ class FrameSkipTransform(Transform):
 
     This transform applies the same action repeatedly in the parent environment,
     which improves stability on certain training sota-implementations.
+    The repetition stops early as soon as any done entry is set (in a batched
+    environment, for any of its elements).
 
     Args:
         frame_skip (int, optional): a positive integer representing the number
@@ -98,6 +100,10 @@ class FrameSkipTransform(Transform):
         reward_key = parent.reward_key
         reward = next_tensordict.get(reward_key)
         for _ in range(self.frame_skip - 1):
+            if _terminated_or_truncated(
+                next_tensordict, full_done_spec=parent.full_done_spec, key=None
+            ):
+                break
             next_tensordict = parent._step(tensordict)
             reward = reward + next_tensordict.get(reward_key)
         return next_tensordict.set(reward_key, reward)
