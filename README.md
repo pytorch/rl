@@ -52,17 +52,15 @@ shared-memory support, memmaps, lazy views, and `nn.Module` wrappers.
 
 ## What's new in TorchRL 0.15
 
-**From robot simulation to offline RL and deployment, TorchRL 0.15 gives you
-more ways to turn experience into intelligent behavior.**
+TorchRL 0.15 adds algorithms, robotics tools, and data and training APIs:
 
-- **Robotics and policy deployment.** Train and explore policies with
-  MuJoCo Menagerie robots and MicroDuck, compose low-level skills into
-  high-level control, and export TensorDict policies to ONNX. [Explore Menagerie](examples/menagerie/)
-  · [Low-level control tutorial](tutorials/sphinx-tutorials/low_level_controller.py)
-- **Model-based and offline RL.** Plan with **TD-MPC2**, learn from
-  offline data with **Flow Q-Learning**, and tackle goal-conditioned learning
-  with **Transitive RL**. Use the implementations or build with their modular
-  components. [TD-MPC2](sota-implementations/tdmpc2_trainer/) ·
+- **Robotics and deployment.** Use MuJoCo Menagerie and MicroDuck environments,
+  compose low-level controllers, and export TensorDict policies to ONNX.
+  [Menagerie example](examples/menagerie/) ·
+  [Low-level control tutorial](tutorials/sphinx-tutorials/low_level_controller.py)
+- **Model-based and offline RL.** TD-MPC2, Flow Q-Learning, and Transitive RL
+  provide components and training implementations for control and offline RL.
+  [TD-MPC2](sota-implementations/tdmpc2_trainer/) ·
   [FQL](sota-implementations/fql/) ·
   [Transitive RL](sota-implementations/transitive_rl/)
 - **PyTorch and dataset interoperability.** Use `buffer.as_dataset()` with a
@@ -71,15 +69,14 @@ more ways to turn experience into intelligent behavior.**
   [PyTorch data integration](docs/source/reference/data_replaybuffers.rst) ·
   [LeRobot tutorial](tutorials/sphinx-tutorials/lerobot_export.py)
 - **Data collection.** Use `replay_write_mode="trajectory"` to write complete
-  episodes to replay and coordinate collection and learning with replay
-  readiness and policy-version controls. See
-  [collectors and execution models](#collectors-and-execution-models).
-- **Evaluation and checkpointing.** Evaluate policies across environments,
-  schedule evaluation during training, and resume supported recipes from
-  checkpoints. [Evaluation](docs/source/reference/collectors_eval.rst) ·
+  episodes to replay, with new readiness and policy-version controls.
+  [Collectors and execution models](#collectors-and-execution-models)
+- **Evaluation and checkpointing.** Evaluate across environments, schedule
+  evaluation during training, and resume supported recipes from checkpoints.
+  [Evaluation](docs/source/reference/collectors_eval.rst) ·
   [Checkpointing](docs/source/reference/checkpoint.rst)
-- **Sequence models and RLHF.** Build Transformer-based policies
-  and train reward models from preference data for RLHF workflows.
+- **Sequence models and RLHF.** Build Transformer-based policies and train
+  reward models from preference data.
   [Transformer example](examples/agents/transformer_actor.py) ·
   [Reward-model recipe](sota-implementations/reward_model_training/)
 
@@ -206,68 +203,65 @@ env = TransformedEnv(
 
 ### Collectors and execution models
 
-Collectors run policies in environments and return batches of experience as
-TensorDicts. TorchRL 0.14 unified construction across local and distributed
-collectors: use `Collector` and choose how the work runs.
+Collectors are the bridge between policies and environments. A collector owns
+the execution loop, batches trajectories, handles devices, and can update policy
+weights while environments keep running.
+
+TorchRL includes single-process, async, multiprocess, and distributed
+collectors. This lets the same policy and loss code be used across small smoke
+tests, GPU-heavy simulation, CPU environment farms, or asynchronous evaluation
+setups.
 
 ```python
 from torchrl.collectors import Collector
-from torchrl.envs import PendulumEnv
 
-if __name__ == "__main__":  # Required for multiprocessing on some platforms
-    direct = Collector(PendulumEnv, frames_per_batch=32, total_frames=32)
-    direct_batch = next(iter(direct))
-    direct.shutdown()
+collector = Collector(
+    create_env_fn=env,
+    policy=policy,
+    frames_per_batch=1024,
+    total_frames=1_000_000,
+)
 
-    parallel = Collector(
-        PendulumEnv, num_collectors=2, sync=True, frames_per_batch=32, total_frames=32
-    )
-    parallel_batch = next(iter(parallel))
-    parallel.shutdown()
+for data in collector:
+    # data is a TensorDict with time, environment, and key structure preserved.
+    train_step(data)
 ```
 
-The first collector runs in the current process; the second uses two worker
-processes and waits for both when forming each batch. Both use random actions
-because no policy is supplied; pass a TensorDict policy as `policy` to collect
-with it. Use `sync=False` to receive data as workers finish; with Ray
-installed, `backend="ray"` selects Ray-managed workers.
+For larger jobs, the collector family adds async execution, multiple worker
+processes, weight updaters, evaluator loops, profiling hooks, and fake-data
+helpers for testing downstream code without stepping an expensive environment.
 
-The selected backend determines the implementation returned by `Collector`.
-For example, the synchronous two-worker call above returns a
-`MultiSyncCollector`, the class that implements synchronous multiprocess
-collection. These implementation classes are also available directly for
-type checks, subclassing, or backend-specific features.
-
-For environments with different step times, `AsyncBatchedCollector` lets each
-environment progress independently and batches observations from ready
-environments into policy calls. This overlaps environment stepping with policy
-inference. For example, collect from two threaded environments with a simple
-TensorDict policy:
+TorchRL 0.14 unified construction for local and distributed collection. For
+example, if `make_env` creates an environment, use multiple local processes with:
 
 ```python
-from tensordict.nn import TensorDictModule
-from torchrl.collectors import AsyncBatchedCollector
-from torchrl.envs import PendulumEnv
-
-if __name__ == "__main__":
-    policy = TensorDictModule(
-        lambda angle: angle.tanh().unsqueeze(-1), in_keys=["th"], out_keys=["action"]
-    )
-    collector = AsyncBatchedCollector(
-        [PendulumEnv, PendulumEnv], policy=policy, env_backend="threading",
-        frames_per_batch=32, total_frames=32,
-    )
-    batch = next(iter(collector))
-    collector.shutdown()
+multi_collector = Collector(
+    make_env, policy, num_collectors=4, sync=True, frames_per_batch=1024
+)
 ```
 
-An `AsyncEnvPool` runs the environments, while an inference server batches
-their policy calls. The collector can also write into replay in the background.
+Here `sync=True` waits for all four workers. This call returns a
+`MultiSyncCollector`, the implementation that manages synchronous worker
+processes. Use `sync=False` to receive data as workers finish, or
+`backend="ray"` for Ray-managed workers (requires Ray).
 
-In 0.15, `replay_write_mode="trajectory"` writes complete episodes to replay,
-`buffer.sample(wait=True)` waits until a batch can be sampled on supported
-buffers, and `collector.worker_policy_versions()` reports each multiprocess
-worker's current policy version when tracking is enabled.
+For asynchronous environment stepping and batched policy inference,
+`AsyncBatchedCollector` combines an `AsyncEnvPool`, which runs environments
+independently, with an inference server that groups their policy requests:
+
+```python
+from torchrl.collectors import AsyncBatchedCollector
+
+collector = AsyncBatchedCollector(
+    [make_env] * 4, policy=policy, frames_per_batch=1024, env_backend="threading"
+)
+```
+
+The async collector can also write to replay in the background. In 0.15,
+`replay_write_mode="trajectory"` writes complete episodes to replay,
+`buffer.sample(wait=True)` waits for sampleable data on supported buffers, and
+`multi_collector.worker_policy_versions()` reports each worker's policy version
+when `track_policy_version=True`.
 
 See [collector APIs](docs/source/reference/collectors_single.rst),
 [distributed collectors](docs/source/reference/collectors_distributed.rst),
