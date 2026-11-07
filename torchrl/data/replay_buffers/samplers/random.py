@@ -289,6 +289,14 @@ class ConsumingSampler(Sampler):
     def _sampleable_count(self, storage: Storage, batch_size: int) -> int:
         return self._num_sampleable(storage)
 
+    def _remaining_sample_count(self, storage: Storage) -> int:
+        self._ensure_state(storage)
+        live = self._live_mask[: self._known_storage_len]
+        remaining = (
+            self.max_sample_count - self._sample_count[: self._known_storage_len]
+        )
+        return int(remaining[live].sum().item())
+
     def _pop_consumed_indices(
         self, storage: Storage | None = None, max_count: int | None = None
     ) -> torch.Tensor:

@@ -15,6 +15,7 @@ from tensordict import TensorDict
 from torchrl.data.replay_buffers.storages import StorageEnsemble
 
 from .base import Sampler
+from .random import ConsumingSampler
 
 
 class SamplerEnsemble(Sampler):
@@ -45,6 +46,13 @@ class SamplerEnsemble(Sampler):
       and :class:`~torchrl.data.StorageEnsemble` objects to retrieve the data.
       This format is different from with other samplers which usually return indices
       as regular tensors.
+
+    .. note::
+      Grouped requests that exceed a consuming sampler's remaining draws raise
+      before any members are sampled. Requests for member IDs that share a
+      consuming sampler are counted together. With ``sample_from_all=True``,
+      partial batches remain supported and each selected member is checked for
+      initial readiness; capacity is not reserved across aliased members.
 
     .. seealso:: :class:`~torchrl.trainers.algorithms.configs.data.SamplerEnsembleConfig`
 
@@ -111,6 +119,36 @@ class SamplerEnsemble(Sampler):
     def num_buffer_sampled(self, value):
         self.__dict__["_num_buffer_sampled"] = value
 
+    def _validate_consuming_demand(self, storage, demands):
+        if not any(
+            isinstance(self._samplers[member_id], ConsumingSampler)
+            for member_id in demands
+        ):
+            return
+        consuming_demands = {}
+        for member_id, demand in demands.items():
+            sampler = self._samplers[member_id]
+            member_storage = storage._storages[member_id]
+            if isinstance(sampler, ConsumingSampler):
+                # Sampling all members makes one draw each and permits partial
+                # batches. Grouped draws must fill the entire selected quota.
+                if self.sample_from_all:
+                    required = 1
+                else:
+                    required = consuming_demands.get(id(sampler), 0) + demand
+                    consuming_demands[id(sampler)] = required
+                remaining = sampler._remaining_sample_count(member_storage)
+                if remaining < required:
+                    raise RuntimeError(
+                        f"Consuming sampler {member_id} has {remaining} draws remaining, "
+                        f"but the ensemble requires {required}. No records were consumed."
+                    )
+            elif not sampler.can_sample(member_storage, demand):
+                raise RuntimeError(
+                    f"Sampler {member_id} cannot provide its requested batch of {demand}. "
+                    "No records were consumed."
+                )
+
     def sample(self, storage, batch_size):
         if batch_size % self.num_buffer_sampled > 0:
             raise ValueError("The batch size must be divisible by num_buffer_sampled.")
@@ -118,6 +156,9 @@ class SamplerEnsemble(Sampler):
             raise TypeError("SamplerEnsemble requires a StorageEnsemble.")
         sub_batch_size = batch_size // self.num_buffer_sampled
         if self.sample_from_all:
+            self._validate_consuming_demand(
+                storage, dict.fromkeys(range(len(self._samplers)), sub_batch_size)
+            )
             samples, infos = zip(
                 *[
                     sampler.sample(storage, sub_batch_size)
@@ -164,7 +205,12 @@ class SamplerEnsemble(Sampler):
                 )
             samples = [None] * self.num_buffer_sampled
             infos = [None] * self.num_buffer_sampled
-            for member_id in buffer_ids.unique(sorted=True).tolist():
+            member_ids, counts = buffer_ids.unique(sorted=True, return_counts=True)
+            self._validate_consuming_demand(
+                storage,
+                dict(zip(member_ids.tolist(), (counts * sub_batch_size).tolist())),
+            )
+            for member_id in member_ids.tolist():
                 positions = (buffer_ids == member_id).nonzero().flatten()
                 member_batch_size = sub_batch_size * positions.numel()
                 member_samples = []
