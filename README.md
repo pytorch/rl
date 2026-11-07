@@ -175,8 +175,8 @@ job runs for hours.
 
 Environment support includes:
 
-- PyTorch-native environments such as `PendulumEnv`, and MuJoCo tasks built
-  on `MujocoEnv`, including `SatelliteEnv` and `CubeBowlEnv`.
+- PyTorch-native environments such as `PendulumEnv`, and custom MuJoCo tasks
+  built on `MujocoEnv`.
 - Wrappers for Gymnasium, Gym, DM Control, Brax, Jumanji, PettingZoo, VMAS,
   OpenSpiel, Safety-Gymnasium, Isaac Lab, and other optional libraries.
 - `SerialEnv`, `ParallelEnv`, and batched wrappers for local vectorization and
