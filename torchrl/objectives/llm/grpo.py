@@ -729,8 +729,9 @@ class GRPOLoss(LossModule):
             raise ValueError(
                 f"advantage and log_weight must have the same number of dimensions, got {advantage.ndim=} and {log_weight.ndim=}"
             )
+        cur_log_prob = tensordict["_cur_log_prob"].unsqueeze(-1)
         loss_objective, clip_fraction = self._compute_policy_objective(
-            log_weight, advantage
+            log_weight, advantage, cur_log_prob
         )
         td_out = TensorDict({"loss_objective": loss_objective})
         td_out.set("clip_fraction", clip_fraction)
@@ -778,7 +779,10 @@ class GRPOLoss(LossModule):
         return self.output_type.from_tensordict(td_out)
 
     def _compute_policy_objective(
-        self, log_weight: torch.Tensor, advantage: torch.Tensor
+        self,
+        log_weight: torch.Tensor,
+        advantage: torch.Tensor,
+        cur_log_prob: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Default GRPO objective: PPO-style min between unclipped and clipped ratios.
 
@@ -1009,21 +1013,28 @@ class CISPOLoss(GRPOLoss):
     Inherits the GRPO pipeline (masking, ESS, entropy, optional KL penalties) but
     replaces the PPO-style min with a clipped-importance objective::
 
-        loss = - clip(weight, [1 - eps_low, 1 + eps_high]) * advantage
+        loss = - stopgrad(clip(weight, [1 - eps_low, 1 + eps_high])) * cur_log_prob * advantage
 
-    See the `MiniMax-M1 (CISPO) <https://arxiv.org/html/2506.13585>`_ paper.
+    Clipped weights are detached, so tokens outside the clipping interval still
+    contribute policy gradients through their current log-probabilities.
+
+    See the `MiniMax-M1 (CISPO) <https://arxiv.org/html/2506.13585>`_ paper (Eq. 4).
     """
 
     output_type: type[LLMLossOutput] = CISPOLossOutput
 
     def _compute_policy_objective(
-        self, log_weight: torch.Tensor, advantage: torch.Tensor
+        self,
+        log_weight: torch.Tensor,
+        advantage: torch.Tensor,
+        cur_log_prob: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # CISPO: use clipped importance weights directly
+        # CISPO: detach clipped ratio and multiply by current log prob and advantage
+        # (MiniMax-M1 Eq. 4)
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
         clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
         ratio = log_weight_clip.exp()
-        gain = ratio * advantage
+        gain = ratio.detach() * cur_log_prob * advantage
         return -gain, clip_fraction
 
 
