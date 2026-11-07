@@ -175,18 +175,22 @@ job runs for hours.
 
 Environment support includes:
 
-- PyTorch-native environments such as `PendulumEnv` and custom MuJoCo tasks.
+- PyTorch-native environments such as `PendulumEnv`, and custom MuJoCo tasks
+  built on `MujocoEnv`.
 - Wrappers for Gymnasium, Gym, DM Control, Brax, Jumanji, PettingZoo, VMAS,
   OpenSpiel, Safety-Gymnasium, Isaac Lab, and other optional libraries.
 - `SerialEnv`, `ParallelEnv`, and batched wrappers for local vectorization and
   multiprocessing.
 - Environment transforms for observation normalization, image conversion,
-  reward transforms, action masking, action scaling, auto-reset, frame stacking,
-  state reconstruction, and more.
+  reward transforms, action masking, action scaling (`ActionScaling`), action
+  flattening (`FlattenAction`), auto-reset, frame stacking, state reconstruction,
+  and more.
 
 Transforms are first-class TorchRL modules. They can run on-device, participate
 in specs, and be inserted, removed, or composed without wrapping the whole
 environment in opaque adapter layers.
+[Macro-control primitives](docs/source/reference/macro_primitives.rst) expand
+high-level commands into sequences of low-level actions.
 
 ```python
 from torchrl.envs import Compose, DoubleToFloat, ObservationNorm, TransformedEnv
@@ -286,7 +290,9 @@ TorchRL replay buffers are modular: storage, sampler, writer, collate function,
 transforms, prefetching, priority updates, and device movement are separate
 pieces. That makes it possible to use the same interface for simple in-memory
 replay, memmap-backed storage, prioritized replay, CUDA-aware sampling, offline
-datasets, HER, or custom storage layouts.
+datasets, or custom storage layouts. `HERReplayBuffer` relabels goals for
+goal-conditioned RL. For compact observations, `NextObservationDelta` and
+`NextStateReconstructor` support reconstruction when sampling from replay.
 
 ```python
 from torchrl.data import LazyMemmapStorage, TensorDictPrioritizedReplayBuffer
@@ -385,13 +391,14 @@ losses and modules declare which keys they use.
 
 TorchRL supports multi-agent environments and algorithms through VMAS,
 PettingZoo, Melting Pot, SMACv2, OpenSpiel, multi-agent trainers, and dedicated
-objectives. The 0.13 line adds MAPPO, IPPO, `MultiAgentGAE`, `ValueNorm`,
+objectives including MAPPO and IPPO, as well as `MultiAgentGAE`, `ValueNorm`,
 `PopArtValueNorm`, `RunningValueNorm`, and cross-agent critic utilities.
 
 The same component style also covers model-based and imitation-learning work:
 Dreamer/DreamerV3 objectives and RSSM modules, Decision Transformer components,
-behavior cloning losses, and ACT-style action chunking all share the same
-TensorDict and key-dispatch conventions as the online RL algorithms.
+`BCLoss` for behavior cloning, and `ACTModel` with `ACTLoss` for action chunking
+all share the same TensorDict and key-dispatch conventions as the online RL
+algorithms.
 
 ### Additional specialized workflows
 
@@ -412,54 +419,11 @@ Performance-sensitive areas include:
 
 - vectorized return and advantage computation;
 - recurrent GRU/LSTM reset handling with scan and Triton backends;
-- compact sequence layouts for recurrent value estimation;
+- compact sequence layouts for recurrent value estimation, shifted value
+  estimation, and chunked value-network forwards;
 - async collectors and policy weight synchronization;
 - prioritized replay and CUDA-aware replay-buffer paths;
 - memmap-backed data movement for large offline or distributed jobs.
-
-## What is new in TorchRL 0.13
-
-TorchRL 0.13 is a broad release. The most impactful changes are in recurrent
-RL performance, MuJoCo-native workflows, multi-agent training, model-based and
-imitation-learning components, replay/collector throughput, and compatibility
-with old or optional dependency stacks.
-
-### Recurrent RL
-
-- Triton and scan recurrent backends for GRU/LSTM reset handling.
-- Recurrent integration tests and a recurrent state lifecycle guide.
-- Compact and shifted value-estimator improvements, chunked forwards, and a
-  dynamic value-estimator registry across loss modules.
-- Recurrent matmul precision controls exposed through public module utilities.
-
-### MuJoCo, robotics, and macro control
-
-- Custom MuJoCo environments with selectable physics backends.
-- New `MujocoEnv` task base plus locomotion tasks, `SatelliteEnv`, and
-  `CubeBowlEnv`.
-- Satellite MuJoCo SAC examples.
-- Macro-control primitives and tutorials for low-frequency semantic actions
-  expanded into multi-step low-level control sequences.
-
-### Multi-agent, imitation, and model-based RL
-
-- MAPPO and IPPO losses.
-- `MultiAgentGAE` and value-normalization utilities.
-- DreamerV3 losses and RSSM V3 modules.
-- `BCLoss`, `ACTLoss`, and `ACTModel` for behavior cloning and action chunking.
-- QMIX/VDN trainer configuration support and improved multi-agent trainer
-  ergonomics.
-
-### Data, transforms, and compatibility
-
-- HER support through `HERReplayBuffer` and `HindsightStrategy`.
-- Action and observation transforms such as `ActionScaling`, `FlattenAction`,
-  `ExpandAs`, `NextObservationDelta`, `NextStateReconstructor`, and
-  `TerminateTransform`.
-- Async prioritized replay-buffer writes, ordered read/write APIs, optional
-  trajectory IDs, compact observations, and safer collector weight syncs.
-- Compatibility fixes across Gym/Atari, PettingZoo, Robohive, optional
-  dependency, setup, documentation, vLLM, and SGLang workflows.
 
 ## Where to start
 
