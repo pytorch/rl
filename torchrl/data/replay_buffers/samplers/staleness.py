@@ -189,7 +189,10 @@ class StalenessAwareSampler(Sampler):
 
         # Weighted sampling
         sampled_local = torch.multinomial(
-            weights, batch_size, replacement=batch_size > len(valid_indices)
+            weights,
+            batch_size,
+            replacement=batch_size > len(valid_indices),
+            generator=self._rng,
         )
         index = valid_indices[sampled_local]
 
