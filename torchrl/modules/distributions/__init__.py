@@ -56,7 +56,6 @@ HAS_ENTROPY = {
 
 __all__ = [
     "NormalParamExtractor",
-    "distributions",
     "Delta",
     "IndependentNormal",
     "LLMMaskedCategorical",
@@ -68,7 +67,6 @@ __all__ = [
     "MaskedOneHotCategorical",
     "OneHotCategorical",
     "OneHotOrdinal",
-    "LLMMaskedCategorical",
     "Ordinal",
     "ReparamGradientStrategy",
     "has_analytic_entropy",
