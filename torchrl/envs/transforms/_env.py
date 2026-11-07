@@ -76,7 +76,8 @@ class FrameSkipTransform(Transform):
 
     This transform applies the same action repeatedly in the parent environment,
     which improves stability on certain training sota-implementations.
-    The repetition stops early as soon as any done entry is set (in a batched
+    Each repeated step starts from the state reached by the previous one, and
+    the repetition stops early as soon as any done entry is set (in a batched
     environment, for any of its elements).
 
     Args:
@@ -99,11 +100,19 @@ class FrameSkipTransform(Transform):
             raise RuntimeError("parent not found for FrameSkipTransform")
         reward_key = parent.reward_key
         reward = next_tensordict.get(reward_key)
+        # Entries the caller preset in "next" (e.g. recurrent states).
+        next_preset = tensordict.get("next", None)
         for _ in range(self.frame_skip - 1):
             if _terminated_or_truncated(
                 next_tensordict, full_done_spec=parent.full_done_spec, key=None
             ):
                 break
+            # Step from the state reached so far (stateless envs read it from
+            # the input), keeping next_preset. Copy so that the caller's
+            # tensordict is not modified.
+            tensordict = parent.step_mdp(tensordict.copy().set("next", next_tensordict))
+            if next_preset is not None:
+                tensordict.set("next", next_preset)
             next_tensordict = parent._step(tensordict)
             reward = reward + next_tensordict.get(reward_key)
         return next_tensordict.set(reward_key, reward)

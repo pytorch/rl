@@ -37,11 +37,13 @@ from torchrl.envs import (
     InitTracker,
     NoopResetEnv,
     ParallelEnv,
+    PendulumEnv,
     RandomTruncationTransform,
     RenameTransform,
     SerialEnv,
     StepCounter,
     TargetReturn,
+    TensorDictPrimer,
     TerminateTransform,
     TicTacToeEnv,
     TrajCounter,
@@ -1417,6 +1419,50 @@ class TestInitTracker(TransformBase):
         assert env.transform.init_keys[0] == ("data", "is_init")
 
 
+class _StatelessEpisodeEnv(EnvBase):
+    """Counter that reads its count from the input tensordict.
+
+    All keys live under ``prefix``. The reward is the new count, and done is
+    set only on the step where the count reaches 2.
+    """
+
+    def __init__(self, prefix: tuple[str, ...] = ()):
+        super().__init__()
+        self.prefix = prefix
+        self.full_observation_spec = Composite(
+            {(*prefix, "count"): Unbounded((1,), dtype=torch.int64)}
+        )
+        self.full_action_spec = Composite(
+            {(*prefix, "action"): Unbounded((1,), dtype=torch.int64)}
+        )
+        self.full_reward_spec = Composite({(*prefix, "reward"): Unbounded((1,))})
+        self.full_done_spec = Composite(
+            {
+                (*prefix, key): Categorical(2, (1,), dtype=torch.bool)
+                for key in ("done", "terminated")
+            }
+        )
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        return self.full_observation_spec.zero().update(self.full_done_spec.zero())
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        count = tensordict[(*self.prefix, "count")]
+        count = count + tensordict[(*self.prefix, "action")]
+        done = count == 2
+        return TensorDict(
+            {
+                (*self.prefix, "count"): count,
+                (*self.prefix, "reward"): count.float(),
+                (*self.prefix, "done"): done,
+                (*self.prefix, "terminated"): done,
+            }
+        )
+
+    def _set_seed(self, seed: int | None) -> None:
+        pass
+
+
 class TestFrameSkipTransform(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), FrameSkipTransform(2))
@@ -1534,6 +1580,62 @@ class TestFrameSkipTransform(TransformBase):
         assert (td["next", "observation"] == 2).all()
         for done_key in env.done_keys:
             assert td["next", done_key].all()
+
+    @pytest.mark.parametrize("skip", [2, 3])
+    def test_frame_skip_stateless_env(self, skip):
+        """Regression: PendulumEnv reads its state from the input tensordict,
+        so each repeated step must start where the previous one ended."""
+        base_env = PendulumEnv(seed=0)
+        env = TransformedEnv(base_env, FrameSkipTransform(skip))
+        policy = CountingEnvCountPolicy(env.action_spec)
+        td = policy(env.reset())
+        # Expected values: the plain env stepped `skip` times.
+        expected = base_env.rollout(
+            skip, policy, tensordict=td.clone(), auto_reset=False
+        )
+        td_before = td.clone()
+        out = env.step(td)
+        assert (out.exclude("next") == td_before).all()
+        for key in ("th", "thdot"):
+            torch.testing.assert_close(out["next", key], expected[-1]["next", key])
+        torch.testing.assert_close(
+            out["next", "reward"], expected["next", "reward"].sum(0)
+        )
+
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_frame_skip_stateless_done_on_terminal_step(self, nested):
+        """Regression: on a stateless env whose done is set on the terminal
+        step only, the output must be that of the step where the episode
+        ended."""
+        prefix = ("agent",) if nested else ()
+        base_env = _StatelessEpisodeEnv(prefix)
+        env = TransformedEnv(base_env, FrameSkipTransform(4))
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], action_key=env.action_key
+        )
+        td = policy(env.reset())
+        # Expected values: the plain env, which ends its episode after 2 steps.
+        expected = base_env.rollout(4, policy, tensordict=td.clone(), auto_reset=False)
+        assert expected.shape == (2,)
+        out = env.step(td)["next"]
+        for key in [(*prefix, "count"), *env.done_keys]:
+            assert (out[key] == expected[-1]["next", key]).all()
+        torch.testing.assert_close(
+            out[env.reward_key], expected["next", env.reward_key].sum(0)
+        )
+
+    def test_frame_skip_keeps_next_preset(self):
+        """Entries the policy writes in "next" before the step, such as the
+        next recurrent state, must survive the repeated steps."""
+        # The primer fills a missing ("next", "hidden") with the root value.
+        env = TransformedEnv(
+            CountingEnv(),
+            Compose(FrameSkipTransform(3), TensorDictPrimer(hidden=Unbounded(3))),
+        )
+        td = CountingEnvCountPolicy(env.action_spec)(env.reset())
+        td["next", "hidden"] = torch.ones(3)
+        out = env.step(td)
+        assert (out["next", "hidden"] == 1).all()
 
     @pytest.mark.skipif(not _has_gym, reason="gym not installed")
     def test_transform_env_episode_end(self):
