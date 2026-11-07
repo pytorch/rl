@@ -2085,6 +2085,9 @@ class TestRateLimitedReplayBuffer:
         thread = threading.Thread(target=sample)
         thread.start()
         assert started.wait(timeout=1)
+        deadline = time.monotonic() + 5
+        while rb.stats()["sample_wait_count"] < 2 and time.monotonic() < deadline:
+            time.sleep(0.001)
         rb.shutdown()
         assert completed.wait(timeout=1)
         thread.join(timeout=1)

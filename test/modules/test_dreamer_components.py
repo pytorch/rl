@@ -534,7 +534,9 @@ class TestDreamerV3Components:
                 result = actor(nested.clone())
             torch.testing.assert_close(
                 result["policy", "action"],
-                F.one_hot(expected.argmax(-1), 5).to(result["policy", "action"]),
+                F.one_hot(distribution.probs.argmax(-1), 5).to(
+                    result["policy", "action"]
+                ),
             )
             with set_exploration_type(ExplorationType.RANDOM):
                 result = actor(nested.clone())

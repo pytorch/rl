@@ -307,7 +307,7 @@ class timeit:
     def __enter__(self) -> timeit:
         if self._sync and torch.cuda.is_available():
             torch.cuda.synchronize()
-        self.t0 = time.time()
+        self.t0 = time.perf_counter()
         return self
 
     def start(self) -> timeit:
@@ -328,7 +328,7 @@ class timeit:
         """
         if self._sync and torch.cuda.is_available():
             torch.cuda.synchronize()
-        self.t0 = time.time()
+        self.t0 = time.perf_counter()
         return self
 
     def elapsed(self) -> float:
@@ -347,7 +347,7 @@ class timeit:
         """
         if self._sync and torch.cuda.is_available():
             torch.cuda.synchronize()
-        return time.time() - self.t0
+        return time.perf_counter() - self.t0
 
     @classmethod
     def _record(cls, name: str, elapsed: float) -> None:
@@ -365,12 +365,12 @@ class timeit:
     @classmethod
     def mark_start(cls, name: str) -> None:
         """Mark the start of a named timed event."""
-        cls._MARKS[name] = time.time()
+        cls._MARKS[name] = time.perf_counter()
 
     @classmethod
     def mark_end(cls, name: str) -> None:
         """Mark the end of a named timed event and record its elapsed time."""
-        cls._record(name, time.time() - cls._MARKS.pop(name))
+        cls._record(name, time.perf_counter() - cls._MARKS.pop(name))
 
     @staticmethod
     def print(prefix: str | None = None) -> str:  # noqa: T202
@@ -505,7 +505,7 @@ def _maybe_timeit(name):
     """Return timeit context if not compiling, nullcontext otherwise.
 
     torch.compiler.is_compiling() returns True when inside a compiled region,
-    and timeit uses time.time() which dynamo cannot trace.
+    and timeit reads time.perf_counter(), which dynamo cannot trace.
     """
     if is_compiling():
         return _NULL_CONTEXT
