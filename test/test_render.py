@@ -349,7 +349,7 @@ class TestRenderCheckpoint:
         module = torch.nn.Linear(2, 2)
         assert save_render_checkpoint(None, module) is None
         assert save_render_checkpoint("", module) is None
-        with pytest.warns(FutureWarning, match="v0.15"):
+        with pytest.warns(FutureWarning, match="v0.16"):
             path = save_render_checkpoint(
                 tmp_path / "checkpoints" / "policy.pt",
                 module,
@@ -1249,7 +1249,7 @@ class TestSotaCheckpointFactories:
             f"{ppo_dir / 'ppo_mujoco.py'}:_save_checkpoint"
         )
         saved_path = tmp_path / "saved_ppo.pt"
-        with pytest.warns(FutureWarning, match="v0.15"):
+        with pytest.warns(FutureWarning, match="v0.16"):
             save_checkpoint(
                 saved_path,
                 cfg=OmegaConf.create(

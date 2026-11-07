@@ -323,10 +323,10 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             workers append :class:`~torchrl.envs.transforms.InitTracker` and
             recurrent-state :class:`~torchrl.envs.transforms.TensorDictPrimer`
             transforms to their envs if the env specs don't already provide
-            them. ``False`` disables it; ``None`` (default through v0.14)
-            preserves pre-v0.15 behavior and emits a
+            them. ``False`` disables it; ``None`` (default through v0.15)
+            preserves pre-v0.16 behavior and emits a
             :class:`FutureWarning` when wrapping would have been needed.
-            Default flips to ``True`` in v0.15.
+            Default flips to ``True`` in v0.16.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,

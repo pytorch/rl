@@ -4199,10 +4199,10 @@ class TestEnvTransformAutoWrap:
             collector.shutdown()
 
     def test_default_emits_future_warning_about_v0_15_flip(self):
-        """Default (None) preserves pre-v0.15 behavior and emits a FutureWarning.
+        """Default (None) preserves pre-v0.16 behavior and emits a FutureWarning.
 
         The collector currently does *not* auto-wrap; the warning informs the
-        user that the default flips to True in v0.15. Construction itself
+        user that the default flips to True in v0.16. Construction itself
         fails downstream (the policy expects ``is_init`` on a bare env), but
         the warning is what we're asserting here.
         """

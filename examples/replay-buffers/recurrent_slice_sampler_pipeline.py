@@ -95,9 +95,9 @@ policy = Seq(OrderedDict(embed=embed, gru=gru, mlp=mlp, qval=qval))
 #    auto_register_policy_transforms=True)`. The collector uses the same
 #    helper (`_maybe_append_env_transforms_from_module`), which is
 #    spec-based and idempotent — so doing both is fine, no double-wrapping.
-#    Default for `auto_register_policy_transforms` is `None` through v0.14
-#    (preserves pre-v0.15 behavior, emits a `FutureWarning` if it would have
-#    helped); the default flips to `True` in v0.15. Pass `False` to opt out
+#    Default for `auto_register_policy_transforms` is `None` through v0.15
+#    (preserves pre-v0.16 behavior, emits a `FutureWarning` if it would have
+#    helped); the default flips to `True` in v0.16. Pass `False` to opt out
 #    permanently.
 # ---------------------------------------------------------------------------
 env = GymEnv("CartPole-v1", policy=policy)

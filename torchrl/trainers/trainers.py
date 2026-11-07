@@ -1143,7 +1143,7 @@ class Trainer:
             return
         warnings.warn(
             "The default Trainer checkpoint format will change from the legacy "
-            "CKPT_BACKEND format to torchrl.checkpoint in v0.15. Pass "
+            "CKPT_BACKEND format to torchrl.checkpoint in v0.16. Pass "
             "checkpoint=Checkpoint(...) to opt in now.",
             FutureWarning,
             stacklevel=2,

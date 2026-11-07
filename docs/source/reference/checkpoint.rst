@@ -587,7 +587,7 @@ remain readable.
 The :func:`torchrl.render.save_render_checkpoint` helper also keeps its legacy
 ``torch.save`` payload by default during the compatibility window. Pass
 ``format="archive"`` or ``format="directory"`` to opt into the unified format;
-the default changes in v0.15.
+the default changes in v0.16.
 
 API
 ---

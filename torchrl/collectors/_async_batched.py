@@ -614,7 +614,7 @@ class AsyncBatchedCollector(BaseCollector):
             with ``service_backend="process"``). ``None`` (default) behaves like
             ``"driver"`` and emits a
             :class:`FutureWarning` when ``"auto"`` would pick process slots:
-            in v0.15 the default becomes ``"auto"``.
+            in v0.16 the default becomes ``"auto"``.
         device (torch.device or str, optional): device for policy inference
             (shorthand for ``InferenceDeviceConfig(policy_device=...)``).
             Defaults to ``None``.
@@ -641,7 +641,7 @@ class AsyncBatchedCollector(BaseCollector):
             ``env_backend`` and ``policy_backend`` take precedence when set.
             One of ``"threading"``, ``"multiprocessing"``, ``"ray"``, or
             ``"monarch"``.  Defaults to ``None``: environment workers run in
-            threads and inference uses the threading transport. In v0.15 the
+            threads and inference uses the threading transport. In v0.16 the
             environment-worker default changes to ``"multiprocessing"``; a
             :class:`FutureWarning` is emitted until then when neither
             ``backend`` nor ``env_backend`` is given.
@@ -963,7 +963,7 @@ class AsyncBatchedCollector(BaseCollector):
         else:
             warnings.warn(
                 "AsyncBatchedCollector runs environment workers in threads when "
-                "neither backend nor env_backend is given. In v0.15 this default "
+                "neither backend nor env_backend is given. In v0.16 this default "
                 "will change to env_backend='multiprocessing'. Pass "
                 "env_backend='threading' to keep the current behavior, or "
                 "env_backend='multiprocessing' to adopt the future default now.",
@@ -1093,7 +1093,7 @@ class AsyncBatchedCollector(BaseCollector):
             if blocker is None:
                 warnings.warn(
                     "AsyncBatchedCollector serves the policy from a thread of this "
-                    "process by default. In v0.15, when environment workers are "
+                    "process by default. In v0.16, when environment workers are "
                     "processes and a policy_factory is given, the default will "
                     "become transport='auto', which serves the policy from a "
                     "dedicated process that the environment workers reach "

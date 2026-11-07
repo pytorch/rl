@@ -212,7 +212,7 @@ the driver process and the reason is logged. A pre-built
 instead; it implies the process inference server and multiprocessing workers.
 ``transport="driver"`` keeps the driver-mediated path explicitly: coordinator
 threads relay requests to the transport derived from ``policy_backend``. In
-v0.15 ``transport="auto"`` becomes the default; until then the collector emits
+v0.16 ``transport="auto"`` becomes the default; until then the collector emits
 a :class:`FutureWarning` when the default would change its behavior.
 This mode bounds completed and in-flight transitions together to twice the
 environment count. Workers park before reserving capacity when the driver stops
