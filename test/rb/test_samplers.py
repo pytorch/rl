@@ -931,6 +931,46 @@ class TestSamplers:
                     curr_eps = curr_eps[curr_eps != 0]
                     assert curr_eps.unique().numel() == 1
 
+    @pytest.mark.parametrize("span", [True, (False, True)])
+    def test_slice_sampler_span_right_returns_every_slice(self, span):
+        """A right span never starts a slice past the end of its trajectory.
+
+        Every requested slice is returned with at least one step, and a slice
+        shorter than ``slice_len`` is cut by the end of its episode or, with a
+        left span, by its start.
+        """
+        torch.manual_seed(0)
+        episode_len, num_slices, slice_len = 4, 4, 4
+        step = torch.arange(episode_len).repeat(2)
+        data = TensorDict(
+            {
+                "episode": torch.arange(2).repeat_interleave(episode_len),
+                "step": step,
+                ("next", "done"): (step == episode_len - 1).unsqueeze(-1),
+            },
+            [2 * episode_len],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel()),
+            sampler=SliceSampler(slice_len=slice_len, traj_key="episode", span=span),
+            batch_size=num_slices * slice_len,
+        )
+        rb.extend(data)
+        for _ in range(50):
+            sample = rb.sample()
+            ends = sample["next", "truncated"].reshape(-1).nonzero().squeeze(-1) + 1
+            slices = sample.tensor_split(ends[:-1].tolist())
+            assert len(slices) == num_slices
+            assert ends[-1] == sample.numel()
+            for slc in slices:
+                assert 1 <= slc.numel() <= slice_len
+                assert (slc["episode"] == slc["episode"][0]).all()
+                assert (slc["step"].diff() == 1).all()
+                if slc.numel() < slice_len:
+                    ends_episode = slc["step"][-1] == episode_len - 1
+                    starts_episode = span is True and slc["step"][0] == 0
+                    assert ends_episode or starts_episode
+
     def test_slice_sampler_left_right_ndim(self):
         torch.manual_seed(0)
         data = TensorDict(
@@ -1829,7 +1869,8 @@ class TestSamplers:
         """Slices from a wrapped storage stay within one env and one episode.
 
         A slice shorter than ``slice_len`` must end where its episode ends (or
-        at the newest stored step), not earlier.
+        at the newest stored step), not earlier. Every slice starts with
+        ``is_init=True``, and no other step of the slice is an episode start.
         """
         torch.manual_seed(0)
         rows_per_env, slice_len, num_steps = 20, 4, 45
@@ -1842,6 +1883,7 @@ class TestSamplers:
                 "env": env,
                 "step": step,
                 "episode": step // episode_len + 1000 * env,
+                "is_init": (step % episode_len == 0)[..., None],
                 ("next", "done"): (step % episode_len == episode_len - 1)[..., None],
             },
             [num_envs, num_steps],
@@ -1883,6 +1925,8 @@ class TestSamplers:
                 assert (slc["env"] == slc["env"][0]).all()
                 assert (slc["episode"] == slc["episode"][0]).all()
                 assert (slc["step"].diff() == 1).all()
+                assert slc["is_init"][0].item()
+                assert not slc["is_init"][1:].any()
 
     @pytest.mark.parametrize(
         "end_kwargs",
@@ -3213,6 +3257,40 @@ def test_prioritized_slice_sampler_doc_example():
     # print("episode", sample["episode"].tolist())
     # print("steps", sample["steps"].tolist())
     # print("weight", info["priority_weight"].tolist())
+
+
+@pytest.mark.parametrize("strict_length", [True, False])
+def test_prioritized_slice_sampler_slice_len_one(strict_length):
+    """With ``slice_len=1`` every transition, including an episode's last step, is a valid start."""
+    torch.manual_seed(0)
+    step = torch.arange(4).repeat(2)
+    data = TensorDict(
+        {
+            "episode": torch.arange(2).repeat_interleave(4),
+            "step": step,
+            ("next", "done"): (step == 3).unsqueeze(-1),
+        },
+        [8],
+    )
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(8),
+        sampler=PrioritizedSliceSampler(
+            max_capacity=8,
+            alpha=1.0,
+            beta=1.0,
+            slice_len=1,
+            traj_key="episode",
+            strict_length=strict_length,
+        ),
+        batch_size=8,
+    )
+    index = rb.extend(data)
+    priority = torch.zeros(8)
+    priority[3] = 1.0
+    rb.update_priority(index, priority)
+    sample = rb.sample()
+    assert sample["episode"].tolist() == [0] * 8
+    assert sample["step"].tolist() == [3] * 8
 
 
 @pytest.mark.parametrize("device", get_default_devices())

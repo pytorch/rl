@@ -278,6 +278,46 @@ class TestMultiAgent:
             submodule = model._empty_net.get_submodule(".".join(key[:-1]))
             assert getattr(submodule, key[-1]) is value
 
+    @pytest.mark.parametrize("centralized", [True, False])
+    @pytest.mark.parametrize(
+        ("model_type", "model_kwargs", "input_shape"),
+        [
+            (
+                MultiAgentMLP,
+                {"n_agent_inputs": 6, "n_agent_outputs": 2, "depth": 2},
+                (4, 3, 6),
+            ),
+            (
+                MultiAgentConvNet,
+                {"in_features": 3, "kernel_sizes": 3},
+                (4, 3, 3, 15, 15),
+            ),
+        ],
+    )
+    def test_multiagent_export_shared_params(
+        self, centralized, model_type, model_kwargs, input_shape
+    ):
+        """Non-strict export of a shared-parameter network must leave the eager network intact."""
+        torch.manual_seed(0)
+        model = model_type(
+            n_agents=3,
+            centralized=centralized,
+            share_params=True,
+            **model_kwargs,
+        )
+        trace_input = torch.randn(input_shape)
+        inputs = torch.randn(input_shape)
+        state = {key: value.clone() for key, value in model.state_dict().items()}
+        with torch.no_grad():
+            expected = model(inputs)
+
+        exported = torch.export.export(model, (trace_input,), strict=False)
+
+        with torch.no_grad():
+            torch.testing.assert_close(exported.module()(inputs), expected)
+            torch.testing.assert_close(model(inputs), expected)
+        torch.testing.assert_close(model.state_dict(), state)
+
     def test_multiagent_export_reentrant(self, monkeypatch):
         torch.manual_seed(0)
         model = MultiAgentMLP(

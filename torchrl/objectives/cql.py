@@ -38,7 +38,7 @@ from torchrl.objectives.value import ValueEstimatorBase
 
 
 class CQLLoss(LossModule):
-    """TorchRL implementation of the continuous CQL loss.
+    r"""TorchRL implementation of the continuous CQL loss.
 
     Presented in "Conservative Q-Learning for Offline Reinforcement Learning" https://arxiv.org/abs/2006.04779
 
@@ -87,9 +87,26 @@ class CQLLoss(LossModule):
         deterministic_backup (bool, optional): Whether to use the deterministic. Default is ``True``.
         num_random (int, optional): Number of random actions to sample for the CQL loss.
             Default is 10.
-        with_lagrange (bool, optional): Whether to use the Lagrange multiplier.
-            Default is ``False``.
-        lagrange_thresh (:obj:`float`, optional): Lagrange threshold. Default is 0.0.
+        with_lagrange (bool, optional): Whether to tune the weight
+            :math:`\alpha'` of the conservative term by dual gradient descent,
+            as in CQL(H) with a Lagrange multiplier. When ``True``,
+            ``"loss_cql"`` is :math:`\alpha' (c_1 + c_2 - 2 \tau)`, where
+            :math:`c_i` is the conservative term of the i-th Q-network and
+            :math:`\tau` is ``lagrange_thresh``, with :math:`\alpha'` treated as
+            a constant, and ``"loss_alpha_prime"`` is
+            :math:`-\alpha' ((c_1 + c_2) / 2 - \tau)` with the conservative
+            terms treated as constants, so that it only trains
+            ``log_alpha_prime``. The losses can be summed into a single
+            optimization step. Default is ``False``.
+
+            .. note:: Before v0.15, ``"loss_cql"`` was not scaled by
+                :math:`\alpha'` and ``"loss_alpha_prime"`` also sent gradients
+                into the Q-networks.
+
+        lagrange_thresh (:obj:`float`, optional): Lagrange threshold
+            :math:`\tau`, the target value of the conservative term
+            :math:`(c_1 + c_2) / 2`. Only used when ``with_lagrange=True``.
+            Default is 0.0.
         reduction (str, optional): Specifies the reduction to apply to the output:
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
@@ -566,7 +583,7 @@ class CQLLoss(LossModule):
             "loss_alpha": loss_alpha,
         }
         if self.with_lagrange:
-            out["loss_alpha_prime"] = alpha_prime_loss.mean()
+            out["loss_alpha_prime"] = alpha_prime_loss
 
         # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
         if self.reduction == "none":
@@ -925,6 +942,10 @@ class CQLLoss(LossModule):
         tensordict.set(self.tensor_keys.cql_q2_loss, cql_q2_loss)
 
         cql_q_loss = cql_q1_loss + cql_q2_loss
+        if self.with_lagrange:
+            cql_q_loss = self._alpha_prime.detach() * (
+                cql_q_loss - 2 * self.target_action_gap
+            )
         cql_q_loss = self._reduce_loss(
             cql_q_loss,
             tensordict=tensordict,
@@ -955,19 +976,15 @@ class CQLLoss(LossModule):
                 "This could be caused by calling alpha_prime_loss method before cql_loss method."
             )
 
-        alpha_prime = torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
-        weights = self._maybe_get_priority_weight(tensordict)
-        cql_q1_loss = self._reduce_loss(
-            cql_q1_loss, tensordict=tensordict, reduction="mean", weights=weights
+        constraint_gap = (
+            cql_q1_loss.detach() + cql_q2_loss.detach()
+        ) * 0.5 - self.target_action_gap
+        alpha_prime_loss = self._reduce_loss(
+            -self._alpha_prime * constraint_gap,
+            tensordict=tensordict,
+            reduction="none" if self.reduction == "none" else "mean",
+            weights=self._maybe_get_priority_weight(tensordict),
         )
-        cql_q2_loss = self._reduce_loss(
-            cql_q2_loss, tensordict=tensordict, reduction="mean", weights=weights
-        )
-
-        min_qf1_loss = alpha_prime * (cql_q1_loss - self.target_action_gap)
-        min_qf2_loss = alpha_prime * (cql_q2_loss - self.target_action_gap)
-
-        alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -1014,6 +1031,10 @@ class CQLLoss(LossModule):
             self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         alpha = self.log_alpha.data.exp()
         return alpha
+
+    @property
+    def _alpha_prime(self) -> Tensor:
+        return torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
 
 
 class DiscreteCQLLoss(LossModule):
