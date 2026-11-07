@@ -42,7 +42,13 @@ from torchrl.envs.batched_envs import (
     _to_device_mps_safe,
 )
 from torchrl.envs.env_creator import get_env_metadata
-from torchrl.envs.transforms import StepCounter, TransformedEnv
+from torchrl.envs.transforms import (
+    Compose,
+    RewardScaling,
+    RewardSum,
+    StepCounter,
+    TransformedEnv,
+)
 from torchrl.envs.transforms.transforms import Tokenizer
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import RandomPolicy
@@ -53,6 +59,7 @@ from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     CountingEnvWithString,
     DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -82,6 +89,14 @@ class _DelayedCountingEnv(CountingEnv):
     def _step(self, tensordict):
         threading.Event().wait(self.delay)
         return super()._step(tensordict)
+
+
+def _rewarded_counting_env(index: int) -> TransformedEnv:
+    """A CountingEnv whose reward is ``index + 1`` at every step and which is done after 3 steps."""
+    return TransformedEnv(
+        CountingEnv(max_steps=3, start_val=index),
+        RewardScaling(loc=float(index + 1), scale=1.0),
+    )
 
 
 class _DifferentSpecCountingEnv(CountingEnv):
@@ -1145,6 +1160,108 @@ class TestAsyncEnvPool:
         finally:
             base_env._maybe_shutdown()
 
+    @pytest.mark.parametrize(
+        "backend,exchange",
+        [
+            ("threading", None),
+            ("multiprocessing", "queue"),
+            ("multiprocessing", "shm"),
+        ],
+    )
+    @set_capture_non_tensor_stack(False)
+    def test_collector_matches_serial_env(self, backend, exchange):
+        """A Collector over an AsyncEnvPool yields the batches of a SerialEnv.
+
+        The pool wrote ``"env_index"`` as a tensor on step but as a
+        ``NonTensorStack`` on reset, so the collector could not stack its
+        rollout. With ``exchange="shm"`` the collector's ``("collector",
+        "traj_ids")`` input was also rejected instead of being passed through.
+        """
+        makers = [partial(_rewarded_counting_env, index) for index in range(3)]
+        kwargs = {} if exchange is None else {"exchange": exchange}
+        pool = AsyncEnvPool(makers, backend=backend, **kwargs)
+        serial = SerialEnv(3, makers)
+        policy = CountingEnvCountPolicy(serial.action_spec)
+        try:
+            pool_batches = list(
+                Collector(pool, policy, frames_per_batch=15, total_frames=30)
+            )
+            serial_batches = list(
+                Collector(serial, policy, frames_per_batch=15, total_frames=30)
+            )
+            assert len(pool_batches) == len(serial_batches) == 2
+            for pool_batch, serial_batch in zip(pool_batches, serial_batches):
+                assert pool_batch["env_index"] == [[index] * 5 for index in range(3)]
+                assert_allclose_td(pool_batch.exclude("env_index"), serial_batch)
+        finally:
+            pool.close(raise_if_closed=False)
+            serial.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("exchange", ["queue", "shm"])
+    @set_capture_non_tensor_stack(False)
+    def test_outer_transforms_match_serial_env(self, exchange):
+        """Transforms wrapping the pool produce the rollout they produce around a SerialEnv.
+
+        With ``exchange="shm"`` the pool rejected the keys written by the
+        outer transforms (``"step_count"``, ``"episode_reward"``), lost the
+        reward of its private ``_step`` and could not forward the partial
+        ``"_reset"`` mask. Each child is done after a different number of
+        steps, so the rollout goes through partial resets.
+        """
+        makers = [partial(_rewarded_counting_env, index) for index in range(3)]
+        transform = Compose(StepCounter(), RewardSum())
+        pool_env = TransformedEnv(
+            AsyncEnvPool(makers, backend="multiprocessing", exchange=exchange),
+            transform.clone(),
+        )
+        serial_env = TransformedEnv(SerialEnv(3, makers), transform.clone())
+        policy = CountingEnvCountPolicy(serial_env.action_spec)
+        try:
+            rollout = pool_env.rollout(6, policy, break_when_any_done=False)
+            expected = serial_env.rollout(6, policy, break_when_any_done=False)
+            assert_allclose_td(rollout.exclude("env_index"), expected)
+            torch.testing.assert_close(
+                expected["next", "episode_reward"].squeeze(-1),
+                torch.tensor(
+                    [
+                        [1.0, 2.0, 3.0, 4.0, 1.0, 2.0],
+                        [2.0, 4.0, 6.0, 2.0, 4.0, 6.0],
+                        [3.0, 6.0, 3.0, 6.0, 3.0, 6.0],
+                    ]
+                ),
+            )
+        finally:
+            pool_env.close(raise_if_closed=False)
+            serial_env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("exchange", ["queue", "shm"])
+    @set_capture_non_tensor_stack(False)
+    def test_step_and_maybe_reset_extra_inputs_match_serial_env(self, exchange):
+        """Entries outside the env specs come back where a SerialEnv puts them.
+
+        The root output keeps the extra root and ``"next"`` entries of the
+        input, and the next root keeps only the extra root entries.
+        """
+        makers = [CountingEnv, CountingEnv]
+        pool = AsyncEnvPool(makers, backend="multiprocessing", exchange=exchange)
+        serial = SerialEnv(2, makers)
+        try:
+            outputs = []
+            for env in (pool, serial):
+                td = env.reset()
+                td["action"] = env.full_action_spec["action"].one()
+                td["tag"] = torch.tensor([3.0, 4.0])
+                td["next", "tag"] = torch.tensor([7.0, 8.0])
+                outputs.append(env.step_and_maybe_reset(td))
+            (pool_root, pool_next), (serial_root, serial_next) = outputs
+            assert_allclose_td(pool_root.exclude("env_index"), serial_root)
+            assert_allclose_td(pool_next.exclude("env_index"), serial_next)
+            assert "next" not in serial_next.keys()
+            torch.testing.assert_close(serial_next["tag"], torch.tensor([3.0, 4.0]))
+        finally:
+            pool.close(raise_if_closed=False)
+            serial.close(raise_if_closed=False)
+
     @set_capture_non_tensor_stack(False)
     def test_shared_memory_exchange(self, make_envs):
         env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")
@@ -1164,15 +1281,20 @@ class TestAsyncEnvPool:
             assert stats["avg_batch_to_action_ms"] > 0
             assert stats["consumer_busy_fraction"] > 0
 
-            invalid = next_step.clone()
-            invalid.set("unknown_input", torch.zeros(invalid.shape))
+            extra = next_step.clone()
+            extra.set("unknown_input", torch.arange(env.num_envs, dtype=torch.float32))
+            env.async_step_send(extra)
+            echoed = env.async_step_recv(min_get=env.num_envs)
+            torch.testing.assert_close(echoed["unknown_input"], extra["unknown_input"])
+
+            invalid = echoed.exclude("next")
+            invalid.set("observation", NonTensorStack(*["a"] * env.num_envs))
             with pytest.raises(KeyError) as exc_info:
                 env.async_step_send(invalid)
             message = str(exc_info.value)
-            assert "unknown_input" in message
+            assert "observation" in message
             assert "fixed exchange schema" in message
             assert "action" in message
-            assert "observation" in message
         finally:
             env._maybe_shutdown()
 
@@ -1366,6 +1488,26 @@ class TestAsyncEnvPool:
             assert result.shape[0] == 2
         finally:
             env._maybe_shutdown()
+
+    def test_shutdown_returns_when_result_queue_pipe_closed(self):
+        """Shutdown terminates when a result queue's pipe is already closed.
+
+        When the garbage collector reclaims a pool caught in a reference
+        cycle, it may finalize the result queues' connections before
+        ``AsyncEnvPool.__del__`` shuts the pool down. Draining a closed queue
+        fails on every ``get`` without consuming anything, which made the
+        drain loop spin forever and hang whatever test ran next.
+        """
+        env = AsyncEnvPool(
+            [CountingEnv, CountingEnv], backend="multiprocessing", exchange="queue"
+        )
+        env.reset()
+        env.close()
+        env.step_queue._reader.close()
+        closer = threading.Thread(target=env.close, daemon=True)
+        closer.start()
+        closer.join(timeout=30)
+        assert not closer.is_alive()
 
     @set_capture_non_tensor_stack(False)
     def test_queue_shutdown_with_unread_results(self):

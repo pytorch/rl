@@ -60,7 +60,7 @@ from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
 from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.utils.utils import _maybe_append_env_transforms_from_module
 from torchrl.weight_update.utils import _resolve_model
-from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
 
 
 def _cuda_sync_if_initialized():
@@ -1712,6 +1712,8 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         super().update_policy_weights_(
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
+        if kwargs.get("model_id") not in (None, "policy"):
+            return
         mark_weight_update(getattr(self, "_policy_w_state_dict", None))
 
         # Bump the local PolicyVersion transform (if track_policy_version is on).
@@ -1730,11 +1732,16 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         *,
         model_id: str | None = None,
     ) -> None:
-        """Copy weights from original policy to internal policy when no scheme configured."""
+        """Copy weights from original policy to internal policy when no scheme configured.
+
+        A ``model_id`` other than ``"policy"`` names another module of the
+        collector by its attribute path (for instance
+        ``"postproc.adv_module"``), whose parameters are overwritten in place
+        with ``policy_or_weights``.
+        """
         if model_id is not None and model_id != "policy":
-            raise KeyError(
-                f"Collector has no local weight target for model_id={model_id!r}."
-            )
+            self._update_local_model(model_id, policy_or_weights)
+            return
 
         # Get source weights - either from argument or from original policy
         if policy_or_weights is not None:
@@ -1755,6 +1762,36 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             TensorDict.from_module(self._policy_w_state_dict).data.update_(weights.data)
             return
         raise RuntimeError("Collector has no mutable local policy weight target.")
+
+    def _update_local_model(
+        self,
+        model_id: str,
+        policy_or_weights: TensorDictBase | nn.Module | dict | None,
+    ) -> None:
+        """Copy ``policy_or_weights`` into the module found at ``model_id``.
+
+        A multiprocess worker reaches this when a weight sync scheme registered
+        for a module other than the policy cascades its update to the worker's
+        collector.
+        """
+        try:
+            target = _resolve_model(self, model_id)
+        except (AttributeError, KeyError, IndexError):
+            target = None
+        if not isinstance(target, nn.Module):
+            raise KeyError(
+                f"Collector has no local weight target for model_id={model_id!r}."
+            )
+        if policy_or_weights is None:
+            raise RuntimeError(
+                f"Collector cannot update model_id={model_id!r} without explicit "
+                "weights."
+            )
+        strategy = WeightStrategy(extract_as="tensordict")
+        if isinstance(policy_or_weights, nn.Module):
+            policy_or_weights = strategy.extract_weights(policy_or_weights)
+        strategy.apply_weights(target, policy_or_weights, inplace=True)
+        mark_weight_update(target)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.

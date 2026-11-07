@@ -10,9 +10,9 @@ from collections.abc import Callable
 from typing import Any
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import is_leaf_nontensor, TensorDictBase
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, NestedKey
 
 from torchrl._utils import timeit
 
@@ -108,6 +108,7 @@ class _SharedSlotExchange:
         self.result_slots = self.result_buffer.unbind(0)
         self.next_slots = self.next_buffer.unbind(0)
         self._input_keys = set(self.input_buffer.keys(True, True))
+        self._extra_inputs: dict[int, TensorDictBase] = {}
         self._lock = threading.Lock()
         self._clock = timeit("async_env_shared_exchange").start()
         self._leased_at: dict[int, float] = {}
@@ -187,29 +188,73 @@ class _SharedSlotExchange:
         tensordict: TensorDictBase,
         *,
         record_action: bool = True,
+        keep_extra_inputs: bool = False,
     ) -> tuple:
+        """Writes the schema entries of ``tensordict`` into the input slot of ``env_index``.
+
+        Entries outside the exchange schema (for instance keys written by a
+        transform wrapping the pool, or by a collector) cannot be consumed by
+        the child env. When ``keep_extra_inputs`` is ``True`` they are cloned
+        and kept in the parent process, then merged back into the next result
+        read for ``env_index``, matching what the child's public ``reset``,
+        ``step`` and ``step_and_maybe_reset`` return with the queue exchange.
+        Otherwise (private ``_reset`` / ``_step`` calls, whose outputs do not
+        carry their inputs) they are ignored.
+
+        Returns:
+            the tuple of schema keys written to the slot, for the worker to
+            select.
+        """
         tensor_keys = []
+        extra_keys = []
         unsupported = []
-        for key, value in tensordict.items(True, True):
+        for key, value in tensordict.items(True, True, is_leaf=is_leaf_nontensor):
             if key == "env_index":
                 continue
-            if not isinstance(value, torch.Tensor) or key not in self._input_keys:
+            if key not in self._input_keys:
+                extra_keys.append(key)
+            elif not isinstance(value, torch.Tensor):
                 unsupported.append(key)
             else:
                 tensor_keys.append(key)
         if unsupported:
             expected_keys = sorted(self._input_keys, key=repr)
             raise KeyError(
-                f"Shared slot exchange received unsupported input at keys {unsupported}. "
+                f"Shared slot exchange received non-tensor input at keys {unsupported}. "
                 f"The fixed exchange schema expects tensor keys {expected_keys}. "
                 "Use exchange='queue' for dynamic data."
             )
         self.input_slots[env_index].update_(
             tensordict.select(*tensor_keys, strict=True)
         )
+        if keep_extra_inputs and extra_keys:
+            self._extra_inputs[env_index] = tensordict.select(
+                *extra_keys, strict=True
+            ).clone()
+        else:
+            self._extra_inputs.pop(env_index, None)
         if record_action:
             self.record_action(env_index)
         return tuple(tensor_keys)
+
+    def _with_extra_inputs(
+        self, env_index: int, *results: TensorDictBase
+    ) -> tuple[TensorDictBase, ...]:
+        """Merges the extra inputs kept for ``env_index`` into ``results``.
+
+        Each result gets its own copy so that the root and ``"next"`` outputs
+        of ``step_and_maybe_reset`` never alias each other. The next root of
+        ``step_and_maybe_reset`` does not receive extra ``"next"`` entries,
+        as :func:`~torchrl.envs.utils.step_mdp` drops them with the queue
+        exchange.
+        """
+        extra = self._extra_inputs.pop(env_index, None)
+        if extra is None:
+            return results
+        merged = [results[0].update(extra)]
+        for result in results[1:]:
+            merged.append(result.update(extra.exclude("next").clone()))
+        return tuple(merged)
 
     @staticmethod
     def publish(
@@ -292,12 +337,30 @@ class _SharedSlotExchange:
                 self._ready_dwell_s += now - ready_s
                 self._ready_dwell_count += 1
 
-    def read(self, descriptors: list[tuple], stack_func) -> TensorDictBase:
+    def read(
+        self,
+        descriptors: list[tuple],
+        stack_func,
+        *,
+        slot_key: NestedKey | None = None,
+    ) -> TensorDictBase:
+        """Stacks the results described by ``descriptors``.
+
+        ``slot_key`` selects a sub-tensordict of each result slot; the private
+        ``_step`` publishes its output under ``"next"`` since that is where the
+        step output keys (e.g. the reward) live in the exchange schema.
+        """
         results = []
         indices = []
         for env_index, keys, _ in descriptors:
             indices.append(env_index)
-            results.append(self.result_slots[env_index].select(*keys, strict=True))
+            slot = self.result_slots[env_index]
+            if slot_key is not None:
+                slot = slot.get(slot_key)
+            (result,) = self._with_extra_inputs(
+                env_index, slot.select(*keys, strict=True)
+            )
+            results.append(result)
         result = stack_func(results)
         indices_data = NonTensorStack(*indices)
         while indices_data.batch_dims < result.batch_dims:
@@ -307,12 +370,10 @@ class _SharedSlotExchange:
 
     def read_one(self, descriptor: tuple) -> TensorDictBase:
         env_index, keys, _ = descriptor
-        return (
-            self.result_slots[env_index]
-            .select(*keys, strict=True)
-            .clone()
-            .set("env_index", NonTensorData(data=env_index))
+        (result,) = self._with_extra_inputs(
+            env_index, self.result_slots[env_index].select(*keys, strict=True).clone()
         )
+        return result.set("env_index", NonTensorData(data=env_index))
 
     def read_pair(
         self, descriptors: list[tuple], stack_func
@@ -322,12 +383,13 @@ class _SharedSlotExchange:
         indices = []
         for env_index, result_keys, next_keys, _ in descriptors:
             indices.append(env_index)
-            results.append(
-                self.result_slots[env_index].select(*result_keys, strict=True)
+            result, next_result = self._with_extra_inputs(
+                env_index,
+                self.result_slots[env_index].select(*result_keys, strict=True),
+                self.next_slots[env_index].select(*next_keys, strict=True),
             )
-            next_results.append(
-                self.next_slots[env_index].select(*next_keys, strict=True)
-            )
+            results.append(result)
+            next_results.append(next_result)
         result = stack_func(results)
         next_result = stack_func(next_results)
         indices_data = NonTensorStack(*indices)
@@ -340,18 +402,13 @@ class _SharedSlotExchange:
     def read_pair_one(self, descriptor: tuple) -> tuple[TensorDictBase, TensorDictBase]:
         env_index, result_keys, next_keys, _ = descriptor
         index_data = NonTensorData(data=env_index)
-        result = (
-            self.result_slots[env_index]
-            .select(*result_keys, strict=True)
-            .clone()
-            .set("env_index", index_data)
+        result, next_result = self._with_extra_inputs(
+            env_index,
+            self.result_slots[env_index].select(*result_keys, strict=True).clone(),
+            self.next_slots[env_index].select(*next_keys, strict=True).clone(),
         )
-        next_result = (
-            self.next_slots[env_index]
-            .select(*next_keys, strict=True)
-            .clone()
-            .set("env_index", index_data.clone())
-        )
+        result.set("env_index", index_data)
+        next_result.set("env_index", index_data.clone())
         return result, next_result
 
     def record_action(self, env_index: int) -> None:

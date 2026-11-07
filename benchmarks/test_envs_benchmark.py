@@ -428,6 +428,29 @@ def test_async_env_pool_per_env_dispatch(benchmark, exchange):
             pool._maybe_shutdown()
 
 
+@pytest.mark.parametrize("exchange", ["queue", "shm"])
+def test_async_env_pool_rollout(benchmark, exchange):
+    """Full-batch step cost of AsyncEnvPool through env.rollout with free envs."""
+    with set_capture_non_tensor_stack(False):
+        pool = AsyncEnvPool(
+            [ContinuousActionVecMockEnv] * ASYNC_POOL_DISPATCH_ENVS,
+            backend="multiprocessing",
+            exchange=exchange,
+        )
+        try:
+            benchmark.extra_info["num_envs"] = ASYNC_POOL_DISPATCH_ENVS
+            benchmark.pedantic(
+                pool.rollout,
+                args=(100,),
+                kwargs={"break_when_any_done": False},
+                rounds=5,
+                warmup_rounds=1,
+                iterations=1,
+            )
+        finally:
+            pool._maybe_shutdown()
+
+
 # Note: the queue exchange is deliberately not parametrized here. At 32
 # workers the queue path hangs during setup/reset with the spawn start method
 # (macOS-confirmed; tracked for a fix in the AsyncEnvPool v2 sequence). The

@@ -117,6 +117,7 @@ from torchrl.modules import (
     SafeModule,
     TanhNormal,
 )
+from torchrl.objectives.value import GAE
 from torchrl.testing import (
     CARTPOLE_VERSIONED,
     check_rollout_consistency_multikey_env,
@@ -2744,8 +2745,10 @@ if __name__ == "__main__":
             state_dict = collector.state_dict()
             policy_state_dict = policy.state_dict()
             # check they don't match
-            workers_see_unsent_weights = not torch.cuda.is_available() and not (
-                scheme is not None and scheme.atomic
+            workers_see_unsent_weights = (
+                not torch.cuda.is_available()
+                and not isinstance(scheme, MultiProcessWeightSyncScheme)
+                and not (scheme is not None and scheme.atomic)
             )
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
@@ -4803,7 +4806,19 @@ class TestUpdateParams:
             second = self.second.detach().clone()
             return torch.zeros_like(state), first, second
 
-    def test_shared_mem_update_never_tears_running_policy(self):
+    @pytest.mark.parametrize(
+        "make_scheme",
+        [
+            pytest.param(
+                functools.partial(SharedMemWeightSyncScheme, atomic=True),
+                id="SharedMemWeightSyncScheme-atomic",
+            ),
+            pytest.param(
+                MultiProcessWeightSyncScheme, id="MultiProcessWeightSyncScheme"
+            ),
+        ],
+    )
+    def test_update_never_tears_running_policy(self, make_scheme):
         policy = TensorDictModule(
             TestUpdateParams.SlowTwoReadModule(),
             in_keys=["state"],
@@ -4815,7 +4830,7 @@ class TestUpdateParams:
             policy,
             frames_per_batch=4,
             total_frames=-1,
-            weight_sync_schemes={"policy": SharedMemWeightSyncScheme(atomic=True)},
+            weight_sync_schemes={"policy": make_scheme()},
         )
         num_updates = 15
         torn_calls = 0
@@ -4832,6 +4847,100 @@ class TestUpdateParams:
             col.shutdown()
         assert torn_calls == 0
         assert (data["first"] > 0).all()
+
+    @pytest.mark.parametrize(
+        "make_scheme",
+        [
+            pytest.param(
+                functools.partial(SharedMemWeightSyncScheme, atomic=True),
+                id="SharedMemWeightSyncScheme-atomic",
+            ),
+            pytest.param(
+                MultiProcessWeightSyncScheme, id="MultiProcessWeightSyncScheme"
+            ),
+        ],
+    )
+    def test_update_syncs_postproc_module(self, make_scheme):
+        """A module of the workers' postproc synced by its own scheme gets the trainer's weights."""
+        env = ContinuousActionVecMockEnv()
+        obs_dim = env.observation_spec["observation"].shape[-1]
+        action_dim = env.action_spec.shape[-1]
+        policy = TensorDictModule(
+            nn.Linear(obs_dim, action_dim), in_keys=["observation"], out_keys=["action"]
+        )
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1), in_keys=["observation"], out_keys=["state_value"]
+        )
+        col = MultiSyncCollector(
+            [ContinuousActionVecMockEnv] * 2,
+            policy,
+            frames_per_batch=20,
+            total_frames=-1,
+            postproc=GAE(gamma=0.9, lmbda=0.9, value_network=value_net),
+            replay_buffer=ReplayBuffer(storage=LazyTensorStorage(100), shared=True),
+            weight_sync_schemes={
+                "policy": make_scheme(),
+                "postproc.value_network": make_scheme(),
+            },
+        )
+        try:
+            next(iter(col))
+            with torch.no_grad():
+                policy.module.weight.fill_(0.25)
+                value_net.module.weight.fill_(0.5)
+                value_net.module.bias.fill_(-2.0)
+            start = time.monotonic()
+            col.update_policy_weights_(
+                weights_dict={"policy": None, "postproc.value_network": None}
+            )
+            assert time.monotonic() - start < 30
+            policy_weights = col.get_distant_attr("policy.module.weight")
+            value_weights = col.get_distant_attr("postproc.value_network.module.weight")
+            value_biases = col.get_distant_attr("postproc.value_network.module.bias")
+        finally:
+            col.shutdown()
+        for policy_weight, value_weight, value_bias in zip(
+            policy_weights, value_weights, value_biases
+        ):
+            torch.testing.assert_close(
+                policy_weight.detach(), torch.full((action_dim, obs_dim), 0.25)
+            )
+            torch.testing.assert_close(
+                value_weight.detach(), torch.full((1, obs_dim), 0.5)
+            )
+            torch.testing.assert_close(value_bias.detach(), torch.full((1,), -2.0))
+
+    def test_multiprocess_update_raises_when_worker_cannot_apply(self):
+        """A worker that fails to apply an update makes send() raise instead of hang."""
+        env = ContinuousActionVecMockEnv()
+        obs_dim = env.observation_spec["observation"].shape[-1]
+        action_dim = env.action_spec.shape[-1]
+        policy = TensorDictModule(
+            nn.Linear(obs_dim, action_dim), in_keys=["observation"], out_keys=["action"]
+        )
+        col = MultiSyncCollector(
+            [ContinuousActionVecMockEnv] * 2,
+            policy,
+            frames_per_batch=20,
+            total_frames=-1,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+        )
+        try:
+            wrong_shape = TensorDict.from_module(policy).apply(
+                lambda t: torch.zeros(*t.shape, 2)
+            )
+            with pytest.raises(RuntimeError, match="failed on the receiver side"):
+                col.update_policy_weights_(wrong_shape)
+            with torch.no_grad():
+                policy.module.weight.fill_(0.25)
+            col.update_policy_weights_()
+            policy_weights = col.get_distant_attr("policy.module.weight")
+        finally:
+            col.shutdown()
+        for policy_weight in policy_weights:
+            torch.testing.assert_close(
+                policy_weight.detach(), torch.full((action_dim, obs_dim), 0.25)
+            )
 
     @pytest.mark.parametrize("atomic", [None, False, True])
     def test_shared_mem_atomic_default_warns(self, atomic):
@@ -7027,6 +7136,33 @@ class TestCollectorRB:
                     (step_countdiff == 1) | (step_countdiff < 0)
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
+
+    def test_multi_collector_rb_batched_env_writes_time_rows(self):
+        """A batched env writes rows of frames_per_batch // num_envs steps into a 1-D storage."""
+        make_env = functools.partial(CountingEnv, max_steps=100, batch_size=[2])
+        probe = make_env()
+        try:
+            policy = CountingEnvCountPolicy(probe.action_spec)
+        finally:
+            probe.close(raise_if_closed=False)
+        rb = ReplayBuffer(storage=LazyTensorStorage(16), shared=True)
+        collector = MultiSyncCollector(
+            [make_env],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=8,
+            total_frames=16,
+        )
+        try:
+            for data in collector:
+                assert data is None
+        finally:
+            collector.shutdown()
+        observations = rb[: len(rb)]["observation"].squeeze(-1)
+        expected = torch.tensor(
+            [[0, 1, 2, 3], [0, 1, 2, 3], [4, 5, 6, 7], [4, 5, 6, 7]]
+        )
+        torch.testing.assert_close(observations, expected.to(observations.dtype))
 
     def test_multi_async_replay_buffer_device_metadata(self):
         probe = CountingEnv()

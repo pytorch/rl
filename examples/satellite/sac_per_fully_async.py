@@ -672,6 +672,10 @@ def main(argv: list[str] | None = None) -> int:
         collector.async_shutdown(timeout=30.0)
     except Exception as e:
         torchrl_logger.warning(f"collector.async_shutdown failed: {e}")
+    if any(proc.exitcode is not None and proc.exitcode > 0 for proc in collector.procs):
+        raise RuntimeError(
+            "The collector worker exited with an error; its traceback is in the log above."
+        )
     if evaluator is not None:
         if evaluator.pending:
             try:
