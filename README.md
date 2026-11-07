@@ -232,8 +232,9 @@ For larger jobs, the collector family adds async execution, multiple worker
 processes, weight updaters, evaluator loops, profiling hooks, and fake-data
 helpers for testing downstream code without stepping an expensive environment.
 
-TorchRL 0.14 unified construction for local and distributed collection. For
-example, if `make_env` creates an environment, use multiple local processes with:
+TorchRL 0.14 made it easier to scale data collection across local processes and
+distributed workers through a shared `Collector` API. For example, if `make_env`
+creates an environment, use multiple local processes with:
 
 ```python
 multi_collector = Collector(
@@ -243,8 +244,18 @@ multi_collector = Collector(
 
 Here `sync=True` waits for all four workers. This call returns a
 `MultiSyncCollector`, the implementation that manages synchronous worker
-processes. Use `sync=False` to receive data as workers finish, or
-`backend="ray"` for Ray-managed workers (requires Ray).
+processes.
+
+The same `Collector` API supports several execution modes:
+
+- **Single process:** `Collector(make_env, policy, ...)` collects in the current
+  process.
+- **Synchronous workers:** `num_collectors=4, sync=True` collects across four
+  local workers and waits for each when forming a batch.
+- **Asynchronous workers:** `num_collectors=4, sync=False` receives data as
+  workers finish.
+- **Distributed workers:** `backend="ray"`, `"rpc"`, or `"distributed"` selects
+  a distributed execution backend.
 
 For asynchronous environment stepping and batched policy inference,
 `AsyncBatchedCollector` combines an `AsyncEnvPool`, which runs environments
