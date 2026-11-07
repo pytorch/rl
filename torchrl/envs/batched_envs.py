@@ -3209,13 +3209,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self._sync_w2m()
         return out
 
-    @_check_start
     def _shutdown_workers(self) -> None:
+        if self.is_closed:
+            raise RuntimeError(
+                f"calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
+            )
         try:
-            if self.is_closed:
-                raise RuntimeError(
-                    f"calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
-                )
             if self._metadata_from_workers:
                 # Expensive native environments may retain renderer resources
                 # until process teardown. Reap each process before asking the
@@ -3251,16 +3250,24 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             if self._use_buffers:
                 del self.shared_tensordicts, self.shared_tensordict_parent
         finally:
-            for channel in self.parent_channels:
-                channel.close()
-            self._terminate_and_join_workers(
-                self._workers, timeout=min(self._timeout, 2.0)
-            )
-        del self._workers
-        del self.parent_channels
+            for channel in self.__dict__.get("parent_channels", ()):
+                try:
+                    channel.close()
+                except Exception:
+                    pass
+            workers = self.__dict__.get("_workers")
+            if workers is not None:
+                self._terminate_and_join_workers(
+                    workers, timeout=min(self._timeout, 2.0)
+                )
+        if "_workers" in self.__dict__:
+            del self._workers
+        if "parent_channels" in self.__dict__:
+            del self.parent_channels
         self._cuda_events = None
         self._events = None
         self.event = None
+        self.is_closed = True
 
     @_check_start
     def set_seed(
