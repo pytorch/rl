@@ -130,6 +130,60 @@ class StalenessAwareSampler(Sampler):
     def max_staleness(self, v: int):
         self._max_staleness = v
 
+    def _reduce_versions(
+        self, versions: torch.Tensor | list | tuple, n: int
+    ) -> torch.Tensor:
+        if getattr(versions, "is_nested", False):
+            reduced = []
+            for t in versions.unbind(0):
+                if t.numel() == 0:
+                    reduced.append(torch.zeros((), dtype=torch.int64, device=t.device))
+                elif (t >= 0).any():
+                    fill_val = (
+                        torch.iinfo(t.dtype).max
+                        if not t.is_floating_point()
+                        else float("inf")
+                    )
+                    reduced.append(torch.where(t >= 0, t, fill_val).min())
+                else:
+                    reduced.append(t.min())
+            return torch.stack(reduced)
+        if isinstance(versions, (list, tuple)):
+            reduced = []
+            for t in versions:
+                if isinstance(t, torch.Tensor):
+                    if t.numel() == 0:
+                        reduced.append(
+                            torch.zeros((), dtype=torch.int64, device=t.device)
+                        )
+                    elif (t >= 0).any():
+                        fill_val = (
+                            torch.iinfo(t.dtype).max
+                            if not t.is_floating_point()
+                            else float("inf")
+                        )
+                        reduced.append(torch.where(t >= 0, t, fill_val).min())
+                    else:
+                        reduced.append(t.min())
+                else:
+                    reduced.append(torch.as_tensor(t))
+            return torch.stack(reduced)
+        if versions.dim() > 1:
+            versions = versions.reshape(n, -1)
+            has_nonneg = (versions >= 0).any(dim=-1, keepdim=True)
+            fill_val = (
+                torch.iinfo(versions.dtype).max
+                if not versions.is_floating_point()
+                else float("inf")
+            )
+            masked = torch.where(versions >= 0, versions, fill_val)
+            return torch.where(
+                has_nonneg.squeeze(-1),
+                masked.min(dim=-1).values,
+                versions.min(dim=-1).values,
+            )
+        return versions
+
     def _get_versions(self, storage: Storage, n: int):
         if isinstance(storage, TensorStorage):
             backing_storage = getattr(storage, "_storage", None)
@@ -142,13 +196,19 @@ class StalenessAwareSampler(Sampler):
                         )
                     elif n != storage.max_size:
                         versions = versions[:n]
-                    return versions
+                    return self._reduce_versions(versions, n)
 
         # Fallback: storage[:n] materialises all data. This path is used for
         # non-TensorStorage backends (e.g. ListStorage). For hot-path
         # performance, prefer TensorStorage where versions are read directly.
         all_data = storage[:n]
-        return all_data.get(self._version_key, None)
+        try:
+            versions = all_data.get(self._version_key, as_nested_tensor=True)
+        except Exception:
+            versions = all_data.get(self._version_key, None)
+        if versions is not None:
+            return self._reduce_versions(versions, n)
+        return None
 
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         n = len(storage)
