@@ -568,10 +568,10 @@ for i, _ in enumerate(collector):
 
 ```
 0%| | 0/200 [00:00<?, ?it/s]
- 25%|██▌ | 50/200 [00:00<00:00, 178.51it/s]
- 50%|█████ | 100/200 [00:00<00:00, 179.77it/s]
- 75%|███████▌ | 150/200 [00:00<00:00, 183.30it/s]
-100%|██████████| 200/200 [00:01<00:00, 185.55it/s]
+ 25%|██▌ | 50/200 [00:00<00:00, 169.64it/s]
+ 50%|█████ | 100/200 [00:00<00:00, 170.40it/s]
+ 75%|███████▌ | 150/200 [00:00<00:00, 174.94it/s]
+100%|██████████| 200/200 [00:01<00:00, 178.36it/s]
 ```
 
 Let's plot our results:
@@ -606,7 +606,7 @@ how hidden states move through `env.reset`, collection, replay,
 and the loss.
 - The TorchRL documentation can be found [here](https://pytorch.org/rl/).
 
-**Total running time of the script:** (0 minutes 4.179 seconds)
+**Total running time of the script:** (0 minutes 4.287 seconds)
 
 [`Download Jupyter notebook: dqn_with_rnn.ipynb`](../_downloads/28be785bad9a380ed2a853d865b074b9/dqn_with_rnn.ipynb)
 
