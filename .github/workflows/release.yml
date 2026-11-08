@@ -2,7 +2,9 @@
 #
 # This workflow automates the release process for TorchRL:
 # 1. Sanity checks (version matching, branch/tag validation, tensordict compatibility)
-# 2. Triggers wheel builds across all platforms (sequentially to avoid test-infra conflicts)
+# 2. Triggers wheel builds across all platforms (sequentially to avoid test-infra conflicts).
+#    Python 3.11+ wheels build against pytorch_release; Python 3.10 wheels build
+#    against pytorch_release_py310, since torch 2.15 no longer supports Python 3.10.
 # 3. Collects wheels into a single artifact
 # 4. Updates gh-pages docs (stable symlink)
 # 5. Creates draft GitHub release with wheels attached
@@ -38,6 +40,11 @@ on:
         required: false
         type: string
         default: 'main'
+      pytorch_release_py310:
+        description: 'PyTorch release branch for the Python 3.10 wheels (torch 2.15 dropped Python 3.10)'
+        required: false
+        type: string
+        default: 'release/2.14'
       skip_sanity_checks:
         description: 'Skip sanity checks'
         required: false
@@ -264,6 +271,22 @@ jobs:
     uses: ./.github/workflows/build-wheels-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      python-versions: '["3.11", "3.12", "3.13", "3.14"]'
+      tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
+      with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
+      with-cuda: ${{ inputs.build_cuda && 'enable' || 'disable' }}
+      with-rocm: ${{ inputs.build_rocm && 'enable' || 'disable' }}
+    secrets: inherit
+
+  build-linux-py310:
+    name: Build Linux Wheels (Python 3.10)
+    needs: [sanity-checks, build-linux]
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-linux.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release_py310 || 'release/2.14' }}
+      python-versions: '["3.10"]'
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -273,12 +296,27 @@ jobs:
 
   build-windows:
     name: Build Windows Wheels
-    needs: [sanity-checks, build-linux]
-    # Run after Linux build completes (success or failure) to avoid concurrency conflicts
+    needs: [sanity-checks, build-linux-py310]
+    # Run after the Linux Python 3.10 build completes (success or failure) to avoid concurrency conflicts
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      python-versions: '["3.11", "3.12", "3.13", "3.14"]'
+      tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
+      with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
+      with-cuda: disable
+    secrets: inherit
+
+  build-windows-py310:
+    name: Build Windows Wheels (Python 3.10)
+    needs: [sanity-checks, build-windows]
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-windows.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release_py310 || 'release/2.14' }}
+      python-versions: '["3.10"]'
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -287,12 +325,26 @@ jobs:
 
   build-macos:
     name: Build macOS Wheels
-    needs: [sanity-checks, build-windows]
-    # Run after Windows build completes (success or failure) to avoid concurrency conflicts
+    needs: [sanity-checks, build-windows-py310]
+    # Run after the Windows Python 3.10 build completes (success or failure) to avoid concurrency conflicts
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-m1.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      python-versions: '["3.11", "3.12", "3.13", "3.14"]'
+      tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
+      with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
+    secrets: inherit
+
+  build-macos-py310:
+    name: Build macOS Wheels (Python 3.10)
+    needs: [sanity-checks, build-macos]
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-m1.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release_py310 || 'release/2.14' }}
+      python-versions: '["3.10"]'
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -300,12 +352,26 @@ jobs:
 
   build-aarch64:
     name: Build Aarch64 Linux Wheels
-    needs: [sanity-checks, build-macos]
-    # Run after macOS build completes (success or failure) to avoid concurrency conflicts
+    needs: [sanity-checks, build-macos-py310]
+    # Run after the macOS Python 3.10 build completes (success or failure) to avoid concurrency conflicts
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      python-versions: '["3.11", "3.12", "3.13", "3.14"]'
+      tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
+      channel: release
+      with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
+    secrets: inherit
+
+  build-aarch64-py310:
+    name: Build Aarch64 Linux Wheels (Python 3.10)
+    needs: [sanity-checks, build-aarch64]
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release_py310 || 'release/2.14' }}
+      python-versions: '["3.10"]'
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -316,7 +382,7 @@ jobs:
   # =============================================================================
   collect-wheels:
     name: Collect Wheels
-    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64]
+    needs: [sanity-checks, build-linux, build-linux-py310, build-windows, build-windows-py310, build-macos, build-macos-py310, build-aarch64, build-aarch64-py310]
     # Only run when ALL build jobs succeed. This ensures:
     # 1. Incomplete wheel sets are never collected
     # 2. If a build fails, this job is "skipped" (not "failed")
@@ -327,6 +393,10 @@ jobs:
       needs.build-windows.result == 'success' &&
       needs.build-macos.result == 'success' &&
       needs.build-aarch64.result == 'success' &&
+      needs.build-linux-py310.result == 'success' &&
+      needs.build-windows-py310.result == 'success' &&
+      needs.build-macos-py310.result == 'success' &&
+      needs.build-aarch64-py310.result == 'success' &&
       (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
@@ -337,6 +407,10 @@ jobs:
           echo "  Windows: ${{ needs.build-windows.result }}"
           echo "  macOS: ${{ needs.build-macos.result }}"
           echo "  Aarch64: ${{ needs.build-aarch64.result }}"
+          echo "  Linux (Python 3.10): ${{ needs.build-linux-py310.result }}"
+          echo "  Windows (Python 3.10): ${{ needs.build-windows-py310.result }}"
+          echo "  macOS (Python 3.10): ${{ needs.build-macos-py310.result }}"
+          echo "  Aarch64 (Python 3.10): ${{ needs.build-aarch64-py310.result }}"
           echo ""
           echo "All builds succeeded - proceeding with wheel collection"
 
@@ -644,7 +718,7 @@ jobs:
   # =============================================================================
   release-summary:
     name: Release Summary
-    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64, collect-wheels, update-docs, create-release, publish-pypi]
+    needs: [sanity-checks, build-linux, build-linux-py310, build-windows, build-windows-py310, build-macos, build-macos-py310, build-aarch64, build-aarch64-py310, collect-wheels, update-docs, create-release, publish-pypi]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -659,6 +733,10 @@ jobs:
           echo "| Build Windows | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build macOS | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build Aarch64 | ${{ needs.build-aarch64.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Linux (Python 3.10) | ${{ needs.build-linux-py310.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Windows (Python 3.10) | ${{ needs.build-windows-py310.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build macOS (Python 3.10) | ${{ needs.build-macos-py310.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Aarch64 (Python 3.10) | ${{ needs.build-aarch64-py310.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Collect Wheels | ${{ needs.collect-wheels.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Update Docs | ${{ needs.update-docs.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Create Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
