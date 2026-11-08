@@ -299,6 +299,19 @@ class TestSplits:
         out = torch.stack(out, 1).contiguous()
         return out
 
+    def test_consecutive_trajectory_lengths(self):
+        trajectory = torch.tensor([7, 7, 3, 3, 3, 9, 4, 4, 4, 4])
+        rollout = TensorDict(
+            {"trajectory": trajectory, "value": torch.arange(trajectory.numel())},
+            batch_size=[trajectory.numel()],
+        )
+
+        result = split_trajectories(rollout, trajectory_key="trajectory")
+        mask = result["mask"]
+
+        assert mask.sum(-1).tolist() == [2, 3, 1, 4]
+        assert result["value"][mask].tolist() == list(range(trajectory.numel()))
+
     @pytest.mark.parametrize("num_workers", range(3, 34, 3))
     @pytest.mark.parametrize("traj_len", [10, 17, 50, 97])
     @pytest.mark.parametrize(
