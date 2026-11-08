@@ -2038,7 +2038,9 @@ class KLPENPPOLoss(PPOLoss):
                 current_log_prob = _sum_td_features(current_log_prob)
             kl = (previous_log_prob - current_log_prob).mean(0)
         kl = kl.unsqueeze(-1)
-        neg_loss = neg_loss - self.beta * kl
+        # beta is updated in place below: penalize with a copy so that the
+        # backward pass uses the beta this loss value was computed with
+        neg_loss = neg_loss - self.beta.clone() * kl
         if kl.mean() > self.dtarg * 1.5:
             self.beta.data *= self.increment
         elif kl.mean() < self.dtarg / 1.5:
