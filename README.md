@@ -442,6 +442,8 @@ Performance-sensitive areas include:
 ## Installation
 
 TorchRL targets Python 3.10+, PyTorch 2.11+, and TensorDict 0.15.x (0.15.2 or later).
+PyTorch 2.15 requires Python 3.11+, so the Python 3.10 wheels are built against
+PyTorch 2.14.
 
 Install the stable release:
 
@@ -454,10 +456,10 @@ prioritized replay buffers and workloads that do not use prioritized replay.
 Starting with TorchRL 0.13, Linux CUDA wheels are also published for users who
 want the CUDA-based prioritized replay-buffer implementations. Install the
 CUDA wheel from the PyTorch wheel index that matches your PyTorch CUDA runtime
-(replace `cu128` with the CUDA build you use):
+(replace `cu132` with the CUDA build you use):
 
 ```bash
-pip install "torchrl==0.15.0+cu128" --extra-index-url https://download.pytorch.org/whl/cu128
+pip install "torchrl==0.15.0+cu132" --extra-index-url https://download.pytorch.org/whl/cu132
 ```
 
 The CUDA wheel is optional: if you do not need CUDA prioritized replay buffers,
