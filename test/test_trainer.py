@@ -2198,6 +2198,37 @@ class TestOptimizationStepper:
         sd = torch.load(file)
         assert "optimization_stepper" in sd
 
+    @pytest.mark.parametrize("updates_replay_priority", [False, True])
+    def test_stepper_updates_replay_priority(self, updates_replay_priority):
+        """post_loss ops (e.g. priority updates) run after a stepper's step,
+        unless the stepper updates the replay priorities itself."""
+
+        class TDErrorStepper(_CountingStepper):
+            def step(self, trainer: Trainer, sub_batch: TensorDict) -> TensorDict:
+                self.index = sub_batch.get("index").clone()
+                sub_batch.set("td_error", torch.full(sub_batch.shape, 2.0))
+                return super().step(trainer, sub_batch)
+
+        stepper = TDErrorStepper()
+        stepper.updates_replay_priority = updates_replay_priority
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+        )
+        S = 8
+        replay_buffer = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7, beta=0.5, storage=ListStorage(S)
+        )
+        replay_buffer.extend(TensorDict({"x": torch.randn(S, 3)}, [S]))
+        ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=4).register(trainer)
+
+        trainer.optim_steps(TensorDict())
+
+        assert stepper.calls == 1
+        for idx in range(S):
+            updated = not updates_replay_priority and idx in stepper.index
+            assert (replay_buffer._sampler._sum_tree[idx] != 1.0) == updated
+
 
 class TestPostOptimCompleteLog:
     def _make_trainer(
