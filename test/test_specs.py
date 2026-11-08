@@ -1557,6 +1557,22 @@ class TestSpec:
             projected == torch.tensor([0, 0, 0, 1, 9, 9, 9], dtype=torch.long)
         ).all()
 
+    @pytest.mark.parametrize("batch", [(), (3,), (2, 3), (2, 3, 2)])
+    @pytest.mark.parametrize("nvec", [[4], [2, 3]])
+    def test_one_hot_project_batched(self, batch, nvec):
+        # Each sub-action has one non-zero score, so the projection must pick it.
+        targets = [torch.randint(n, batch) for n in nvec]
+        expected = torch.cat(
+            [torch.nn.functional.one_hot(t, n) for t, n in zip(targets, nvec)], -1
+        )
+        if len(nvec) == 1:
+            spec = OneHot(nvec[0], shape=(*batch, nvec[0]))
+        else:
+            spec = MultiOneHot(nvec, shape=(*batch, sum(nvec)))
+        projected = spec.project(expected * 0.5)
+        assert projected.shape == expected.shape
+        assert (projected == expected).all()
+
     def test_bounded_rand(self):
         spec = Bounded(-3, 3, torch.Size((1,)))
         sample = torch.stack([spec.rand() for _ in range(100)])
