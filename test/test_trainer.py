@@ -1637,6 +1637,17 @@ class TestSubSampler:
         assert (td_out[key1].diff(dim=-1) == 1).all()
         assert (td_out[key1] // 10 == td_out[key1][..., :1] // 10).all()
 
+    @pytest.mark.parametrize("use_mask", [False, True])
+    def test_subsampler_samples_every_window(self, use_mask):
+        # A trajectory of length 4 has 3 windows of length 2, starting at 0, 1 and 2.
+        td = TensorDict({"t": torch.arange(4).expand(8, 4)}, [8, 4])
+        if use_mask:
+            td.set(("collector", "mask"), torch.ones(8, 4, dtype=torch.bool))
+        subsampler = BatchSubSampler(batch_size=1000, sub_traj_len=2)
+        torch.manual_seed(0)
+        td_out = subsampler(td)
+        assert set(td_out["t"][:, 0].tolist()) == {0, 1, 2}
+
     def test_subsampler_state_dict(self):
         trainer = mocking_trainer()
 
