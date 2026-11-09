@@ -208,6 +208,22 @@ class TestMaxValueWriter:
         top_rank = torch.argmax(rank_key)
         assert (sample.get("obs") == obs[top_rank]).all()
 
+    def test_max_value_writer_extend_trajectories(self):
+        # Each element along the first dim is a trajectory ranked by the sum of
+        # its keys, as when extending the buffer with a [batch, time] rollout.
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(2),
+            writer=TensorDictMaxValueWriter(rank_key="key"),
+            batch_size=3,
+        )
+        key = torch.tensor([1.0, 4.0, 2.0, 3.0]).unsqueeze(-1).expand(4, 5)
+        obs = torch.arange(20).view(4, 5)
+        td = TensorDict({"key": key, "obs": obs}, batch_size=[4, 5])
+        index = rb.extend(td)
+        assert index.tolist() == [-1, 1, -1, 0]
+        assert (rb[:]["obs"] == obs[[3, 1]]).all()
+        assert rb.sample().shape == (3, 5)
+
 
 class TestMultiProc:
     @staticmethod
