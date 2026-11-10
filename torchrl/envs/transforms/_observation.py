@@ -1089,6 +1089,11 @@ class CatFrames(ObservationTransform):
         .. note:: For a more complete example, refer to torchrl's github repo `examples` folder:
             https://github.com/pytorch/rl/tree/main/examples/replay-buffers/catframes-in-buffer.py
 
+        .. seealso:: :ref:`catframes-images` (env-side stacking, reset /
+            :class:`~torchrl.envs.transforms.InitTracker`) and
+            :ref:`catframes-collector-replay` (collector ``extend`` / buffer
+            ``sample``, ``dim=-3`` for CHW images).
+
         """
         from torchrl.data.replay_buffers import SliceSampler
 
