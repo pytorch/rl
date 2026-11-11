@@ -73,6 +73,7 @@ from torchrl.modules import (
 from torchrl.objectives import (
     ClipPPOLoss,
     CQLLoss,
+    DQNLoss,
     FQLLoss,
     HardUpdate,
     LossModule,
@@ -117,6 +118,7 @@ from torchrl.trainers.trainers import (
     REWARD_KEY,
     RewardNormalizer,
     SelectKeys,
+    TargetNetUpdaterHook,
     UpdateWeights,
     ValueEstimatorHook,
 )
@@ -2759,6 +2761,30 @@ class TestOnPolicyTargetNetUpdater:
         assert any(
             not torch.allclose(after.get(key), current.get(key)) for key in before
         )
+
+
+class TestTargetNetUpdaterHook:
+    def test_register_steps_after_every_optim_step(self):
+        loss_module = DQNLoss(
+            TensorDictModule(nn.Linear(3, 2), ["observation"], ["action_value"]),
+            action_space="one-hot",
+            delay_value=True,
+        )
+        updater = HardUpdate(loss_module, value_network_update_interval=100)
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=3,
+            loss_module=loss_module,
+            optimization_stepper=_CountingStepper(),
+        )
+        trainer._pbar_str = OrderedDict()
+        TargetNetUpdaterHook(updater).register(trainer, "target_net_updater")
+
+        trainer.optim_steps(TensorDict())
+
+        assert updater.counter == 3
 
 
 class TestValueEstimatorHook:
