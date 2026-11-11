@@ -129,6 +129,40 @@ def test_routed_streaming_replay_buffer(benchmark, operation):
         benchmark.pedantic(sample, setup=prepare_sample, rounds=50)
 
 
+def test_routed_slice_replay_buffer_sample(benchmark):
+    # DreamerV3 walker replay shape: 16 streams, batches of 16 windows of 65 records
+    num_streams, records, time = 16, 65, 4_096
+    members = [
+        TensorDictReplayBuffer(
+            storage=LazyTensorStorage(time),
+            sampler=SliceSampler(
+                slice_len=records, end_key=("next", "done"), init_key=None
+            ),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+        )
+        for _ in range(num_streams)
+    ]
+    rb = ReplayBufferEnsemble(
+        *members,
+        routing_dim=1,
+        p="sampleable",
+        num_buffer_sampled=num_streams,
+        batch_size=num_streams * records,
+    )
+    done = torch.zeros(time, num_streams, 1, dtype=torch.bool)
+    done[999::1_000] = True
+    rb.extend(
+        TensorDict(
+            {
+                "observation": torch.randn(time, num_streams, 24),
+                ("next", "done"): done,
+            },
+            [time, num_streams],
+        )
+    )
+    benchmark(sample, rb)
+
+
 def _replay_boundary_device():
     device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
     if device == "GPU":
