@@ -886,7 +886,81 @@ class TestIncrementalTokenizer:
         out = transform._step(td, next_td)
         assert torch.equal(out[tokens_key], tokens_full)
 
+    def test_step_tokens_full_unequal_lengths(self):
+        """Handle tokens.full with different sequence lengths in a lazy batch."""
+        tokens = [
+            torch.tensor([1, 2, 3]),
+            torch.tensor([4, 5]),
+        ]
+        td = lazy_stack(
+            [
+                TensorDict({("tokens", "full"): tokens[0]}, batch_size=()),
+                TensorDict({("tokens", "full"): tokens[1]}, batch_size=()),
+            ]
+        )
+        next_td = TensorDict(batch_size=(2,))
+        transform = IncrementalTokenizer(self.DummyTokenizer())
 
+        out = transform._step(td, next_td)
+
+        result = out.get(("tokens", "prompt"), as_list=True)
+        assert torch.equal(result[0].data, tokens[0])
+        assert torch.equal(result[1].data, tokens[1])
+
+    def test_step_tokens_full_unequal_lengths_with_history(self, tokenizer):
+        env = ChatEnv.with_tokenizer(batch_size=(2,), tokenizer=tokenizer)
+
+        td = TensorDict(
+            {"query": ["Hi", "Explain how neural networks learn in detail."]},
+            batch_size=(2,),
+        )
+        result = env.reset(td)
+
+        old_tokens = result.get(("tokens", "prompt"), as_list=True)
+        history = result.get(("history", "prompt"))
+
+        response = History(
+            role=[["assistant"], ["assistant"]],
+            content=[
+                ["Hello! How can I help?"],
+                ["Neural networks learn by adjusting their weights using training data and optimization."],
+            ],
+            batch_size=(2, 1),
+        )
+
+        history_full = history.extend(response, inplace=False, dim=-1)
+
+        assert len(old_tokens) == 2
+        assert old_tokens[0].numel() != old_tokens[1].numel()
+        td = lazy_stack(
+            [
+                TensorDict(
+                    {("tokens", "full"): old_tokens[0]},
+                    batch_size=(),
+                ),
+                TensorDict(
+                    {("tokens", "full"): old_tokens[1]},
+                    batch_size=(),
+                ),
+            ]
+        )
+
+        next_td = TensorDict(
+            {
+                "history": ChatHistory(
+                    prompt=history_full,
+                    batch_size=(2,),
+                )
+            },
+            batch_size=(2,),
+        )
+
+        out = env.transform._step(td, next_td)
+        new_tokens = out.get(("tokens", "prompt")).unbind()
+
+        for old, new in zip(old_tokens, new_tokens):
+            assert torch.equal(new[:old.numel()], old)
+            assert new.numel() > old.numel()
 class TestTokenizer:
     @pytest.mark.parametrize("tokenizer_cls", [Tokenizer, EnvTokenizer])
     @pytest.mark.filterwarnings("error::DeprecationWarning")

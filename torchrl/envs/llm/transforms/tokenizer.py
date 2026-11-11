@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import Any, TYPE_CHECKING
 
 import torch
-from tensordict import NonTensorData, NonTensorStack, TensorDictBase, unravel_key
+from tensordict import NonTensorData, NonTensorStack, TensorDictBase, unravel_key, LazyStackedTensorDict
 from tensordict.nn import dispatch
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -589,7 +589,11 @@ class IncrementalTokenizer(Transform):
             tokens_full_key = (tokens_key, "full")
         else:
             tokens_full_key = (*tokens_key[:-1], "full")
-        existing_tokens_full = tensordict.get(tokens_full_key, None)
+
+        if isinstance(tensordict, LazyStackedTensorDict):
+            existing_tokens_full = tensordict.get(tokens_full_key, None, as_list=True)
+        else:
+            existing_tokens_full = tensordict.get(tokens_full_key, None)
         history = self._get_history(next_tensordict)
 
         if history is None:
