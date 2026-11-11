@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import copy
+import warnings
 from dataclasses import dataclass
 from typing import Literal
 
@@ -35,6 +36,37 @@ InputMode = Literal["canonical", "preprocessed"]
 LogProbsMode = Literal["sequence", "token"]
 OutputMode = Literal["chunk", "tokens", "both"]
 SamplingMode = Literal["greedy", "sample"]
+
+
+def _warn_deprecated_vla_device(*, stacklevel: int = 3) -> None:
+    warnings.warn(
+        "VLAWrapperBase.device is deprecated and will be removed in v0.16. "
+        "Place work from the input tensordict or a parameter/buffer.",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
+
+
+class _DeprecatedVLADevice:
+    """Deprecated public ``device`` attribute kept until v0.16.
+
+    Stores the constructor value only. Runtime placement uses the input
+    tensor or a parameter/buffer. Internal code must read ``_device``.
+    """
+
+    def __get__(
+        self, obj: object | None, objtype: type | None = None
+    ) -> torch.device | None:
+        if obj is None:
+            return self
+        _warn_deprecated_vla_device()
+        return getattr(obj, "_device", None)
+
+    def __set__(self, obj: object, value: torch.device | str | None) -> None:
+        _warn_deprecated_vla_device()
+        object.__setattr__(
+            obj, "_device", None if value is None else torch.device(value)
+        )
 
 
 class VLAWrapperBase(TensorDictModuleBase):
@@ -80,6 +112,11 @@ class VLAWrapperBase(TensorDictModuleBase):
         inplace (bool | "empty" | None): Output TensorDict behavior. ``True``
             updates the input, ``False`` returns a new output TensorDict, and
             ``"empty"`` returns an empty TensorDict populated with outputs.
+        device (torch.device or str, optional): accepted so subclasses can
+            place parameters at construction. Runtime tensors use
+            ``chunk.device`` / ``out.device``. Until v0.16,
+            :attr:`VLAWrapperBase.device` returns this constructor value and
+            emits a :class:`DeprecationWarning`. Defaults to ``None``.
         num_samples (int, optional): Number of token samples to draw per input.
 
     Examples:
@@ -102,7 +139,15 @@ class VLAWrapperBase(TensorDictModuleBase):
         torch.Size([2, 4, 7])
         >>> out["vla_action", "chunk"].shape
         torch.Size([2, 4, 7])
+
+    .. warning::
+        :attr:`VLAWrapperBase.device` is deprecated and will be removed in v0.16.
+        It is the constructor ``device=`` value, not the location of every
+        parameter or buffer. Place work from the input tensordict or a
+        parameter/buffer.
     """
+
+    device = _DeprecatedVLADevice()
 
     @dataclass
     class _AcceptedKeys:
@@ -219,7 +264,9 @@ class VLAWrapperBase(TensorDictModuleBase):
         self.default_interaction_type = default_interaction_type
         self.log_probs_mode = log_probs_mode
         self.inplace = True if inplace is None else inplace
-        self.device = None if device is None else torch.device(device)
+        object.__setattr__(
+            self, "_device", None if device is None else torch.device(device)
+        )
         self.num_samples = None if num_samples is None else int(num_samples)
         if action_chunk_key is None:
             action_chunk_key = self._vla_field_key(vla_action_key, "chunk")
