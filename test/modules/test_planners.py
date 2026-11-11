@@ -195,6 +195,19 @@ class _SumRewardAdvantage(nn.Module):
         return tensordict
 
 
+class _OffsetAdvantage(_SumRewardAdvantage):
+    """Trajectory return plus a constant."""
+
+    def __init__(self, offset: float):
+        super().__init__()
+        self.offset = offset
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        tensordict = super().forward(tensordict)
+        tensordict.set("advantage", tensordict.get("advantage") + self.offset)
+        return tensordict
+
+
 def _make_planner(
     name,
     env,
@@ -292,6 +305,29 @@ class TestPlanner:
         for key in td.keys():
             if key != "action":
                 assert torch.allclose(td[key], td_copy[key])
+
+    @pytest.mark.parametrize("offset", [200.0, -200.0])
+    def test_MPPI_advantage_offset_invariant(self, device, batch_size, offset, seed=1):
+        # MPPI weights are a softmax over the top-k advantages, so adding a constant
+        # to every advantage must not change the plan. Without subtracting the max
+        # before exp, float32 overflows (offset > ~88.7) or underflows (< ~-103.9)
+        # and the weights become inf/inf or 0/0.
+        def plan(advantage_offset):
+            torch.manual_seed(seed)
+            env = MockBatchedUnLockedEnv(device=device)
+            planner = MPPIPlanner(
+                env,
+                _OffsetAdvantage(advantage_offset),
+                temperature=1.0,
+                planning_horizon=5,
+                optim_steps=2,
+                num_candidates=20,
+                top_k=4,
+            )
+            td = env.reset(TensorDict(batch_size=batch_size).to(device))
+            return planner(td).get("action")
+
+        torch.testing.assert_close(plan(offset), plan(0.0))
 
 
 @pytest.mark.parametrize("device", get_default_devices())
