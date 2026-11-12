@@ -381,6 +381,9 @@ class DistributionalDQNLoss(LossModule):
     where the value network outputs a single point prediction of the
     disctounted return).
 
+    The categorical projection preserves the dtype of the probability-weighted
+    interpolation, independently of the default floating-point dtype.
+
     For more details regarding Distributional DQN, refer to "A Distributional
     Perspective on Reinforcement Learning",
     https://arxiv.org/pdf/1707.06887.pdf
@@ -594,7 +597,6 @@ class DistributionalDQNLoss(LossModule):
             up[(low < (atoms - 1)) & (low == up)] += 1
 
             # Distribute probability of Tz
-            m = torch.zeros(batch_size, atoms)
             offset = torch.linspace(
                 0,
                 ((batch_size - 1) * atoms),
@@ -605,6 +607,7 @@ class DistributionalDQNLoss(LossModule):
             offset = offset.unsqueeze(1).expand(batch_size, atoms)
             index = (low + offset).view(-1)
             tensor = (pns_a * (up.float() - b)).view(-1)
+            m = torch.zeros(batch_size, atoms, dtype=tensor.dtype, device=tensor.device)
             # m_l = m_l + p(s_t+n, a*)(u - b)
             m.view(-1).index_add_(0, index, tensor)
             index = (up + offset).view(-1)
