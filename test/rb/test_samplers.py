@@ -3293,6 +3293,60 @@ def test_prioritized_slice_sampler_slice_len_one(strict_length):
     assert sample["step"].tolist() == [3] * 8
 
 
+@pytest.mark.parametrize(
+    "strict_length,span,slice_len,num_starts",
+    [
+        # only full slices
+        (True, False, 4, lambda length: length - 3),
+        # full slices, and short episodes from their first step
+        (False, False, 4, lambda length: max(length - 3, 1)),
+        # at least slice_len - 2 steps per slice
+        (True, (False, 2), 6, lambda length: length - 3),
+    ],
+)
+def test_prioritized_slice_sampler_start_steps(
+    strict_length, span, slice_len, num_starts
+):
+    """Slices start at every step they can be drawn from, and nowhere else, with episodes of mixed lengths."""
+    torch.manual_seed(0)
+    lengths = [2, 7, 4, 1, 12, 5]
+    data = TensorDict(
+        {
+            "episode": torch.repeat_interleave(
+                torch.arange(len(lengths)), torch.tensor(lengths)
+            ),
+            "step": torch.cat([torch.arange(length) for length in lengths]),
+        },
+        [sum(lengths)],
+    )
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(sum(lengths)),
+        sampler=PrioritizedSliceSampler(
+            max_capacity=sum(lengths),
+            alpha=1.0,
+            beta=1.0,
+            slice_len=slice_len,
+            traj_key="episode",
+            strict_length=strict_length,
+            span=span,
+        ),
+        batch_size=50 * slice_len,
+    )
+    rb.extend(data)
+    starts = set()
+    for _ in range(40):
+        sample = rb.sample()
+        ends = sample["next", "truncated"].reshape(-1).nonzero().squeeze(-1) + 1
+        for slc in sample.tensor_split(ends[:-1].tolist()):
+            starts.add((slc["episode"][0].item(), slc["step"][0].item()))
+    expected = {
+        (episode, step)
+        for episode, length in enumerate(lengths)
+        for step in range(num_starts(length))
+    }
+    assert starts == expected
+
+
 @pytest.mark.parametrize("device", get_default_devices())
 def test_prioritized_slice_sampler_episodes(device):
     num_slices = 10
