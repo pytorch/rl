@@ -790,7 +790,7 @@ class ClosedLoopMultiActionConfig(TransformConfig):
 
     controller: Any = MISSING
     steps: int = MISSING
-    decision_spec: Any = None
+    decision_spec: Any = MISSING
     reward_aggregation: str = "sum"
     exploration_type: ExplorationType = ExplorationType.DETERMINISTIC
     no_grad: bool = True

@@ -17,7 +17,6 @@ from typing import Any, Literal, TYPE_CHECKING
 import torch
 
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_as_right, NestedKey, unravel_key
 from torch import nn
 
@@ -1104,14 +1103,15 @@ class ClosedLoopMultiAction(MultiAction):
     transition. Finished environments stop executing the controller.
 
     Args:
-        controller (TensorDictModuleBase): low-level policy, typically
-            :class:`~torchrl.modules.LowLevelController`.
+        controller (LowLevelController): low-level policy to execute.
 
     Keyword Args:
         steps (int): positive number of physical steps per decision.
-        decision_spec (Composite, optional): complete policy-facing action spec,
-            including environment batch dimensions. Defaults to None, inferring
-            the spec from LowLevelController and preserving unrelated actions.
+        decision_spec (Composite): unbatched spec for one controller's high-level
+            decisions, expanded over the controller's group (or the environment
+            batch). It replaces the controller's low-level action in the
+            environment's action spec and leaves unrelated actions untouched.
+            All leaves are held fixed during a closed-loop macro step.
         reward_aggregation (str, optional): "sum", "mean", "last", or "stack".
             Defaults to "sum". Mean counts only executed steps; last returns
             the last executed reward. Stack uses MultiAction's ragged convention.
@@ -1138,9 +1138,13 @@ class ClosedLoopMultiAction(MultiAction):
         >>> from torchrl.testing.mocking_classes import CountingEnv
         >>> policy = TensorDictModule(
         ...     torch.nn.Identity(), in_keys=["command"], out_keys=["action"])
-        >>> controller = LowLevelController(
-        ...     policy, Composite(command=Bounded(0, 1, shape=(1,))))
-        >>> env = ClosedLoopMultiAction.from_env(CountingEnv(), controller, steps=3)
+        >>> controller = LowLevelController(policy)
+        >>> env = ClosedLoopMultiAction.from_env(
+        ...     CountingEnv(),
+        ...     controller,
+        ...     steps=3,
+        ...     decision_spec=Composite(command=Bounded(0, 1, shape=(1,))),
+        ... )
         >>> td = env.reset().set("command", torch.ones(1))
         >>> env.step(td)["next", "observation"]
         tensor([3], dtype=torch.int32)
@@ -1157,10 +1161,10 @@ class ClosedLoopMultiAction(MultiAction):
 
     def __init__(
         self,
-        controller: TensorDictModuleBase,
+        controller: LowLevelController,
         *,
         steps: int,
-        decision_spec: Composite | None = None,
+        decision_spec: Composite,
         reward_aggregation: Literal["last", "stack", "sum", "mean"] = "sum",
         exploration_type: ExplorationType = ExplorationType.DETERMINISTIC,
         no_grad: bool = True,
@@ -1174,13 +1178,15 @@ class ClosedLoopMultiAction(MultiAction):
             reward_aggregation=reward_aggregation,
             stack_observations=stack_observations,
         )
-        if decision_spec is None and not isinstance(controller, LowLevelController):
+        if not isinstance(decision_spec, Composite) or decision_spec.shape:
             raise ValueError(
-                "Pass decision_spec when controller is not a LowLevelController."
+                "decision_spec must be an unbatched Composite for one controller."
             )
+        if not list(decision_spec.keys(True, True)):
+            raise ValueError("decision_spec must contain at least one decision.")
         self.controller = controller
         self.steps = steps
-        self.decision_spec = None if decision_spec is None else decision_spec.clone()
+        self.decision_spec = decision_spec.clone()
         self.exploration_type = exploration_type
         self.no_grad = no_grad
         self._decision_keys = None
@@ -1189,7 +1195,7 @@ class ClosedLoopMultiAction(MultiAction):
     def from_env(
         cls,
         env: EnvBase,
-        controller: TensorDictModuleBase,
+        controller: LowLevelController,
         *,
         steps: int,
         init_key: str = "is_init",
@@ -1199,7 +1205,7 @@ class ClosedLoopMultiAction(MultiAction):
 
         Args:
             env (EnvBase): physical environment.
-            controller (TensorDictModuleBase): controller to execute.
+            controller (LowLevelController): controller to execute.
 
         Keyword Args:
             steps (int): positive number of controller steps per decision.
@@ -1223,29 +1229,20 @@ class ClosedLoopMultiAction(MultiAction):
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
         input_spec = input_spec.clone()
-        if self.decision_spec is not None:
-            actions = self.decision_spec.clone()
-            if actions.shape != input_spec.shape:
-                raise ValueError(
-                    "decision_spec must include the environment batch dimensions."
-                )
+        controller = self.controller
+        actions = input_spec["full_action_spec"].clone()
+        del actions[controller._action_path]
+        if controller.group_key is None:
+            actions.update(self.decision_spec.to(actions.device).expand(actions.shape))
         else:
-            controller = self.controller
-            actions = input_spec["full_action_spec"].clone()
-            del actions[controller._action_path]
-            if controller.group_key is None:
-                actions.update(
-                    controller.decision_spec.to(actions.device).expand(actions.shape)
-                )
+            group_spec = self.parent.full_observation_spec[controller.group_key]
+            decisions = self.decision_spec.to(group_spec.device).expand(
+                group_spec.shape
+            )
+            if controller.group_key in actions.keys(True):
+                actions[controller.group_key].update(decisions)
             else:
-                group_spec = self.parent.full_observation_spec[controller.group_key]
-                decisions = controller.decision_spec.to(group_spec.device).expand(
-                    group_spec.shape
-                )
-                if controller.group_key in actions.keys(True):
-                    actions[controller.group_key].update(decisions)
-                else:
-                    actions[controller.group_key] = decisions
+                actions[controller.group_key] = decisions
         input_spec["full_action_spec"] = actions
         self._decision_keys = list(actions.keys(True, True))
         return input_spec
@@ -2101,9 +2098,9 @@ class FlattenAction(Transform):
         # generic ``_apply_to_composite_inv`` decorator only iterates top-level
         # keys when it is called with the full action spec directly.
         if not isinstance(action_spec, Composite):
-            self._unflatten_shapes[
-                unravel_key(self.in_keys_inv[0])
-            ] = self._span_from_spec(action_spec)
+            self._unflatten_shapes[unravel_key(self.in_keys_inv[0])] = (
+                self._span_from_spec(action_spec)
+            )
             return self._flatten_leaf(action_spec)
         action_spec = action_spec.clone()
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
