@@ -30,6 +30,32 @@ TorchRL provides various storage backends for replay buffers, each optimized for
     TensorStorage
     TensorStorageCheckpointer
 
+HDF5 checkpoint loading
+-----------------------
+
+:class:`H5StorageCheckpointer` follows the installed TensorDict version's
+:meth:`~tensordict.PersistentTensorDict.from_h5` default when
+``auto_batch_size=None`` (the default), including its metadata warnings.
+TensorDict announces a change in 0.17 to restoring saved batch sizes and dimension
+names. That change will apply when TorchRL's supported TensorDict range includes
+0.17; this option does not bypass the dependency constraints.
+
+To explicitly request batch-size inference when loading a checkpoint, configure
+the destination buffer's checkpointer:
+
+.. code-block:: python
+
+    from torchrl.data import H5StorageCheckpointer, LazyTensorStorage, ReplayBuffer
+
+    restored = ReplayBuffer(storage=LazyTensorStorage(100))
+    restored.storage.checkpointer = H5StorageCheckpointer(auto_batch_size=True)
+    restored.loads("replay-checkpoint")
+
+Pass ``auto_batch_size=False`` to explicitly disable the additional inference
+step in ``from_h5``. This is not a request to restore saved metadata before
+TensorDict implements that behavior. The inference option affects loading only;
+``h5_kwargs`` continues to configure HDF5 dataset creation when saving.
+
 Storage Performance
 -------------------
 

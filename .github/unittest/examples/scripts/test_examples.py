@@ -193,6 +193,13 @@ RUNNABLE_EXAMPLES = (
     ExampleSpec(
         "replay-buffer-checkpoint",
         "examples/replay-buffers/checkpoint.py",
+        warning_filters=(
+            WarningFilter(
+                "default:This h5 file stores the batch sizes or the dim names:FutureWarning",
+                "TensorDict announces its 0.17 HDF5 metadata transition; "
+                "keep this expected warning visible while validating the round trip.",
+            ),
+        ),
     ),
     ExampleSpec(
         "replay-buffer-filter-trajectories",
@@ -626,6 +633,29 @@ def test_run_example_reports_process_failures(tmp_path: Path, code: str) -> None
     spec = ExampleSpec("intentional-failure", "-c", (code,))
     with pytest.raises(ExampleRunError, match="failed with exit code"):
         run_example(spec, tmp_path)
+
+
+def test_checkpoint_warning_policy_is_scoped(tmp_path: Path) -> None:
+    filters = next(
+        spec.warning_filters
+        for spec in RUNNABLE_EXAMPLES
+        if spec.name == "replay-buffer-checkpoint"
+    )
+    for message, allowed in (
+        ("This h5 file stores the batch sizes or the dim names", True),
+        ("an unrelated future change", False),
+    ):
+        spec = ExampleSpec(
+            "checkpoint-warning-policy",
+            "-c",
+            (f"import warnings; warnings.warn({message!r}, FutureWarning)",),
+            warning_filters=filters,
+        )
+        if allowed:
+            run_example(spec, tmp_path)
+        else:
+            with pytest.raises(ExampleRunError, match="failed with exit code"):
+                run_example(spec, tmp_path)
 
 
 def test_run_example_terminates_timeouts(tmp_path: Path) -> None:
