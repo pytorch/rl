@@ -2876,7 +2876,7 @@ class BatchSubSampler(TrainerHookBase):
             _traj_len = traj_len[traj_idx]
             seq_idx = (
                 torch.rand_like(_traj_len, dtype=torch.float)
-                * (_traj_len - sub_traj_len)
+                * (_traj_len - sub_traj_len + 1)
             ).int()
             seq_idx = seq_idx.unsqueeze(-1).expand(-1, sub_traj_len)
         elif sub_traj_len == batch.shape[1]:
