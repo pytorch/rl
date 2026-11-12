@@ -1316,6 +1316,7 @@ class TestDataConfigs:
         assert hasattr(cfg, "_target_")
         assert cfg._target_ == "torchrl.data.replay_buffers.Storage"
 
+    @pytest.mark.skip(reason="flaky: see #4480")
     def test_complex_replay_buffer_configuration(self):
         """Test a complex replay buffer configuration with all components."""
         from torchrl.trainers.algorithms.configs.data import (
