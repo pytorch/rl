@@ -2136,7 +2136,6 @@ class OneHot(TensorSpec):
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if self.mask is None:
-            # torch.multinomial takes at most 2 dims: sample over flattened batch dims.
             probs = val.to(torch.get_default_dtype())
             out = torch.multinomial(probs.reshape(-1, probs.shape[-1]), 1)
             out = out.reshape(probs.shape[:-1])

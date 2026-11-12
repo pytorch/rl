@@ -1560,7 +1560,6 @@ class TestSpec:
     @pytest.mark.parametrize("batch", [(), (3,), (2, 3), (2, 3, 2)])
     @pytest.mark.parametrize("nvec", [[4], [2, 3]])
     def test_one_hot_project_batched(self, batch, nvec):
-        # Each sub-action has one non-zero score, so the projection must pick it.
         targets = [torch.randint(n, batch) for n in nvec]
         expected = torch.cat(
             [torch.nn.functional.one_hot(t, n) for t, n in zip(targets, nvec)], -1
