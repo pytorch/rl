@@ -2066,6 +2066,13 @@ class Trainer:
 
                 if self.optimization_stepper is not None:
                     losses_detached = self.optimization_stepper.step(self, sub_batch)
+                    # The stepper computed the loss, so run the batch-level
+                    # post_loss ops (e.g. priority updates) now, unless the
+                    # stepper already updated the replay priorities itself.
+                    if not getattr(
+                        self.optimization_stepper, "updates_replay_priority", False
+                    ):
+                        self._post_loss_hook(sub_batch)
                     self._post_optim_hook()
                 else:
                     losses_td = self.loss_module(sub_batch)
