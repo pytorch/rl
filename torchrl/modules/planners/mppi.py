@@ -247,7 +247,11 @@ class MPPIPlanner(MPCPlannerBase):
             _, top_k = advantage.topk(self.top_k, dim=K_DIM)
             # get omega weights for each top-k trajectory
             vals = advantage.gather(K_DIM, top_k.expand(adv_topk_shape))
-            Omegas = (self.temperature * vals).exp()
+            # Subtract the max before exp so large advantages do not overflow
+            # (or underflow) to inf/0; the weights are normalized below, so this
+            # leaves them unchanged.
+            logits = self.temperature * vals
+            Omegas = (logits - logits.amax(dim=K_DIM, keepdim=True)).exp()
 
             # gather best actions
             best_actions = actions.gather(K_DIM, top_k.expand(action_topk_shape))
