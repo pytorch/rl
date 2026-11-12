@@ -1,6 +1,6 @@
 # Computation times
 
-**06:52.885** total execution time for 32 files **from tutorials**:
+**06:52.561** total execution time for 32 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -8,8 +8,8 @@
 | [MuJoCo scripted manipulation with human-readable robot actions](mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`mujoco_cube_bowl_macros.py`) | 00:57.176 | 0.0 |
 | [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`multiagent_ppo.py`) | 00:30.661 | 0.0 |
 | [TorchRL objectives: Coding a DDPG loss](coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`coding_ddpg.py`) | 00:29.140 | 0.0 |
-| [Exporting Rollout data to LeRobot](lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`lerobot_export.py`) | 00:28.138 | 0.0 |
 | [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`multiagent_competitive_ddpg.py`) | 00:27.848 | 0.0 |
+| [Exporting Rollout data to LeRobot](lerobot_export.html#sphx-glr-tutorials-lerobot-export-py) (`lerobot_export.py`) | 00:27.814 | 0.0 |
 | [LLM Wrappers in TorchRL](llm_wrappers.html#sphx-glr-tutorials-llm-wrappers-py) (`llm_wrappers.py`) | 00:26.404 | 0.0 |
 | [Exporting TorchRL modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:25.414 | 0.0 |
 | [TorchRL envs](torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`torchrl_envs.py`) | 00:24.928 | 0.0 |
