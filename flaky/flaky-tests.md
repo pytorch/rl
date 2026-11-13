@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-11-12
+# Flaky Test Report - 2026-11-13
 
 ## Summary
 
 - **Flaky tests**: 2
-- **Newly flaky** (last 7 days): 2
+- **Newly flaky** (last 7 days): 0
 - **Resolved**: 0
-- **Total tests analyzed**: 32972
+- **Total tests analyzed**: 32982
 - **CI runs analyzed**: 60
 
 ---
@@ -14,14 +14,9 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...TestDataConfigs::test_complex_replay_buffer_configuration` 🆕 | 13.8% (22/160) | 22 | 0.28 | 2026-11-08 |
-| `...stDreamerV3Components::test_discrete_actor[cuda-autocast]` 🆕 | 5.4% (4/74) | 4 | 0.09 | 2026-11-07 |
+| `...TestDataConfigs::test_complex_replay_buffer_configuration` | 15.1% (24/159) | 24 | 0.30 | 2026-11-12 |
+| `...stDreamerV3Components::test_discrete_actor[cuda-autocast]` | 5.5% (4/73) | 4 | 0.09 | 2026-11-07 |
 
-
-### Newly Flaky Tests
-
-- `test/test_configs.py::TestDataConfigs::test_complex_replay_buffer_configuration`
-- `test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cuda-autocast]`
 
 ---
 
@@ -34,4 +29,4 @@
 
 ---
 
-*Generated at 2026-11-12T06:19:47.520952+00:00*
+*Generated at 2026-11-13T06:20:21.065525+00:00*

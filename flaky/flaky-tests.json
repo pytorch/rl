@@ -1,49 +1,49 @@
 {
-  "generated_at": "2026-11-12T06:19:47.520952+00:00",
+  "generated_at": "2026-11-13T06:20:21.065525+00:00",
   "analysis_period": {
     "start": "2026-11-05",
     "end": "2026-11-12",
     "runs_analyzed": 60
   },
   "summary": {
-    "total_tests": 32972,
+    "total_tests": 32982,
     "flaky_count": 2,
-    "new_flaky_count": 2,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
   "flaky_tests": [
     {
       "nodeid": "test/test_configs.py::TestDataConfigs::test_complex_replay_buffer_configuration",
-      "executions": 160,
-      "failures": 22,
-      "failure_rate": 0.1375,
-      "flaky_score": 0.275,
-      "passed": 138,
-      "failed": 22,
+      "executions": 159,
+      "failures": 24,
+      "failure_rate": 0.1509,
+      "flaky_score": 0.3019,
+      "passed": 135,
+      "failed": 24,
       "error": 0,
       "reruns": 0,
       "avg_duration": 0.001,
       "recent_failures": [
-        "2026-11-07T07:32:44Z",
-        "2026-11-07T07:35:00Z",
         "2026-11-07T07:35:00Z",
         "2026-11-08T03:32:55Z",
-        "2026-11-08T03:32:55Z"
+        "2026-11-08T03:32:55Z",
+        "2026-11-12T05:10:50Z",
+        "2026-11-12T05:10:50Z"
       ],
       "first_seen_flaky": "2026-11-06T01:11:25Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cuda-autocast]",
-      "executions": 74,
+      "executions": 73,
       "failures": 4,
-      "failure_rate": 0.0541,
-      "flaky_score": 0.0865,
-      "passed": 70,
+      "failure_rate": 0.0548,
+      "flaky_score": 0.0877,
+      "passed": 69,
       "failed": 4,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.292,
+      "avg_duration": 0.296,
       "recent_failures": [
         "2026-11-06T01:12:09Z",
         "2026-11-06T01:12:09Z",
@@ -51,7 +51,7 @@
         "2026-11-07T07:32:44Z"
       ],
       "first_seen_flaky": "2026-11-06T01:12:09Z",
-      "is_new": true
+      "is_new": false
     }
   ],
   "thresholds": {
