@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import Any, TYPE_CHECKING
 
 import torch
-from tensordict import NonTensorData, NonTensorStack, TensorDictBase, unravel_key, LazyStackedTensorDict
+from tensordict import NonTensorData, NonTensorStack, TensorDictBase, unravel_key
 from tensordict.nn import dispatch
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -590,16 +590,16 @@ class IncrementalTokenizer(Transform):
         else:
             tokens_full_key = (*tokens_key[:-1], "full")
 
-        if isinstance(tensordict, LazyStackedTensorDict):
-            existing_tokens_full = tensordict.get(tokens_full_key, None, as_list=True)
-        else:
-            existing_tokens_full = tensordict.get(tokens_full_key, None)
+        existing_tokens_full = tensordict.get(tokens_full_key, None, as_list=True)
         history = self._get_history(next_tensordict)
 
         if history is None:
             # Nothing to synchronize against: pass tokens.full through when present.
             if existing_tokens_full is not None:
-                next_tensordict.set(self.tokens_key, existing_tokens_full)
+                if isinstance(existing_tokens_full, Tensor):
+                    next_tensordict.set(self.tokens_key, existing_tokens_full)
+                else:
+                    self._set_tokens(next_tensordict, existing_tokens_full)
             return next_tensordict
 
         self._check_batch_dims(next_tensordict)

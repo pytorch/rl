@@ -886,28 +886,31 @@ class TestIncrementalTokenizer:
         out = transform._step(td, next_td)
         assert torch.equal(out[tokens_key], tokens_full)
 
-    def test_step_tokens_full_unequal_lengths(self):
-        """Handle tokens.full with different sequence lengths in a lazy batch."""
+    def test_step_tokens_full_unequal_lengths_without_history(self):
         tokens = [
             torch.tensor([1, 2, 3]),
             torch.tensor([4, 5]),
         ]
-        td = lazy_stack(
+
+        tokens_td = lazy_stack(
             [
-                TensorDict({("tokens", "full"): tokens[0]}, batch_size=()),
-                TensorDict({("tokens", "full"): tokens[1]}, batch_size=()),
+                TensorDict({"full": token}, batch_size=())
+                for token in tokens
             ]
         )
+        td = TensorDict({"tokens": tokens_td}, batch_size=(2,))
         next_td = TensorDict(batch_size=(2,))
-        transform = IncrementalTokenizer(self.DummyTokenizer())
 
+        transform = IncrementalTokenizer(self.DummyTokenizer())
         out = transform._step(td, next_td)
 
-        result = out.get(("tokens", "prompt"), as_list=True)
-        assert torch.equal(result[0].data, tokens[0])
-        assert torch.equal(result[1].data, tokens[1])
+        result = out.get(("tokens", "prompt"))
 
+        assert result.is_nested
+        for actual, expected in zip(result.unbind(), tokens):
+            assert torch.equal(actual, expected)
     def test_step_tokens_full_unequal_lengths_with_history(self, tokenizer):
+        """Handle unequal token lengths through the public env.step() API."""
         env = ChatEnv.with_tokenizer(batch_size=(2,), tokenizer=tokenizer)
 
         td = TensorDict(
@@ -919,48 +922,56 @@ class TestIncrementalTokenizer:
         old_tokens = result.get(("tokens", "prompt"), as_list=True)
         history = result.get(("history", "prompt"))
 
+        replies = [
+            "Hello! How can I help?",
+            "Neural networks learn by adjusting their weights using training data and optimization.",
+        ]
+
         response = History(
             role=[["assistant"], ["assistant"]],
-            content=[
-                ["Hello! How can I help?"],
-                ["Neural networks learn by adjusting their weights using training data and optimization."],
-            ],
+            content=[[replies[0]], [replies[1]]],
             batch_size=(2, 1),
         )
-
         history_full = history.extend(response, inplace=False, dim=-1)
 
-        assert len(old_tokens) == 2
         assert old_tokens[0].numel() != old_tokens[1].numel()
-        td = lazy_stack(
+
+        full_tokens = [
+            torch.cat(
+                [
+                    old_tokens[i],
+                    torch.tensor(
+                        tokenizer(replies[i], add_special_tokens=False)["input_ids"]
+                    ),
+                ]
+            )
+            for i in range(2)
+        ]
+
+        # Build the nested tokens child that occurs in the real batched workflow.
+        tokens_td = lazy_stack(
             [
                 TensorDict(
-                    {("tokens", "full"): old_tokens[0]},
+                    {"prompt": old_tokens[i], "full": full_tokens[i]},
                     batch_size=(),
-                ),
-                TensorDict(
-                    {("tokens", "full"): old_tokens[1]},
-                    batch_size=(),
-                ),
+                )
+                for i in range(2)
             ]
         )
 
-        next_td = TensorDict(
-            {
-                "history": ChatHistory(
-                    prompt=history_full,
-                    batch_size=(2,),
-                )
-            },
-            batch_size=(2,),
-        )
+        action_td = result.clone()
+        action_td.set(("history", "full"), history_full)
+        action_td.set("tokens", tokens_td)
 
-        out = env.transform._step(td, next_td)
-        new_tokens = out.get(("tokens", "prompt")).unbind()
+        # Exercise the public environment step, not the transform's private method.
+        next_td = env.step(action_td)["next"]
+
+        new_tokens = next_td.get(("tokens", "prompt"), as_list=True)
 
         for old, new in zip(old_tokens, new_tokens):
             assert torch.equal(new[:old.numel()], old)
             assert new.numel() > old.numel()
+
 class TestTokenizer:
     @pytest.mark.parametrize("tokenizer_cls", [Tokenizer, EnvTokenizer])
     @pytest.mark.filterwarnings("error::DeprecationWarning")
