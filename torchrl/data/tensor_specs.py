@@ -34,6 +34,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
+from tensordict._indexing import _num_indexed_dims, convert_ellipsis_to_idx
 from tensordict.base import NO_DEFAULT
 from tensordict.utils import (
     _getitem_batch_size,
@@ -4075,11 +4076,48 @@ class Categorical(TensorSpec):
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
         indexed_shape = _size(_shape_indexing(self.shape, idx))
+        mask = self.mask
+        if mask is not None:
+            mask_idx = idx if isinstance(idx, tuple) else (idx,)
+            if not self.shape and isinstance(idx, slice):
+                # A slice of a scalar spec is a no-op in _shape_indexing.
+                mask_idx = ()
+            mask_idx = list(convert_ellipsis_to_idx(mask_idx, self.shape))
+            dim = 0
+            for i, item in enumerate(mask_idx):
+                indexed_dims = _num_indexed_dims(item)
+                if isinstance(item, slice):
+                    if item.step is not None and item.step < 0:
+                        # Keep this a basic slice, including alongside advanced indices.
+                        size = mask.shape[dim]
+                        start, stop, step = item.indices(size)
+                        mask = mask.flip((dim,))
+                        mask_idx[i] = slice(size - 1 - start, size - 1 - stop, -step)
+                elif indexed_dims == 1 and self.shape[dim] == -1:
+                    # The mask broadcasts over every logical position of this axis.
+                    if isinstance(item, int):
+                        mask_idx[i] = 0
+                    else:
+                        item = torch.as_tensor(item, device=mask.device)
+                        if item.dtype in (
+                            torch.int8,
+                            torch.int16,
+                            torch.int32,
+                            torch.int64,
+                        ):
+                            mask_idx[i] = torch.zeros_like(item)
+                dim += indexed_dims
+            mask = mask[tuple(mask_idx) + (slice(None),)]
+            if mask.shape[:-1] != _remove_neg_shapes(indexed_shape):
+                raise IndexError(
+                    "Index produces an outcome mask inconsistent with the indexed spec shape."
+                )
         return self.__class__(
             n=self.space.n,
             shape=indexed_shape,
             device=self.device,
             dtype=self.dtype,
+            mask=mask,
         )
 
     def __eq__(self, other):
