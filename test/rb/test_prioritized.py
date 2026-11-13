@@ -278,6 +278,40 @@ def test_tensordict_prioritized_replay_buffer_cuda_storage_cpu_sampler():
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_prioritized_replay_buffer_cuda_storage_without_cuda_trees(monkeypatch):
+    # CPU-only builds of the extension (PyPI and aarch64 wheels) have no CUDA
+    # trees: with the default sampler device, CUDA storage keeps the CPU trees.
+    monkeypatch.setattr(samplers.prioritized, "CudaSumSegmentTreeFp32", None)
+    device = torch.device("cuda:0")
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=0.7,
+        beta=0.5,
+        storage=LazyTensorStorage(32, device=device),
+        batch_size=8,
+        priority_key="td_error",
+    )
+    data = TensorDict(
+        {
+            "obs": torch.arange(16, device=device).float().unsqueeze(-1),
+            "td_error": torch.linspace(0.1, 1.0, 16, device=device),
+        },
+        batch_size=[16],
+        device=device,
+    )
+
+    rb.extend(data)
+    sample = rb.sample()
+    sample["td_error"] = torch.ones_like(sample["td_error"]) * 10
+    rb.update_tensordict_priority(sample)
+    sample = rb.sample()
+
+    assert rb.sampler.device == torch.device("cpu")
+    assert sample.device == device
+    assert sample["priority_weight"].device == device
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
 def test_cuda_prioritized_replay_buffer_weight_matches_cpu_formula():
     ext = pytest.importorskip("torchrl._torchrl")
     if not hasattr(ext, "CudaSumSegmentTreeFp32"):

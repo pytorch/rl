@@ -276,7 +276,9 @@ class PrioritizedSampler(Sampler):
         if device is None or device == "auto":
             return None
         device = torch.device(device)
-        if device.type == "cuda":
+        # Only CUDA builds of the extension ship the CUDA trees (the PyPI and
+        # aarch64 wheels are CPU-only). Without them, keep the CPU trees.
+        if device.type == "cuda" and CudaSumSegmentTreeFp32 is not None:
             return device
         return None
 
