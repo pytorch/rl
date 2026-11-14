@@ -9,6 +9,7 @@ import contextlib
 import functools
 import itertools
 import sys
+from copy import deepcopy
 from dataclasses import asdict
 
 import pytest
@@ -61,6 +62,7 @@ from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import _sum_td_features, ValueEstimators
 from torchrl.objectives.value.advantages import (
     GAE,
+    TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
     VTrace,
@@ -73,6 +75,7 @@ from torchrl.testing import (  # noqa
     get_default_devices,
     PENDULUM_VERSIONED,
 )
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 
 
 class _NormalWithoutEntropy(d.Normal):
@@ -2448,6 +2451,171 @@ class TestA2C(LossModuleTestBase):
         value = self._create_mock_value()
         loss_fn = A2CLoss(actor, value)
         self.reset_parameters_recursive_test(loss_fn)
+
+    @pytest.mark.parametrize(
+        "value_estimator",
+        [
+            ValueEstimators.TD0,
+            ValueEstimators.GAE,
+            ValueEstimators.TDLambda,
+            "instance",
+        ],
+    )
+    @pytest.mark.parametrize("differentiable", [False, True])
+    def test_a2c_functional_shifted_matches_nonfunctional(
+        self, value_estimator, differentiable
+    ):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(obs_dim=7, action_dim=7)
+        value = self._create_mock_value(obs_dim=7)
+        env = ContinuousActionVecMockEnv()
+        try:
+            with torch.no_grad():
+                data = env.rollout(6, policy=actor)
+        finally:
+            env.close()
+        # Cast after constructing the loss, so functional parameter binding must
+        # also use the current parameter dtype rather than the module's old state.
+        data = data.apply(lambda x: x.double() if x.is_floating_point() else x)
+        expected_loss = A2CLoss(
+            deepcopy(actor), deepcopy(value), functional=False, entropy_bonus=False
+        ).double()
+        actual_loss = A2CLoss(
+            deepcopy(actor), deepcopy(value), functional=True, entropy_bonus=False
+        ).double()
+        for loss in (expected_loss, actual_loss):
+            if value_estimator == "instance":
+                loss.make_value_estimator(
+                    TD0Estimator(
+                        gamma=0.9,
+                        value_network=loss.critic_network,
+                        shifted=True,
+                        differentiable=differentiable,
+                    )
+                )
+            else:
+                loss.make_value_estimator(
+                    value_estimator,
+                    gamma=0.9,
+                    shifted=True,
+                    differentiable=differentiable,
+                )
+
+        expected_data, actual_data = data.clone(), data.clone()
+        for rollout in (expected_data, actual_data):
+            rollout["observation"].requires_grad_()
+        expected = expected_loss(expected_data)
+        actual = actual_loss(actual_data)
+        assert_allclose_td(actual, expected)
+        for loss in (expected, actual):
+            sum(
+                value for key, value in loss.items() if key.startswith("loss")
+            ).backward()
+
+        expected_params = dict(expected_loss.named_parameters())
+        actual_params = {
+            name.replace("_network_params.", "_network."): param
+            for name, param in actual_loss.named_parameters()
+        }
+        assert actual_params.keys() == expected_params.keys()
+        before = {name: param.detach().clone() for name, param in actual_params.items()}
+        for name, param in actual_params.items():
+            assert param.grad is not None
+            torch.testing.assert_close(param.grad, expected_params[name].grad)
+        torch.testing.assert_close(
+            actual_data["observation"].grad, expected_data["observation"].grad
+        )
+        for loss in (expected_loss, actual_loss):
+            torch.optim.SGD(loss.parameters(), lr=0.01).step()
+        for name, param in actual_params.items():
+            torch.testing.assert_close(param, expected_params[name])
+        for network in ("actor_network", "critic_network"):
+            assert any(
+                not torch.equal(param, before[name])
+                for name, param in actual_params.items()
+                if name.startswith(network)
+            )
+
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_a2c_functional_shifted_shared_network(self, separate_losses):
+        torch.manual_seed(self.seed)
+        common = Mod(nn.Linear(7, 4), in_keys=["observation"], out_keys=["hidden"])
+        actor = ProbSeq(
+            common,
+            Mod(
+                nn.Sequential(nn.Linear(4, 14), NormalParamExtractor()),
+                in_keys=["hidden"],
+                out_keys=["loc", "scale"],
+            ),
+            ProbMod(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+            ),
+        )
+        value = Seq(common, Mod(nn.Linear(4, 1), ["hidden"], ["state_value"]))
+        env = ContinuousActionVecMockEnv()
+        try:
+            with torch.no_grad():
+                data = env.rollout(6, policy=actor)
+        finally:
+            env.close()
+        assert not data["next", "done"].any()
+
+        losses, outputs, shared_params = [], [], []
+        for shifted in (False, True):
+            actor_copy, value_copy, common_copy = deepcopy((actor, value, common))
+            loss = A2CLoss(
+                actor_copy,
+                value_copy,
+                functional=True,
+                separate_losses=separate_losses,
+                entropy_bonus=False,
+            )
+            loss.make_value_estimator(ValueEstimators.GAE, gamma=0.9, shifted=shifted)
+            losses.append(loss)
+            shared_params.append(list(common_copy.parameters()))
+            outputs.append(loss(data.clone()))
+        assert_allclose_td(outputs[1], outputs[0])
+
+        for loss, output, params in zip(losses, outputs, shared_params):
+            output["loss_critic"].backward(retain_graph=True)
+            if separate_losses:
+                assert all(param.grad is None for param in params)
+            else:
+                assert any(
+                    param.grad is not None and param.grad.any() for param in params
+                )
+            loss.zero_grad(set_to_none=True)
+            sum(
+                value for key, value in output.items() if key.startswith("loss")
+            ).backward()
+        expected_params = dict(losses[0].named_parameters())
+        actual_params = dict(losses[1].named_parameters())
+        assert actual_params.keys() == expected_params.keys()
+        for name, param in actual_params.items():
+            assert param.grad is not None
+            torch.testing.assert_close(param.grad, expected_params[name].grad)
+        for loss in losses:
+            torch.optim.SGD(loss.parameters(), lr=0.01).step()
+        for name, param in actual_params.items():
+            torch.testing.assert_close(param, expected_params[name])
+
+    def test_a2c_shifted_precomputed_values(self):
+        actor, value = self._create_mock_actor(), self._create_mock_value()
+        data = self._create_seq_mock_data_a2c()
+        with torch.no_grad():
+            value(data)
+            value(data["next"])
+        loss = A2CLoss(actor, value, entropy_bonus=False)
+        loss.make_value_estimator(
+            TD0Estimator(gamma=0.9, value_network=None, shifted=True)
+        )
+        expected_data = data.clone()
+        TD0Estimator(gamma=0.9, value_network=None)(expected_data)
+        expected = loss(expected_data)
+        actual = loss(data)
+        assert_allclose_td(actual, expected)
 
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
