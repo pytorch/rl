@@ -577,9 +577,9 @@ class TestDQN(LossModuleTestBase):
         previous_dtype = torch.get_default_dtype()
         try:
             torch.set_default_dtype(default_dtype)
-            actor = self._create_mock_distributional_actor(
-                "one_hot", atoms=51
-            ).to(model_dtype)
+            actor = self._create_mock_distributional_actor("one_hot", atoms=51).to(
+                model_dtype
+            )
             td = self._create_mock_data_dqn("one_hot", atoms=51).apply(
                 lambda value: value.to(model_dtype)
                 if value.is_floating_point()
@@ -591,7 +591,9 @@ class TestDQN(LossModuleTestBase):
             assert loss.dtype == model_dtype
             assert torch.isfinite(loss)
             loss.backward()
-            grad_norm = torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0)
+            grad_norm = torch.nn.utils.clip_grad.clip_grad_norm_(
+                actor.parameters(), 1.0
+            )
             assert torch.isfinite(grad_norm)
             assert grad_norm > 0
         finally:
