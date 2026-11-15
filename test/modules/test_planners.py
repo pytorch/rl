@@ -237,7 +237,8 @@ def _assert_planner_selects(env, planner_name, device, expected_action):
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch_size", [3, 5])
 class TestPlanner:
-    def test_CEM_model_free_env(self, device, batch_size, seed=1):
+    @pytest.mark.parametrize("top_k", [2, 1])
+    def test_CEM_model_free_env(self, device, batch_size, top_k, seed=1):
         env = MockBatchedUnLockedEnv(device=device)
         torch.manual_seed(seed)
         planner = CEMPlanner(
@@ -245,11 +246,12 @@ class TestPlanner:
             planning_horizon=10,
             optim_steps=2,
             num_candidates=100,
-            top_k=2,
+            top_k=top_k,
         )
         td = env.reset(TensorDict(batch_size=batch_size).to(device))
         td_copy = td.clone()
         td = planner(td)
+        assert torch.isfinite(td.get("action")).all()
         assert (
             td.get("action").shape[-len(env.action_spec.shape) :]
             == env.action_spec.shape

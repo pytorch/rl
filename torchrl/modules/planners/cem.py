@@ -47,6 +47,8 @@ class CEMPlanner(MPCPlannerBase):
             Gaussian distributions.
         top_k (int): The number of top candidates to use to
             update the mean and standard deviation of the Gaussian distribution.
+            With ``top_k=1``, the standard deviation becomes zero after the
+            first optimization step, so later steps do not explore new actions.
         reward_key (NestedKey, optional): The key in the TensorDict to use to
             retrieve the reward. Defaults to ``("next", "reward")``.
         action_key (NestedKey, optional): The key in the TensorDict to use to store
@@ -218,7 +220,10 @@ class CEMPlanner(MPCPlannerBase):
                 ("stats", "_action_means"), best_actions.mean(dim=K_DIM, keepdim=True)
             )
             container.set_(
-                ("stats", "_action_stds"), best_actions.std(dim=K_DIM, keepdim=True)
+                ("stats", "_action_stds"),
+                best_actions.std(
+                    dim=K_DIM, keepdim=True, correction=0 if self.top_k == 1 else 1
+                ),
             )
         action_means = container.get(("stats", "_action_means"))
         return action_means[..., 0, 0, :]
