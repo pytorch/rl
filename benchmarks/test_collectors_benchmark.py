@@ -22,6 +22,7 @@ from torchrl.collectors import (
     MultiAsyncCollector,
     MultiSyncCollector,
 )
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Binary,
     Categorical,
@@ -50,6 +51,23 @@ from torchrl.testing.mocking_classes import (
     MockBatchedLockedEnv,
 )
 from torchrl.weight_update import MultiProcessWeightSyncScheme
+
+
+def test_split_trajectories_many_short(benchmark):
+    num_trajectories = 1_024
+    trajectory_length = 32
+    num_steps = num_trajectories * trajectory_length
+    rollout = TensorDict(
+        {
+            "trajectory": torch.arange(num_trajectories).repeat_interleave(
+                trajectory_length
+            ),
+            "observation": torch.arange(num_steps * 4).reshape(num_steps, 4),
+        },
+        batch_size=[num_steps],
+    )
+
+    benchmark(split_trajectories, rollout, trajectory_key="trajectory")
 
 
 class _ResetLatencyPixelEnv(PixelMockEnv):
