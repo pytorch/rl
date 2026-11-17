@@ -122,6 +122,8 @@ See also
 
 Returns a new Spec with the expanded shape.
 
+If the spec has an outcome mask, it is broadcast to the expanded shape.
+
 Parameters:
 
 ***shape** (*tuple**or**iterable**of**int*) - the new shape of the Spec.
