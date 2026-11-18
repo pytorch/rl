@@ -1234,17 +1234,14 @@ class CatFrames(ObservationTransform):
                     _all = True
                     data_reset = data
                     buffer_reset = buffer
-                    dim = self.dim
                 else:
                     _all = False
                     data_reset = data[_reset]
                     buffer_reset = buffer[_reset]
-                    dim = self.dim - _reset.ndim + 1
+                # self.dim is negative, so it still points at the cat dim after
+                # _reset collapses the batch dims
                 shape = [1 for _ in buffer_reset.shape]
-                if _all:
-                    shape[dim] = self.N
-                else:
-                    shape[dim] = self.N
+                shape[self.dim] = self.N
 
                 if self.padding == "same":
                     if _all:
