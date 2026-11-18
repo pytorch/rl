@@ -2456,6 +2456,7 @@ class TestA2C(LossModuleTestBase):
         "value_estimator",
         [
             ValueEstimators.TD0,
+            ValueEstimators.TD1,
             ValueEstimators.GAE,
             ValueEstimators.TDLambda,
             "instance",
