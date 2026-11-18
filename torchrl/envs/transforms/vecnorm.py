@@ -294,6 +294,8 @@ class VecNormV2(Transform):
 
     @in_keys.setter
     def in_keys(self, in_keys: Sequence[NestedKey]):
+        if isinstance(in_keys, NestedKey):
+            in_keys = [in_keys]
         self._in_keys = in_keys
 
     def set_container(self, container: Transform | EnvBase) -> None:
