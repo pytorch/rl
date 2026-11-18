@@ -909,24 +909,18 @@ class TestIncrementalTokenizer:
         assert result.is_nested
         for actual, expected in zip(result.unbind(), tokens):
             assert torch.equal(actual, expected)
+
     def test_step_tokens_full_unequal_lengths_with_history(self, tokenizer):
         """Handle unequal token lengths through the public env.step() API."""
         env = ChatEnv.with_tokenizer(batch_size=(2,), tokenizer=tokenizer)
-
-        td = TensorDict(
-            {"query": ["Hi", "Explain how neural networks learn in detail."]},
-            batch_size=(2,),
-        )
+        td = TensorDict({"query": ["Hi", "Explain how neural networks learn in detail."]},batch_size=(2,),)
         result = env.reset(td)
-
         old_tokens = result.get(("tokens", "prompt"), as_list=True)
         history = result.get(("history", "prompt"))
-
         replies = [
             "Hello! How can I help?",
             "Neural networks learn by adjusting their weights using training data and optimization.",
         ]
-
         response = History(
             role=[["assistant"], ["assistant"]],
             content=[[replies[0]], [replies[1]]],
@@ -972,11 +966,13 @@ class TestIncrementalTokenizer:
             assert torch.equal(new[:old.numel()], old)
             assert new.numel() > old.numel()
 
+
 class TestTokenizer:
     @pytest.mark.parametrize("tokenizer_cls", [Tokenizer, EnvTokenizer])
     @pytest.mark.filterwarnings("error::DeprecationWarning")
     def test_device_follows_env_to(self, tokenizer_cls):
         # Cached parent.device goes stale after env.to (issue #4345).
+
         class DummyTokenizer:
             def __call__(self, value, return_tensors="pt", **kwargs):
                 batch = 1 if isinstance(value, str) else len(value)
