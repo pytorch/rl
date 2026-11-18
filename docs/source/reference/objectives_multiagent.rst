@@ -56,3 +56,32 @@ update on the global value (Rashid et al. 2018).
     :template: rl_template_noinherit.rst
 
     QMixerLoss
+
+COMA
+----
+
+:class:`COMALoss` implements Counterfactual Multi-Agent Policy Gradients
+(Foerster et al. 2018) — a decentralised actor paired with a *centralised*
+critic that outputs one action value per possible action of the acting
+agent. The actor's advantage is a counterfactual baseline: the critic's own
+output is marginalised over the acting agent's action (holding every other
+agent's action fixed), crediting an agent only for the part of the outcome
+its own action choice affected.
+
+The critic is centralised through its inputs rather than through a mixing
+network: it is built with the acting agent's observation together with
+either the other agents' actions
+(:func:`~torchrl.objectives.multiagent.coma.add_action_without_self`) or a
+joint/global state
+(:func:`~torchrl.objectives.multiagent.coma.add_joint_observation`,
+:func:`~torchrl.objectives.multiagent.coma.add_masked_joint_action`). The
+critic itself is trained with an n-step TD target bootstrapped from a target
+network via :meth:`~torchrl.objectives.multiagent.COMALoss.compute_value_target`.
+
+See ``sota-implementations/multiagent/coma.py`` for a hydra-configured recipe.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    COMALoss
