@@ -168,6 +168,10 @@ class CISPOLossOutput(LLMLossOutput):
     """CISPO Loss Output."""
 
 
+class GSPOLossOutput(LLMLossOutput):
+    """GSPO Loss Output."""
+
+
 class MCAdvantageSelector:
     """Select trajectories from an oversampled Monte-Carlo advantage group.
 
@@ -1025,6 +1029,93 @@ class CISPOLoss(GRPOLoss):
         ratio = log_weight_clip.exp()
         gain = ratio * advantage
         return -gain, clip_fraction
+
+
+class GSPOLoss(GRPOLoss):
+    """GSPO (Group Sequence Policy Optimization).
+
+    Inherits the GRPO pipeline but uses one importance ratio per sequence, the
+    geometric mean of the token ratios::
+
+        s_i = exp(mean_t(log pi_theta(y_i,t) - log pi_old(y_i,t)))
+        loss = -min(s_i * advantage, clip(s_i, [1 - eps_low, 1 + eps_high]) * advantage)
+
+    A sequence is one batch row: all of its valid tokens under ``masking_strategy``,
+    across turns for ``"rlhf"``. Each token's log-weight is the GSPO-token form
+    ``sg[log s_i] + log pi_theta(y_i,t) - sg[log pi_theta(y_i,t)]``, so its value is
+    ``log s_i`` and its gradient flows through that token's log-probability. With
+    ``aggregation="prompt_mean"`` and an advantage that is constant over each
+    sequence, this gives the sequence-level GSPO objective of the paper.
+
+    Takes the same arguments as :class:`GRPOLoss`, except ``kl_mask_threshold``,
+    with the paper's defaults for ``clip_epsilon`` and ``aggregation``.
+
+    ``ESS`` counts each sequence ratio once per valid token, and ``clip_fraction``
+    averages over all token slots, padding included.
+
+    See the `GSPO <https://arxiv.org/abs/2507.18071>`_ paper.
+
+    Args:
+        actor_network (LLMWrapperBase, optional): the LLM actor network.
+            Defaults to ``None``.
+
+    Keyword Args:
+        clip_epsilon (float | tuple[float, float], optional): clipping threshold(s)
+            for the sequence ratio: ``[1 - x, 1 + x]`` for a float ``x``, and
+            ``[1 - eps_low, 1 + eps_high]`` for a tuple ``(eps_low, eps_high)``. Defaults to ``(3e-4, 4e-4)``, as in the paper:
+            the sequence ratio is a geometric mean over tokens and stays much
+            closer to 1 than token ratios, so GRPO's 0.2 would rarely clip.
+        aggregation (str, optional): loss aggregation strategy, as in
+            :class:`GRPOLoss`. Defaults to ``"prompt_mean"``, the per-sequence mean
+            that gives each sequence equal weight, as in the paper; ``None`` also
+            selects ``"prompt_mean"``.
+        **kwargs: the other keyword arguments of :class:`GRPOLoss`.
+
+    Examples:
+        >>> loss_fn = GSPOLoss(actor_network)  # doctest: +SKIP
+        >>> loss = loss_fn(data)  # doctest: +SKIP
+    """
+
+    output_type: type[LLMLossOutput] = GSPOLossOutput
+
+    def __init__(
+        self,
+        actor_network: LLMWrapperBase | None = None,
+        *,
+        clip_epsilon: float | tuple[float, float] = (3e-4, 4e-4),
+        aggregation: Literal["token_mean", "prompt_mean", "none"]
+        | None = "prompt_mean",
+        kl_mask_threshold: float | None = None,
+        **kwargs,
+    ) -> None:
+        if kl_mask_threshold is not None:
+            # The KL mask is applied after the sequence ratio is computed.
+            raise ValueError(
+                "GSPOLoss does not support kl_mask_threshold, got "
+                f"{kl_mask_threshold=}."
+            )
+        super().__init__(
+            actor_network,
+            clip_epsilon=clip_epsilon,
+            aggregation=aggregation or "prompt_mean",
+            **kwargs,
+        )
+
+    def _log_weight(
+        self, tensordict: TensorDictBase, adv_shape: torch.Size
+    ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor, torch.Tensor]:
+        log_weight, dist, kl_approx, mask = super()._log_weight(tensordict, adv_shape)
+        cur_log_prob = tensordict.get("_cur_log_prob")
+        num_tokens = mask.sum(-1, keepdim=True).clamp_min(1)
+        # Sum in at least float32: a long fp16 sequence can overflow the sum.
+        sum_dtype = torch.promote_types(log_weight.dtype, torch.float32)
+        seq_log_weight = (
+            log_weight.squeeze(-1).to(sum_dtype).sum(-1, keepdim=True) / num_tokens
+        ).to(log_weight.dtype)
+        # Parenthesized so the zero-valued term cannot round the sequence log-ratio.
+        log_weight = seq_log_weight.detach() + (cur_log_prob - cur_log_prob.detach())
+        log_weight = torch.where(mask, log_weight, torch.zeros_like(log_weight))
+        return log_weight.unsqueeze(-1), dist, kl_approx, mask
 
 
 class MCAdvantage(Transform):
