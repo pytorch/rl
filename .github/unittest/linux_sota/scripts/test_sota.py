@@ -446,6 +446,30 @@ commands = {
 """,
     "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100 --dataset=synthetic
 """,
+    "pilco": """python sota-implementations/pilco/pilco.py \
+  device=cpu \
+  logger.backend= \
+  logger.video=false \
+  pilco.epochs=1 \
+  pilco.policy_training_steps=2 \
+  pilco.eval_interval=1 \
+  pilco.horizon=5 \
+  pilco.eval_horizon=5 \
+  pilco.initial_rollout_length=20 \
+  pilco.max_rollout_length=25
+""",
+    "pilco_csv": """python sota-implementations/pilco/pilco.py \
+  device=cpu \
+  logger.backend=csv \
+  logger.video=false \
+  pilco.epochs=1 \
+  pilco.policy_training_steps=2 \
+  pilco.eval_interval=1 \
+  pilco.horizon=5 \
+  pilco.eval_horizon=5 \
+  pilco.initial_rollout_length=20 \
+  pilco.max_rollout_length=25
+""",
     "dreamer": """python sota-implementations/dreamer/dreamer.py \
   optimization.total_optim_steps=2 \
   optimization.log_every=1 \
