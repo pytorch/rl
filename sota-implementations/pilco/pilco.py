@@ -30,7 +30,7 @@ def evaluate_policy(
         break_when_any_done=True,
     )
 
-    reward = test_rollout["episode_reward"][-1].tolist()
+    reward = test_rollout["episode_reward"][-1].item()
     steps = test_rollout["step_count"].max().tolist()
     angles = test_rollout["observation", "mean"][..., 1].abs()
     max_abs_angle = angles.max().tolist()
@@ -176,6 +176,7 @@ def main(cfg: DictConfig) -> None:
 
     env = make_env(cfg.env.env_name, device, from_pixels=cfg.logger.video)
 
+    logger = None
     if cfg.logger.backend:
         exp_name = generate_exp_name("PILCO", cfg.env.env_name)
         logger = get_logger(

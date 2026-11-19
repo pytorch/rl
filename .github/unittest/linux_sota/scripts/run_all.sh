@@ -99,6 +99,8 @@ uv pip install \
   av \
   coverage \
   vmas \
+  botorch \
+  gpytorch \
   transformers \
   "minari[hdf5,create]"
 
