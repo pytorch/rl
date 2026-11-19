@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-11-18
+# Flaky Test Report - 2026-11-19
 
 ## Summary
 
-- **Flaky tests**: 2
+- **Flaky tests**: 1
 - **Newly flaky** (last 7 days): 1
 - **Resolved**: 0
-- **Total tests analyzed**: 32988
+- **Total tests analyzed**: 33006
 - **CI runs analyzed**: 60
 
 ---
@@ -14,8 +14,7 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...TestDataConfigs::test_complex_replay_buffer_configuration` | 12.9% (20/155) | 20 | 0.26 | 2026-11-12 |
-| `...scripts/test_sota.py::test_commands[discrete_cql_offline]` 🆕 | 11.1% (3/27) | 3 | 0.13 | 2026-11-17 |
+| `...scripts/test_sota.py::test_commands[discrete_cql_offline]` 🆕 | 30.4% (7/23) | 7 | 0.61 | 2026-11-19 |
 
 
 ### Newly Flaky Tests
@@ -33,4 +32,4 @@
 
 ---
 
-*Generated at 2026-11-18T06:18:04.117951+00:00*
+*Generated at 2026-11-19T06:22:54.748678+00:00*

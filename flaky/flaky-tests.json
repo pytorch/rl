@@ -1,53 +1,34 @@
 {
-  "generated_at": "2026-11-18T06:18:04.117951+00:00",
+  "generated_at": "2026-11-19T06:22:54.748678+00:00",
   "analysis_period": {
-    "start": "2026-11-06",
-    "end": "2026-11-17",
+    "start": "2026-11-07",
+    "end": "2026-11-19",
     "runs_analyzed": 60
   },
   "summary": {
-    "total_tests": 32988,
-    "flaky_count": 2,
+    "total_tests": 33006,
+    "flaky_count": 1,
     "new_flaky_count": 1,
     "resolved_count": 0
   },
   "flaky_tests": [
     {
-      "nodeid": "test/test_configs.py::TestDataConfigs::test_complex_replay_buffer_configuration",
-      "executions": 155,
-      "failures": 20,
-      "failure_rate": 0.129,
-      "flaky_score": 0.2581,
-      "passed": 135,
-      "failed": 20,
-      "error": 0,
-      "reruns": 0,
-      "avg_duration": 0.001,
-      "recent_failures": [
-        "2026-11-07T07:35:00Z",
-        "2026-11-08T03:32:55Z",
-        "2026-11-08T03:32:55Z",
-        "2026-11-12T05:10:50Z",
-        "2026-11-12T05:10:50Z"
-      ],
-      "first_seen_flaky": "2026-11-06T01:15:38Z",
-      "is_new": false
-    },
-    {
       "nodeid": ".github/unittest/linux_sota/scripts/test_sota.py::test_commands[discrete_cql_offline]",
-      "executions": 27,
-      "failures": 3,
-      "failure_rate": 0.1111,
-      "flaky_score": 0.1333,
-      "passed": 24,
-      "failed": 3,
+      "executions": 23,
+      "failures": 7,
+      "failure_rate": 0.3043,
+      "flaky_score": 0.6087,
+      "passed": 16,
+      "failed": 7,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 264.37,
+      "avg_duration": 205.995,
       "recent_failures": [
-        "2026-11-17T04:04:39Z",
-        "2026-11-17T04:15:11Z",
-        "2026-11-17T04:28:45Z"
+        "2026-11-17T04:28:45Z",
+        "2026-11-19T01:42:43Z",
+        "2026-11-19T01:50:18Z",
+        "2026-11-19T02:10:33Z",
+        "2026-11-19T02:22:22Z"
       ],
       "first_seen_flaky": "2026-11-17T04:04:39Z",
       "is_new": true
