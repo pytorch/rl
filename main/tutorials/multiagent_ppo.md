@@ -835,11 +835,11 @@ for tensordict_data in collector:
 
 ```
 episode_reward_mean = 0: 0%| | 0/5 [00:00<?, ?it/s]
-episode_reward_mean = -0.4321812093257904: 20%|██ | 1/5 [00:06<00:24, 6.05s/it]
-episode_reward_mean = 0.36842775344848633: 40%|████ | 2/5 [00:12<00:18, 6.07s/it]
-episode_reward_mean = 1.1668334007263184: 60%|██████ | 3/5 [00:18<00:12, 6.06s/it]
-episode_reward_mean = 1.4797375202178955: 80%|████████ | 4/5 [00:24<00:06, 6.06s/it]
-episode_reward_mean = 1.9024386405944824: 100%|██████████| 5/5 [00:30<00:00, 6.06s/it]
+episode_reward_mean = -0.8743401169776917: 20%|██ | 1/5 [00:06<00:24, 6.09s/it]
+episode_reward_mean = 0.34459924697875977: 40%|████ | 2/5 [00:12<00:18, 6.06s/it]
+episode_reward_mean = 0.7934237122535706: 60%|██████ | 3/5 [00:18<00:12, 6.01s/it]
+episode_reward_mean = 1.2502988576889038: 80%|████████ | 4/5 [00:23<00:05, 5.94s/it]
+episode_reward_mean = 1.7289915084838867: 100%|██████████| 5/5 [00:29<00:00, 5.95s/it]
 ```
 
 ## Results
@@ -941,7 +941,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 Scenarios available in [VMAS](https://github.com/proroklab/VectorizedMultiAgentSimulator)
 
-**Total running time of the script:** (0 minutes 30.535 seconds)
+**Total running time of the script:** (0 minutes 30.100 seconds)
 
 [`Download Jupyter notebook: multiagent_ppo.ipynb`](../_downloads/a977047786179278d12b52546e1c0da8/multiagent_ppo.ipynb)
 
