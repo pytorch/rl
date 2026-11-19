@@ -58,7 +58,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f2a16fd2690>
+<torch._C.Generator object at 0x7f0746dd26f0>
 ```
 
 ## The problem
@@ -866,7 +866,7 @@ sampling sequences for the loss.
 -- how collectors lay out trajectory ids, masks, and slices.
 - [TorchRL documentation](https://pytorch.org/rl/)
 
-**Total running time of the script:** (0 minutes 0.232 seconds)
+**Total running time of the script:** (0 minutes 0.242 seconds)
 
 [`Download Jupyter notebook: memory_efficient_rl.ipynb`](../_downloads/1dc9c90b893b412af56b0fa1674e3ac1/memory_efficient_rl.ipynb)
 
