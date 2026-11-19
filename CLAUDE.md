@@ -265,8 +265,7 @@ commit read sensibly on its own.
 ### PR descriptions
 
 Write for the reviewer's decision, not as a transcript of the work. Use
-`.github/PULL_REQUEST_TEMPLATE.md`, retaining its sections and checklist.
-Only check boxes that apply.
+`.github/PULL_REQUEST_TEMPLATE.md`.
 
 Keep the description proportional to the change: a simple fix usually needs
 a short paragraph or even one line. Include a concise explanation of trade-offs
