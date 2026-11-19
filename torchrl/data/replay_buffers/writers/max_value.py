@@ -273,14 +273,14 @@ class TensorDictMaxValueWriter(Writer):
             index = data.get("index", None)
             dtype = index.dtype if index is not None else torch.long
             device = index.device if index is not None else data.device
-            out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
+            out_index = torch.full(data.shape[:1], -1, dtype=torch.long, device=device)
             data_idx = torch.as_tensor(data_idx, dtype=dtype, device=device)
             storage_idx = torch.as_tensor(storage_idx, dtype=dtype, device=device)
             out_index[data_idx] = storage_idx
             self._storage.set(storage_idx, data[data_idx])
         else:
             device = getattr(self._storage, "device", None)
-            out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
+            out_index = torch.full(data.shape[:1], -1, dtype=torch.long, device=device)
         index = self._replicate_index(out_index)
         self._mark_update_entities(index)
         return index
