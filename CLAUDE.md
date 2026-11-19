@@ -249,7 +249,7 @@ in `0.(X+2)`.
 - **Always name the target version explicitly** in the warning, e.g.
   `"MyClass.foo is deprecated and will be removed in v0.X+2. Use MyClass.bar."`
 
-## 13. PR labels & commits
+## 13. Pull requests & commits
 
 `[Tag]` prefix on PR title. Canonical set:
 
@@ -261,6 +261,34 @@ in `0.(X+2)`.
 
 Pick the most specific. No squash requirement on commits -- just make each
 commit read sensibly on its own.
+
+### PR descriptions
+
+Write for the reviewer's decision, not as a transcript of the work. Use
+`.github/PULL_REQUEST_TEMPLATE.md`, retaining its sections and checklist.
+Only check boxes that apply.
+
+Keep the description proportional to the change: a simple fix usually needs
+a short paragraph or even one line. Explain the problem and the change; include
+trade-offs or limitations when they matter to the reviewer.
+
+Do not include test commands, passing counts, logs, environment details, or
+lists of individual tests. Do not narrate the investigation, implementation
+history, or agent activity. Mention testing only when a limitation or result
+matters to the review.
+
+**Good:**
+
+> `CEMPlanner` returns NaN actions with `top_k=1` because the sample standard
+> deviation is undefined. Use a zero spread in this case; subsequent
+> optimization steps will not explore new actions.
+
+**Bad:**
+
+> Reproduced on Python 3.12 with PyTorch 2.15. Updated the standard deviation
+> calculation and added four parameterized regression tests. Ran the focused
+> test: 4 passed. Ran the planner suite: 34 passed, 6 skipped. Formatting and
+> `git diff --check` also passed.
 
 ## 14. Config / class parity
 
