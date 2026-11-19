@@ -1,5 +1,7 @@
 .. currentmodule:: torchrl.weight_update
 
+.. _ref_collectors_weightsync:
+
 Weight Synchronization
 ======================
 
@@ -63,6 +65,196 @@ Each of these classes is detailed below.
     - Implement custom weight sync schemes for specialized use cases (e.g., new distributed backends, custom serialization)
     - Debug synchronization issues in complex distributed setups
     - Use weight sync schemes outside of collectors for custom multiprocessing scenarios
+
+When is ``update_policy_weights_`` required?
+--------------------------------------------
+
+:class:`~torchrl.objectives.LossModule` does not copy the policy object (see
+:ref:`ref_lossmodule_weight_sharing`). For a non-expanded actor, an optimizer
+step on the loss updates the original policy in-place. Whether the collector
+needs an explicit sync after that step depends on whether its inference policy
+shares parameter storage with the training policy:
+
+- **Shared storage.** A policy passed directly can retain its parameter storage
+  when no device transfer or other copy is needed. No extra sync is required.
+- **Distinct storage.** Worker policies created by ``policy_factory``, copies
+  placed on another device, and remote policies have independent storage and
+  require a configured synchronization path.
+
+Passing ``policy_device`` or ``device`` is not by itself evidence of a copy. If
+the policy is already on the requested device, the collector can keep the same
+object and storage. If a move is needed, it creates a separate policy and
+:meth:`~torchrl.collectors.Collector.update_policy_weights_` must propagate the
+trained weights.
+
+Calling :meth:`~torchrl.collectors.Collector.update_policy_weights_` anyway
+is conservative good practice. Use it to push weights through a
+:class:`~torchrl.weight_update.WeightSyncScheme` or another configured transport
+whenever the policies do not share storage (the rest of this page).
+``update_at_each_batch=True`` on a process or remote collector does the same
+at every yield.
+
+The snippets below share this CartPole setup. Gym is required. Lines that
+need CUDA or a Ray cluster are marked ``# doctest: +SKIP``.
+
+.. code-block:: python
+
+    from tensordict.nn import TensorDictModule
+    from torch import nn
+    from torchrl.collectors import Collector
+    from torchrl.envs import GymEnv
+
+    def make_env():
+        return GymEnv("CartPole-v1")
+
+    def make_policy():
+        env = make_env()
+        module = TensorDictModule(
+            nn.Linear(
+                env.observation_spec["observation"].shape[-1],
+                env.action_spec.shape[-1],
+            ),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        env.close()
+        return module
+
+    env = make_env()
+    policy = make_policy()
+
+Shared storage (direct collector)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A policy passed into a same-process collector, with no device move, keeps
+its parameter storage. An optimizer step on the (non-expanded) loss already
+updates collection.
+
+.. code-block:: python
+
+    collector = Collector(
+        env,
+        policy,
+        frames_per_batch=64,
+        total_frames=10_000,
+        auto_register_policy_transforms=True,
+    )
+    for data in collector:
+        # loss(data); optimizer.step() updates ``policy`` in-place.
+        break
+    collector.shutdown()
+
+Same-device ``policy_device`` / ``device``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Those kwargs copy the policy **only** when the requested device differs from
+the policy's current device.
+
+.. code-block:: python
+
+    policy = policy.to("cpu")
+    collector = Collector(
+        env,
+        policy,
+        policy_device="cpu",
+        frames_per_batch=64,
+        total_frames=10_000,
+        auto_register_policy_transforms=True,
+    )
+    # Collector(..., device="cpu") is the same: it fills policy_device, and
+    # the CPU policy is kept. No extra sync is required.
+    collector.shutdown()
+
+Device kwargs that copy the policy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A ``policy_device`` (or a ``device`` that fills it) on another device makes
+a separate copy. Push the trained weights after each optimizer step.
+
+.. code-block:: python
+
+    policy = policy.cpu()
+    collector = Collector(
+        env,
+        policy,
+        policy_device="cuda:0",  # doctest: +SKIP
+        frames_per_batch=64,
+        total_frames=10_000,
+        auto_register_policy_transforms=True,
+    )  # doctest: +SKIP
+    for data in collector:  # doctest: +SKIP
+        # optimizer.step() updates the CPU training policy.
+        collector.update_policy_weights_()
+    collector.shutdown()  # doctest: +SKIP
+
+Local process workers
+~~~~~~~~~~~~~~~~~~~~~
+
+``num_collectors>1`` runs worker processes with their own policy instances.
+A default :class:`~torchrl.weight_update.SharedMemWeightSyncScheme` is
+installed when you pass a module. Sync after training.
+
+.. code-block:: python
+
+    collector = Collector(
+        create_env_fn=make_env,
+        num_collectors=2,
+        sync=True,
+        policy=policy,
+        frames_per_batch=64,
+        total_frames=10_000,
+        auto_register_policy_transforms=True,
+    )
+    for data in collector:
+        # ... optimizer.step() ...
+        collector.update_policy_weights_()
+    collector.shutdown()
+
+``policy_factory`` workers
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``policy_factory`` builds a new module in each worker. Pass the training
+``policy`` as the weight source; it is not sent to the workers.
+
+.. code-block:: python
+
+    collector = Collector(
+        create_env_fn=make_env,
+        num_collectors=2,
+        sync=True,
+        policy=policy,
+        policy_factory=make_policy,
+        frames_per_batch=64,
+        total_frames=10_000,
+        auto_register_policy_transforms=True,
+    )
+    for data in collector:
+        # ... optimizer.step() ...
+        collector.update_policy_weights_()
+    collector.shutdown()
+
+Remote collectors
+~~~~~~~~~~~~~~~~~
+
+Ray, RPC, and distributed backends always own independent remote policy
+storage. The same ``update_policy_weights_`` call applies;
+``backend="rpc"`` and ``backend="distributed"`` follow this pattern.
+
+.. code-block:: python
+
+    collector = Collector(
+        make_env,
+        policy,
+        backend="ray",
+        num_collectors=4,
+        frames_per_batch=256,
+        total_frames=10_000,
+        backend_options={"remote_configs": {"num_cpus": 1}},
+    )  # doctest: +SKIP
+    for data in collector:  # doctest: +SKIP
+        # ... optimizer.step() ...
+        collector.update_policy_weights_()
+    collector.shutdown()  # doctest: +SKIP
 
 Lifecycle of Weight Synchronization
 -----------------------------------
