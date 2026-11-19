@@ -1113,9 +1113,6 @@ class TestOneHotCategorical:
         torch.testing.assert_close(dist.mode, expected)
         torch.testing.assert_close(dist.deterministic_sample, expected)
 
-    @pytest.mark.skipif(
-        sys.version_info >= (3, 14), reason="torch.compile requires Python < 3.14"
-    )
     @pytest.mark.parametrize("mask_type", ["unmasked", "dense"])
     def test_tied_mode_compile(self, mask_type):
         logits = torch.zeros(3)
