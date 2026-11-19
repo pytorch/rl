@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**07:02.240** total execution time for 32 files **from all galleries**:
+**07:02.869** total execution time for 32 files **from all galleries**:
 
 .. container::
 
@@ -48,7 +48,7 @@ Computation times
      - 00:30.100
      - 0.0
    * - :ref:`sphx_glr_tutorials_lerobot_export.py` (``reference/generated/tutorials/lerobot_export.py``)
-     - 00:27.401
+     - 00:28.030
      - 0.0
    * - :ref:`sphx_glr_tutorials_multiagent_competitive_ddpg.py` (``reference/generated/tutorials/multiagent_competitive_ddpg.py``)
      - 00:26.585

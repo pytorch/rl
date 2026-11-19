@@ -86,9 +86,8 @@ Parameters:
 - **params** (*List**[*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*]**,**optional*) - list of parameters of the world model;
 - **buffers** (*List**[*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*]**,**optional*) - list of buffers of the world model;
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - device where the env input and output are expected to live
-- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - dtype of the env input and output
 - **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - number of environments contained in the instance
-- **run_type_check** (*bool**,**optional*) - whether to run type checks on the step of the env
+- **run_type_checks** (*bool**,**optional*) - whether to run type checks on the step of the env
 
 torchrl.envs.step(*TensorDict -> TensorDict*)
 
