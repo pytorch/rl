@@ -1331,6 +1331,14 @@ class LSTMModule(ModuleBase):
         ``is_init`` is sourced from :class:`~torchrl.envs.InitTracker` on the
         env side; without that transform there is no signal for boundary
         resets and hidden state will silently leak across episodes.
+        After :class:`~torchrl.data.replay_buffers.SliceSampler`, the first
+        timestep of each slice must also be ``is_init=True`` (the sampler
+        does this by default via ``init_key="is_init"``). Mid-episode
+        slices otherwise keep an all-false ``is_init`` and hidden state
+        leaks across concatenated traj ids. Sequential mode zeros the
+        incoming hidden with ``torch.where(is_init, zeros, hidden)``;
+        recurrent mode splits on ``is_init`` and restarts from the stored
+        hidden at each split.
         """
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]

@@ -2340,6 +2340,115 @@ class TestLSTMRecurrentStateLifecycle:
             msg="hidden state leaked across is_init trajectory boundary",
         )
 
+    def test_lstm_concatenated_slices_all_false_is_init_leaks_hidden(self):
+        """Mid-episode concatenated slices leak hidden state unless is_init is set at slice starts.
+
+        SliceSampler can return mid-trajectory windows whose stored is_init is
+        all False (none of the frames were episode starts). LSTMModule in
+        recurrent mode then treats the concatenated time dim as one trajectory
+        and carries hidden state from the last step of slice A into the first
+        step of unrelated slice B.
+
+        Marking slice starts with is_init=True (SliceSampler's init_key
+        default, or shifting ("next", "truncated") onto is_init) restores
+        independence. Expected features come from the inner LSTM on each
+        slice alone, not from LSTMModule.
+        """
+        torch.manual_seed(0)
+        num_rows = 2
+        slice_len = 3
+        n_slices = 2
+        T = slice_len * n_slices
+        F, H, L = 4, 5, 1
+        # Mixed traj ids along time, as in https://github.com/pytorch/rl/issues/3147
+        traj_ids = torch.tensor(
+            [
+                [2, 2, 2, 4, 4, 4],
+                [5, 5, 5, 6, 6, 6],
+            ],
+            dtype=torch.long,
+        )
+        lstm_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "rs_h", "rs_c"],
+            out_keys=["feat", ("next", "rs_h"), ("next", "rs_c")],
+            python_based=True,
+            dropout=0,
+        )
+        lstm_module.eval()
+
+        obs = torch.randn(num_rows, T, F)
+        rs_h = torch.randn(num_rows, T, L, H)
+        rs_c = torch.randn(num_rows, T, L, H)
+        is_init = torch.zeros(num_rows, T, 1, dtype=torch.bool)
+        truncated = torch.zeros(num_rows, T, 1, dtype=torch.bool)
+        truncated[:, slice_len - 1] = True
+        truncated[:, T - 1] = True
+        data = TensorDict(
+            {
+                "obs": obs,
+                "rs_h": rs_h,
+                "rs_c": rs_c,
+                "is_init": is_init,
+                ("collector", "traj_ids"): traj_ids,
+                ("next", "truncated"): truncated,
+            },
+            [num_rows, T],
+        )
+
+        def inner_features(obs_slice, h_slice, c_slice):
+            h0 = h_slice[:, 0].transpose(0, 1).contiguous()
+            c0 = c_slice[:, 0].transpose(0, 1).contiguous()
+            y, _ = lstm_module.lstm(obs_slice, (h0, c0))
+            return y
+
+        expected = torch.empty(num_rows, T, H)
+        leaked_expected = torch.empty(num_rows, T, H)
+        for row in range(num_rows):
+            leaked_expected[row : row + 1] = inner_features(
+                obs[row : row + 1], rs_h[row : row + 1], rs_c[row : row + 1]
+            )
+            for s in range(n_slices):
+                sl = slice(s * slice_len, (s + 1) * slice_len)
+                expected[row : row + 1, sl] = inner_features(
+                    obs[row : row + 1, sl],
+                    rs_h[row : row + 1, sl],
+                    rs_c[row : row + 1, sl],
+                )
+
+        with set_recurrent_mode(True), torch.no_grad():
+            leaked = lstm_module(data.clone())
+
+        torch.testing.assert_close(leaked["feat"], leaked_expected)
+        torch.testing.assert_close(
+            leaked["feat"][:, :slice_len], expected[:, :slice_len]
+        )
+        assert not torch.allclose(
+            leaked["feat"][:, slice_len:],
+            expected[:, slice_len:],
+            atol=1e-5,
+            rtol=1e-5,
+        ), "second-slice features matched the isolated run; leak was not observed"
+
+        marked = data.clone()
+        marked["is_init"][:, 0] = True
+        marked["is_init"][:, slice_len] = True
+
+        shifted = data.clone()
+        shifted_is_init = shifted["is_init"].clone()
+        trunc = shifted["next", "truncated"]
+        shifted_is_init[:, 0] = True
+        shifted_is_init[:, 1:] |= trunc[:, :-1]
+        shifted["is_init"] = shifted_is_init
+        assert torch.equal(shifted["is_init"], marked["is_init"])
+
+        with set_recurrent_mode(True), torch.no_grad():
+            isolated = lstm_module(marked)
+
+        torch.testing.assert_close(isolated["feat"], expected)
+
 
 class TestGRUModule:
     def test_errs(self):
