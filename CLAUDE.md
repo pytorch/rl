@@ -249,7 +249,7 @@ in `0.(X+2)`.
 - **Always name the target version explicitly** in the warning, e.g.
   `"MyClass.foo is deprecated and will be removed in v0.X+2. Use MyClass.bar."`
 
-## 13. PR labels & commits
+## 13. Pull requests & commits
 
 `[Tag]` prefix on PR title. Canonical set:
 
@@ -261,6 +261,20 @@ in `0.(X+2)`.
 
 Pick the most specific. No squash requirement on commits -- just make each
 commit read sensibly on its own.
+
+### PR descriptions
+
+Write for the reviewer's decision, not as a transcript of the work. Use
+`.github/PULL_REQUEST_TEMPLATE.md`.
+
+Keep the description proportional to the change: a simple fix usually needs
+a short paragraph or even one line. Include a concise explanation of trade-offs
+or limitations when they matter to the reviewer.
+
+Do not include test commands, passing counts, logs, environment details, or
+lists of individual tests etc. which bloat the PR description. Do not narrate
+the investigation, implementation history, or agent activity. Mention testing
+only when a limitation or result matters to the review.
 
 ## 14. Config / class parity
 
