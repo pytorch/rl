@@ -28,8 +28,8 @@ class ModelBasedEnvBase(EnvBase):
         >>> from tensordict import TensorDict
         >>> from torchrl.data import Composite, Unbounded
         >>> class MyMBEnv(ModelBasedEnvBase):
-        ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
-        ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+        ...     def __init__(self, world_model, device="cpu", batch_size=None):
+        ...         super().__init__(world_model, device=device, batch_size=batch_size)
         ...         self.observation_spec = Composite(
         ...             hidden_observation=Unbounded((4,))
         ...         )
