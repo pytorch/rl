@@ -269,26 +269,13 @@ Write for the reviewer's decision, not as a transcript of the work. Use
 Only check boxes that apply.
 
 Keep the description proportional to the change: a simple fix usually needs
-a short paragraph or even one line. Explain the problem and the change; include
-trade-offs or limitations when they matter to the reviewer.
+a short paragraph or even one line. Include a concise explanation of trade-offs
+or limitations when they matter to the reviewer.
 
 Do not include test commands, passing counts, logs, environment details, or
-lists of individual tests. Do not narrate the investigation, implementation
-history, or agent activity. Mention testing only when a limitation or result
-matters to the review.
-
-**Good:**
-
-> `CEMPlanner` returns NaN actions with `top_k=1` because the sample standard
-> deviation is undefined. Use a zero spread in this case; subsequent
-> optimization steps will not explore new actions.
-
-**Bad:**
-
-> Reproduced on Python 3.12 with PyTorch 2.15. Updated the standard deviation
-> calculation and added four parameterized regression tests. Ran the focused
-> test: 4 passed. Ran the planner suite: 34 passed, 6 skipped. Formatting and
-> `git diff --check` also passed.
+lists of individual tests etc. which bloat the PR description. Do not narrate
+the investigation, implementation history, or agent activity. Mention testing
+only when a limitation or result matters to the review.
 
 ## 14. Config / class parity
 
