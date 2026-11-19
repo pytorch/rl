@@ -209,8 +209,6 @@ class TestMaxValueWriter:
         assert (sample.get("obs") == obs[top_rank]).all()
 
     def test_max_value_writer_extend_trajectories(self):
-        # Each element along the first dim is a trajectory ranked by the sum of
-        # its keys, as when extending the buffer with a [batch, time] rollout.
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(2),
             writer=TensorDictMaxValueWriter(rank_key="key"),
