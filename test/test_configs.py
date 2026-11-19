@@ -113,8 +113,12 @@ _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_hydra = importlib.util.find_spec("hydra") is not None
 _python_version_compatible = sys.version_info >= (3, 10)
 _has_vmas = importlib.util.find_spec("vmas") is not None
-# Make sure that warnings raise an exception
-pytestmark = pytest.mark.filterwarnings("error")
+# Make sure that warnings raise an exception, except the one CPython emits when
+# the GC frees a leftover semaphore while the resource tracker is busy.
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings("ignore:ResourceTracker called reentrantly:UserWarning"),
+]
 
 
 def _discover_leaf_configs() -> dict[str, type]:
