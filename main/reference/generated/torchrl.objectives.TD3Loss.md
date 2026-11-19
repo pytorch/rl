@@ -29,7 +29,7 @@ be provided.
 - **action_spec** ([*TensorSpec*](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*,**optional*) - the action spec.
 Exclusive with bounds. Either this or `bounds` must be provided.
 - **num_qvalue_nets** (*int**,**optional*) - Number of Q-value networks to be
-trained. Default is `10`.
+trained. Default is `2`.
 - **policy_noise** (`float`, optional) - Standard deviation for the target
 policy action noise. Default is `0.2`.
 - **noise_clip** (`float`, optional) - Clipping range value for the sampled
