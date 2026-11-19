@@ -219,3 +219,10 @@ Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#
 >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
 >>> ppo_loss.make_value_estimator(gae)
 ```
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.
