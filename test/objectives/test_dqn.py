@@ -565,6 +565,40 @@ class TestDQN(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.parametrize(
+        "model_dtype,default_dtype",
+        [(torch.float64, torch.float32), (torch.float32, torch.float64)],
+    )
+    def test_distributional_dqn_dtype_independent_of_default(
+        self, model_dtype, default_dtype
+    ):
+        """Projection and backward must work when model and default dtypes differ."""
+        torch.manual_seed(self.seed)
+        previous_dtype = torch.get_default_dtype()
+        try:
+            torch.set_default_dtype(default_dtype)
+            actor = self._create_mock_distributional_actor("one_hot", atoms=51).to(
+                model_dtype
+            )
+            td = self._create_mock_data_dqn("one_hot", atoms=51).apply(
+                lambda value: value.to(model_dtype)
+                if value.is_floating_point()
+                else value
+            )
+            loss_fn = DistributionalDQNLoss(actor, gamma=0.9, delay_value=True)
+            SoftUpdate(loss_fn, eps=0.5)
+            loss = loss_fn(td)["loss"]
+            assert loss.dtype == model_dtype
+            assert torch.isfinite(loss)
+            loss.backward()
+            grad_norm = torch.nn.utils.clip_grad.clip_grad_norm_(
+                actor.parameters(), 1.0
+            )
+            assert torch.isfinite(grad_norm)
+            assert grad_norm > 0
+        finally:
+            torch.set_default_dtype(previous_dtype)
+
     @pytest.mark.parametrize("actor_first", [False, True])
     def test_distributional_dqn_lazy_target(self, actor_first):
         torch.manual_seed(self.seed)
