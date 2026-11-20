@@ -953,6 +953,42 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert torch.isfinite(loss_td["loss_actor"])
         assert fake_data.shape == (tensordict.shape[0], 3)
 
+    @pytest.mark.parametrize(
+        "estimator,expected",
+        [
+            (ValueEstimators.TDLambda, [20.25, 28.5, 33.0]),
+            (ValueEstimators.TD0, [11.0, 22.0, 33.0]),
+            (ValueEstimators.TD1, [36.0, 35.0, 33.0]),
+        ],
+    )
+    def test_dreamer_v3_lambda_target_without_continuation(
+        self, device, estimator, expected
+    ):
+        """Without a continuation model, targets follow the configured estimator over time.
+
+        The returns are computed over dim ``-2`` of ``[batch, T, 1]`` inputs.
+        Before the fix every estimator collapsed to the one-step target
+        ``r + gamma * V'`` (``[11, 22, 33]`` here), because the trailing
+        singleton dim was taken as the time dim.
+        """
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model_with_log_prob().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+        )
+        hyperparams = {"gamma": 1.0}
+        if estimator == ValueEstimators.TDLambda:
+            hyperparams["lmbda"] = 0.5
+        loss_module.make_value_estimator(estimator, **hyperparams)
+
+        reward = torch.tensor([[[1.0], [2.0], [3.0]]], device=device)
+        value = torch.tensor([[[10.0], [20.0], [30.0]]], device=device)
+        torch.testing.assert_close(
+            loss_module.lambda_target(reward, value),
+            torch.tensor(expected, device=device).reshape(1, 3, 1),
+        )
+
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
         class _ConstantContinuation(nn.Module):
             def forward(self_, state, belief):
