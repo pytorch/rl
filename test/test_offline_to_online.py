@@ -314,15 +314,23 @@ class TestPrefillReplayBuffer:
         expected = torch.arange(300 if n_samples is None else n_samples)
         assert torch.equal(target[:]["step"], expected)
 
-    def test_prefill_multidim_storage_copies_each_transition_once(self):
-        """A 2-d dataset storage is copied row-major, each transition once."""
+    def test_prefill_wrapped_dataset_copies_oldest_first(self):
+        """A circular dataset that wrapped is copied from its oldest transition."""
+        offline = ReplayBuffer(storage=LazyTensorStorage(100))
+        offline.extend(TensorDict({"step": torch.arange(150)}, batch_size=[150]))
+        target = ReplayBuffer(storage=LazyTensorStorage(1000))
+        prefill_replay_buffer(target, offline, n_samples=60, chunk_size=25)
+        assert torch.equal(target[:]["step"], torch.arange(50, 110))
+
+    def test_prefill_multidim_storage_is_sampled(self):
+        """A multi-dimensional dataset storage is still drawn with ``sample()``."""
         offline = ReplayBuffer(storage=LazyTensorStorage(150, ndim=2))
         offline.extend(
             TensorDict({"step": torch.arange(150).reshape(50, 3)}, batch_size=[50, 3])
         )
         target = ReplayBuffer(storage=LazyTensorStorage(1000))
-        prefill_replay_buffer(target, offline, n_samples=100, chunk_size=10)
-        assert torch.equal(target[:]["step"], torch.arange(100))
+        prefill_replay_buffer(target, offline, n_samples=40, chunk_size=16)
+        assert len(target) == 40
 
     def test_prefill_respects_chunk_size(self, monkeypatch):
         offline = _make_offline_buffer(n=1000)

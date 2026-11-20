@@ -7,7 +7,11 @@ from __future__ import annotations
 import torch
 from tensordict import TensorDictBase
 
-from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+from torchrl.data.replay_buffers.query import _last_write_index
+from torchrl.data.replay_buffers.replay_buffers import (
+    ReplayBuffer,
+    ReplayBufferEnsemble,
+)
 from torchrl.data.replay_buffers.storages import LazyTensorStorage, Storage
 
 
@@ -233,18 +237,22 @@ def prefill_replay_buffer(
     who want a single flat buffer (no per-batch sampling ratio, slightly higher
     memory usage since offline data is copied).
 
-    Transitions are read with ``dataset[start:stop]`` in storage order, so
-    each one is copied exactly once, the dataset's transforms are applied, and
-    trajectories stay contiguous for slice or sequence samplers on ``rb``. A
-    storage with more than one dimension is flattened in row-major order.
+    For a one-dimensional storage, transitions are read with
+    ``dataset[index]`` in insertion order (oldest first once a circular
+    storage has wrapped), so each stored transition is copied exactly once,
+    the dataset's transforms are applied, and trajectories stay contiguous
+    for slice or sequence samplers on ``rb``. For a multi-dimensional storage
+    or a :class:`~torchrl.data.ReplayBufferEnsemble`, chunks are drawn with
+    ``dataset.sample()``, which samples with the dataset's sampler.
 
     Args:
         rb (ReplayBuffer): a mutable replay buffer to seed.
         dataset (str or ReplayBuffer): offline dataset or a prefixed ID string
             (``"minari:..."`` / ``"d4rl:..."``).
-        n_samples (int, optional): number of transitions to copy, taken from
-            the start of the dataset in storage order and capped at
-            ``len(dataset)``. Defaults to the full dataset.
+        n_samples (int, optional): number of transitions to copy. For a
+            one-dimensional storage they are the oldest ``n_samples`` stored
+            transitions, capped at the storage length. Defaults to the full
+            dataset.
         chunk_size (int, optional): number of transitions copied per
             iteration. When ``dataset`` is a string, this is also used as the
             dataset constructor batch size. Default: ``1000``.
@@ -270,24 +278,27 @@ def prefill_replay_buffer(
 
         dataset = load_dataset(dataset, batch_size=chunk_size)
 
-    total = min(n_samples, len(dataset)) if n_samples is not None else len(dataset)
-    storage_ndim = getattr(dataset.storage, "ndim", 1)
-    rows_per_chunk = chunk_size
-    if storage_ndim > 1 and total:
-        row_numel = dataset[0:1].shape[1:storage_ndim].numel()
-        rows_per_chunk = max(1, chunk_size // row_numel)
+    if (
+        isinstance(dataset, ReplayBufferEnsemble)
+        or getattr(dataset.storage, "ndim", 1) > 1
+    ):
+        total = min(n_samples, len(dataset)) if n_samples is not None else len(dataset)
+        copied = 0
+        while copied < total:
+            this_chunk = min(chunk_size, total - copied)
+            rb.extend(dataset.sample(this_chunk))
+            copied += this_chunk
+        return rb
 
-    copied = 0
-    row = 0
-    while copied < total:
-        data = dataset[row : row + rows_per_chunk]
-        if storage_ndim > 1:
-            data = data.flatten(0, storage_ndim - 1)
-        data = data[: total - copied]
-        if not len(data):
-            break
-        rb.extend(data)
-        copied += len(data)
-        row += rows_per_chunk
+    storage = dataset.storage
+    storage_length = len(storage)
+    total = min(n_samples, storage_length) if n_samples is not None else storage_length
+    oldest = 0
+    last_write = _last_write_index(getattr(storage, "_last_cursor_index", None))
+    if storage._is_full and last_write is not None:
+        oldest = (last_write % storage_length + 1) % storage_length
+    order = (torch.arange(total) + oldest) % storage_length
+    for start in range(0, total, chunk_size):
+        rb.extend(dataset[order[start : start + chunk_size]])
 
     return rb
