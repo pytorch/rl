@@ -961,15 +961,16 @@ class DreamerV3ActorLoss(LossModule):
 
         Args:
             reward (torch.Tensor): imagined rewards of shape ``[*batch, T, 1]``,
-                with time on dim ``-2``.
+                with time on dim ``-2``. Without ``continuation``, a reward of
+                shape ``[*batch, T]`` is also accepted.
             value (torch.Tensor): values of the next states, same shape as
                 ``reward``.
             continuation (torch.Tensor, optional): continuation probabilities,
                 same shape as ``reward``. When given, the TD(lambda) recursion
                 is discounted by it at every step. When ``None``, the
-                configured value estimator is used over dim ``-2``; a
+                configured value estimator runs over the time dim; a
                 ``time_dim`` set on the estimator is overridden, since the
-                layout is fixed.
+                layout is fixed. Defaults to ``None``.
 
         Returns:
             torch.Tensor: the targets, same shape as ``reward``.
@@ -989,14 +990,17 @@ class DreamerV3ActorLoss(LossModule):
                 )
                 returns.append(next_return)
             return torch.stack(returns[::-1], dim=-2)
-        done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
-        terminated = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
+        if reward.shape[-1] != 1:
+            return self.lambda_target(
+                reward.unsqueeze(-1), value.unsqueeze(-1)
+            ).squeeze(-1)
+        done = torch.zeros_like(reward, dtype=torch.bool)
         input_tensordict = TensorDict(
             {
                 ("next", self.tensor_keys.reward): reward,
                 ("next", self.tensor_keys.value): value,
                 ("next", self.tensor_keys.done): done,
-                ("next", self.tensor_keys.terminated): terminated,
+                ("next", self.tensor_keys.terminated): done.clone(),
             },
             reward.shape[:-1],
         )

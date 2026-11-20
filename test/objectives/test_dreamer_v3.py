@@ -968,11 +968,14 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     ):
         """Without a continuation model, targets follow the configured estimator over time.
 
-        The returns are computed over dim ``-2`` of ``[batch, T, 1]`` inputs.
-        Before the fix every estimator collapsed to the one-step target
-        ``r + gamma * V'`` (``[11, 22, 33]`` here), because the trailing
-        singleton dim was taken as the time dim. ``time_dim=-2`` on the
-        estimator, the old workaround, must give the same targets.
+        The returns are computed over dim ``-2`` of ``[batch, T, 1]`` inputs,
+        and over the last dim of ``[batch, T]`` inputs. Before the fix every
+        estimator collapsed to the one-step target ``r + gamma * V'``
+        (``[11, 22, 33]`` for the first row), because the trailing singleton
+        dim was taken as the time dim. The second row (zero reward, unit
+        value) has the same targets for every estimator, so it catches
+        returns mixed across the batch. ``time_dim=-2`` on the estimator, the
+        old workaround, must give the same targets.
         """
         loss_module = DreamerV3ActorLoss(
             self._create_actor_model_with_log_prob().to(device),
@@ -987,11 +990,19 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             hyperparams["lmbda"] = 0.5
         loss_module.make_value_estimator(estimator, **hyperparams)
 
-        reward = torch.tensor([[[1.0], [2.0], [3.0]]], device=device)
-        value = torch.tensor([[[10.0], [20.0], [30.0]]], device=device)
+        reward = torch.tensor(
+            [[[1.0], [2.0], [3.0]], [[0.0], [0.0], [0.0]]], device=device
+        )
+        value = torch.tensor(
+            [[[10.0], [20.0], [30.0]], [[1.0], [1.0], [1.0]]], device=device
+        )
+        expected = torch.tensor([expected, [1.0, 1.0, 1.0]], device=device)
         torch.testing.assert_close(
-            loss_module.lambda_target(reward, value),
-            torch.tensor(expected, device=device).reshape(1, 3, 1),
+            loss_module.lambda_target(reward, value), expected.unsqueeze(-1)
+        )
+        torch.testing.assert_close(
+            loss_module.lambda_target(reward.squeeze(-1), value.squeeze(-1)),
+            expected,
         )
 
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
