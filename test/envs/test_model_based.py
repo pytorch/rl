@@ -4,13 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
 import re
 
 import numpy as np
 import pytest
 import torch
 
-from tensordict import TensorDict
+from tensordict import TensorDict, unravel_key
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.data import Composite, TensorDictReplayBuffer, Unbounded
@@ -183,19 +184,32 @@ class _SpecOnlyEnv(EnvBase):
     """Minimal :class:`EnvBase` used to supply specs to :class:`WorldModelEnv`.
 
     Not steppable on its own — only its specs are read by the env wrapper.
+    ``batch_size=None`` builds an unbatched env, and ``observation_key``
+    selects whether it declares the latent itself or a raw observation.
     """
 
-    def __init__(self, batch_size: int = _WM_BATCH, device: str = "cpu") -> None:
-        super().__init__(batch_size=[batch_size], device=device)
+    def __init__(
+        self,
+        batch_size: int | None = _WM_BATCH,
+        device: str = "cpu",
+        observation_key: str = "latent",
+    ) -> None:
+        batch = [] if batch_size is None else [batch_size]
+        super().__init__(batch_size=batch, device=device)
+        observation_dim = _WM_LATENT_DIM if observation_key == "latent" else _WM_OBS_DIM
         self.observation_spec = Composite(
-            latent=Unbounded(shape=(batch_size, _WM_LATENT_DIM), device=device),
-            shape=[batch_size],
+            {
+                observation_key: Unbounded(
+                    shape=(*batch, observation_dim), device=device
+                )
+            },
+            shape=batch,
             device=device,
         )
-        self.action_spec = Unbounded(shape=(batch_size, _WM_ACTION_DIM), device=device)
-        self.reward_spec = Unbounded(shape=(batch_size, 1), device=device)
+        self.action_spec = Unbounded(shape=(*batch, _WM_ACTION_DIM), device=device)
+        self.reward_spec = Unbounded(shape=(*batch, 1), device=device)
         self.done_spec = Categorical(
-            n=2, shape=(batch_size, 1), dtype=torch.bool, device=device
+            n=2, shape=(*batch, 1), dtype=torch.bool, device=device
         )
 
     def _reset(self, tensordict, **kwargs):  # pragma: no cover - never called
@@ -362,3 +376,77 @@ class TestWorldModelEnv:
         env = self._make_env(wm)
         with pytest.raises(RuntimeError, match="initial latent"):
             env.reset()
+
+    @pytest.mark.parametrize("latent_key", ["latent", ("encoded", "latent")])
+    @pytest.mark.parametrize("override_spec", [False, True])
+    def test_latent_advances_with_unbatched_observation_env(
+        self, latent_key, override_spec
+    ):
+        """The imagined latent follows the dynamics when the reference env is unbatched.
+
+        The reference env declares ``"observation"`` rather than the latent, as
+        a real env does, so the latent spec must come from the encoder and be
+        added to an observation spec override that omits it. Before the fix
+        the latent was dropped after each step, so every step restarted from
+        the reset latent, and action / reward specs lost their feature dim.
+        """
+        next_latent_key = unravel_key(("next", latent_key))
+        encoder = TensorDictModule(
+            nn.Linear(_WM_OBS_DIM, _WM_LATENT_DIM),
+            in_keys=["observation"],
+            out_keys=[latent_key],
+        )
+        dynamics = TensorDictModule(
+            CatLinear(_WM_LATENT_DIM + _WM_ACTION_DIM, _WM_LATENT_DIM),
+            in_keys=[latent_key, "action"],
+            out_keys=[next_latent_key],
+        )
+        reward_head = TensorDictModule(
+            nn.Linear(_WM_LATENT_DIM, 1),
+            in_keys=[next_latent_key],
+            out_keys=[("next", "reward")],
+        )
+        wm = WorldModel(encoder, dynamics, reward_head)
+        observation_spec = None
+        if override_spec:
+            observation_spec = Composite(
+                pixels=Unbounded(shape=(_WM_BATCH, _WM_OBS_DIM)), shape=[_WM_BATCH]
+            )
+        env = WorldModelEnv(
+            wm,
+            base_env=_SpecOnlyEnv(batch_size=None, observation_key="observation"),
+            batch_size=[_WM_BATCH],
+            observation_spec=observation_spec,
+            latent_key=latent_key,
+        )
+        assert env.action_spec.shape == (_WM_BATCH, _WM_ACTION_DIM)
+        assert env.reward_spec.shape == (_WM_BATCH, 1)
+        assert env.observation_spec[latent_key].shape == (_WM_BATCH, _WM_LATENT_DIM)
+
+        policy = TensorDictModule(
+            nn.Linear(_WM_LATENT_DIM, _WM_ACTION_DIM),
+            in_keys=[latent_key],
+            out_keys=["action"],
+        )
+        start_td = wm.encode(
+            TensorDict(
+                {"observation": torch.randn(_WM_BATCH, _WM_OBS_DIM)},
+                batch_size=[_WM_BATCH],
+            )
+        )
+        horizon = 4
+        with torch.no_grad():
+            rollout = env.rollout(horizon, policy=policy, tensordict=start_td)
+            latent = start_td.get(latent_key)
+            expected = []
+            for _ in range(horizon):
+                latent = dynamics.module(latent, policy.module(latent))
+                expected.append(latent)
+        torch.testing.assert_close(
+            rollout.get(next_latent_key), torch.stack(expected, dim=1)
+        )
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

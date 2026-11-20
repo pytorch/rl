@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
+from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 
@@ -56,9 +57,16 @@ class WorldModelEnv(ModelBasedEnvBase):
             stepped — only its specs are read.
 
     Keyword Args:
-        observation_spec (TensorSpec, optional): override for the observation
-            spec. When ``None``, the env exposes the latent state under
-            ``latent_key`` with shape inferred from ``base_env``.
+        observation_spec (Composite, optional): override for the observation
+            spec. When ``None`` and ``base_env`` declares ``latent_key`` (for
+            instance a reference env that only carries specs), its
+            observation spec is reused. When ``None`` and ``base_env`` does
+            not declare it (a real env exposing raw observations), the env
+            exposes only the latent state under ``latent_key``, with its spec
+            inferred by running the world model's encoder once on
+            ``base_env.fake_tensordict()``. When an override does not contain
+            ``latent_key``, the latent spec is added to it so that the latent
+            state is always carried from one imagined step to the next.
         batch_size (torch.Size, optional): batch size for the env. Defaults
             to ``base_env.batch_size``.
         device (torch.device, optional): device for the env. Defaults to
@@ -72,7 +80,7 @@ class WorldModelEnv(ModelBasedEnvBase):
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.model_based import WorldModelEnv
-        >>> from torchrl.modules import WorldModel
+        >>> from torchrl.modules import MLP, WorldModel
         >>> base_env = GymEnv("Pendulum-v1")
         >>> obs_dim = base_env.observation_spec["observation"].shape[-1]
         >>> action_dim = base_env.action_spec.shape[-1]
@@ -82,7 +90,7 @@ class WorldModelEnv(ModelBasedEnvBase):
         ...     in_keys=["observation"], out_keys=["latent"],
         ... )
         >>> dynamics = TensorDictModule(
-        ...     torch.nn.Linear(latent_dim + action_dim, latent_dim),
+        ...     MLP(in_features=latent_dim + action_dim, out_features=latent_dim, depth=0),
         ...     in_keys=["latent", "action"], out_keys=[("next", "latent")],
         ... )
         >>> reward_head = TensorDictModule(
@@ -91,7 +99,10 @@ class WorldModelEnv(ModelBasedEnvBase):
         ... )
         >>> world_model = WorldModel(encoder, dynamics, reward_head)
         >>> wm_env = WorldModelEnv(world_model, base_env=base_env, batch_size=[3])
-        >>> # Seed the env with a starting latent and roll it out.
+        >>> wm_env.observation_spec["latent"].shape
+        torch.Size([3, 4])
+        >>> wm_env.action_spec.shape
+        torch.Size([3, 1])
         >>> obs_td = TensorDict(
         ...     {"observation": torch.randn(3, obs_dim)}, batch_size=[3]
         ... )
@@ -99,6 +110,8 @@ class WorldModelEnv(ModelBasedEnvBase):
         >>> rollout = wm_env.rollout(max_steps=5, tensordict=start_td)
         >>> rollout.shape
         torch.Size([3, 5])
+        >>> bool((rollout["next", "latent"][:, -1] != start_td["latent"]).any())
+        True
     """
 
     def __init__(
@@ -106,7 +119,7 @@ class WorldModelEnv(ModelBasedEnvBase):
         world_model: WorldModel,
         base_env: EnvBase,
         *,
-        observation_spec=None,
+        observation_spec: Composite | None = None,
         batch_size: int | torch.Size | Sequence[int] | None = None,
         device: torch.device | str | None = None,
         latent_key: NestedKey = "latent",
@@ -142,19 +155,56 @@ class WorldModelEnv(ModelBasedEnvBase):
         self._world_model = world_model
         self.latent_key = latent_key
 
-        # Spec wiring: action / reward / done are copied directly from the
-        # reference env. The observation spec defaults to the latent
-        # representation but can be overridden by the caller.
-        self.action_spec = base_env.action_spec.expand(self.batch_size).clone()
-        self.reward_spec = base_env.reward_spec.expand(self.batch_size).clone()
-        self.done_spec = base_env.done_spec.expand(self.batch_size).clone()
+        self.action_spec = self._expand_base_spec(base_env.action_spec, base_env)
+        self.reward_spec = self._expand_base_spec(base_env.reward_spec, base_env)
+        self.done_spec = self._expand_base_spec(base_env.done_spec, base_env)
 
         if observation_spec is not None:
-            self.observation_spec = observation_spec
+            observation_spec = observation_spec.clone()
+        elif latent_key in base_env.observation_spec.keys(include_nested=True):
+            observation_spec = self._expand_base_spec(
+                base_env.observation_spec, base_env
+            )
         else:
-            self.observation_spec = base_env.observation_spec.expand(
-                self.batch_size
-            ).clone()
+            observation_spec = Composite(shape=self.batch_size, device=self.device)
+        if latent_key not in observation_spec.keys(include_nested=True):
+            observation_spec[latent_key] = self._latent_spec(
+                world_model, base_env, latent_key
+            )
+        self.observation_spec = observation_spec
+
+    def _expand_base_spec(self, spec: TensorSpec, base_env: EnvBase) -> TensorSpec:
+        """Expand a reference-env spec to ``(*self.batch_size, *feature_shape)``.
+
+        The feature shape is what remains of the spec shape once the reference
+        env's own batch dimensions are dropped, so an unbatched reference env
+        with an action of shape ``(1,)`` gives ``(*self.batch_size, 1)``.
+        """
+        feature_shape = spec.shape[len(base_env.batch_size) :]
+        return spec.expand(*self.batch_size, *feature_shape).clone()
+
+    def _latent_spec(
+        self, world_model: WorldModel, base_env: EnvBase, latent_key: NestedKey
+    ) -> TensorSpec:
+        """Build the spec of the latent state stepped by the world model.
+
+        The reference env's own spec is used when it already declares
+        ``latent_key``. Otherwise the encoder is run once, without gradients,
+        on a fake tensordict of the reference env, moved to this env's
+        device, to read the latent's feature shape and dtype.
+        """
+        base_observation_spec = base_env.full_observation_spec
+        if latent_key in base_observation_spec.keys(include_nested=True):
+            return self._expand_base_spec(base_observation_spec[latent_key], base_env)
+        with torch.no_grad():
+            fake_tensordict = base_env.fake_tensordict().to(self.device)
+            latent = world_model.encode(fake_tensordict).get(latent_key)
+        feature_shape = latent.shape[len(base_env.batch_size) :]
+        return Unbounded(
+            shape=(*self.batch_size, *feature_shape),
+            dtype=latent.dtype,
+            device=self.device,
+        )
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Run one imagined step and remap WorldModel's ``("next", *)`` outputs to root.
