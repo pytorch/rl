@@ -299,6 +299,31 @@ class TestPrefillReplayBuffer:
         result = prefill_replay_buffer(target, offline, n_samples=50)
         assert result is target
 
+    @pytest.mark.parametrize("n_samples", [None, 120])
+    def test_prefill_copies_each_transition_once_in_order(self, n_samples):
+        """The prefix of the dataset is copied once each, in storage order.
+
+        Before the fix the copy was drawn with ``dataset.sample``, which
+        samples with replacement: transitions were duplicated or missing and
+        trajectories were shuffled.
+        """
+        offline = ReplayBuffer(storage=LazyTensorStorage(300))
+        offline.extend(TensorDict({"step": torch.arange(300)}, batch_size=[300]))
+        target = ReplayBuffer(storage=LazyTensorStorage(1000))
+        prefill_replay_buffer(target, offline, n_samples=n_samples, chunk_size=37)
+        expected = torch.arange(300 if n_samples is None else n_samples)
+        assert torch.equal(target[:]["step"], expected)
+
+    def test_prefill_multidim_storage_copies_each_transition_once(self):
+        """A 2-d dataset storage is copied row-major, each transition once."""
+        offline = ReplayBuffer(storage=LazyTensorStorage(150, ndim=2))
+        offline.extend(
+            TensorDict({"step": torch.arange(150).reshape(50, 3)}, batch_size=[50, 3])
+        )
+        target = ReplayBuffer(storage=LazyTensorStorage(1000))
+        prefill_replay_buffer(target, offline, n_samples=100, chunk_size=10)
+        assert torch.equal(target[:]["step"], torch.arange(100))
+
     def test_prefill_respects_chunk_size(self, monkeypatch):
         offline = _make_offline_buffer(n=1000)
         target = ReplayBuffer(storage=LazyTensorStorage(10_000))

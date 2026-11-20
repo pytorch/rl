@@ -227,21 +227,27 @@ def prefill_replay_buffer(
     n_samples: int | None = None,
     chunk_size: int = 1000,
 ) -> ReplayBuffer:
-    """Copy samples from an offline dataset into a mutable replay buffer.
+    """Copy the transitions of an offline dataset into a mutable replay buffer.
 
     A simpler alternative to :class:`OfflineToOnlineReplayBuffer` for users
     who want a single flat buffer (no per-batch sampling ratio, slightly higher
     memory usage since offline data is copied).
 
+    Transitions are read with ``dataset[start:stop]`` in storage order, so
+    each one is copied exactly once, the dataset's transforms are applied, and
+    trajectories stay contiguous for slice or sequence samplers on ``rb``. A
+    storage with more than one dimension is flattened in row-major order.
+
     Args:
         rb (ReplayBuffer): a mutable replay buffer to seed.
         dataset (str or ReplayBuffer): offline dataset or a prefixed ID string
             (``"minari:..."`` / ``"d4rl:..."``).
-        n_samples (int, optional): maximum number of samples to copy.
-            Defaults to the full dataset.
-        chunk_size (int, optional): number of samples copied per iteration.
-            When ``dataset`` is a string, this is also used as the dataset
-            constructor batch size. Default: ``1000``.
+        n_samples (int, optional): number of transitions to copy, taken from
+            the start of the dataset in storage order and capped at
+            ``len(dataset)``. Defaults to the full dataset.
+        chunk_size (int, optional): number of transitions copied per
+            iteration. When ``dataset`` is a string, this is also used as the
+            dataset constructor batch size. Default: ``1000``.
 
     Returns:
         ReplayBuffer: ``rb`` mutated in-place (also returned for chaining).
@@ -265,12 +271,23 @@ def prefill_replay_buffer(
         dataset = load_dataset(dataset, batch_size=chunk_size)
 
     total = min(n_samples, len(dataset)) if n_samples is not None else len(dataset)
-    copied = 0
+    storage_ndim = getattr(dataset.storage, "ndim", 1)
+    rows_per_chunk = chunk_size
+    if storage_ndim > 1 and total:
+        row_numel = dataset[0:1].shape[1:storage_ndim].numel()
+        rows_per_chunk = max(1, chunk_size // row_numel)
 
+    copied = 0
+    row = 0
     while copied < total:
-        this_chunk = min(chunk_size, total - copied)
-        data = dataset.sample(this_chunk)
+        data = dataset[row : row + rows_per_chunk]
+        if storage_ndim > 1:
+            data = data.flatten(0, storage_ndim - 1)
+        data = data[: total - copied]
+        if not len(data):
+            break
         rb.extend(data)
-        copied += this_chunk
+        copied += len(data)
+        row += rows_per_chunk
 
     return rb
