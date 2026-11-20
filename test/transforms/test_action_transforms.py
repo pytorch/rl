@@ -54,8 +54,10 @@ from torchrl.data.vla import (
     UniformActionTokenizer,
 )
 from torchrl.envs import (
+    ActionDelay,
     ActionMask,
     ActionScaling,
+    ActuatorModel,
     CartesianSolver,
     ClosedLoopMultiAction,
     Compose,
@@ -3969,6 +3971,164 @@ class TestLastAction(TransformBase):
         assert remembered is not td["action"]
         td["action"].fill_(123)
         torch.testing.assert_close(remembered, original)
+
+
+def _make_sim2real_action_env(transform_cls, *args, **kwargs) -> TransformedEnv:
+    return TransformedEnv(
+        ContinuousActionVecMockEnv(), transform_cls(*args, **kwargs)
+    )
+
+
+class TestActionDelay:
+    @pytest.mark.parametrize("delay", [2, (1, 3)])
+    @pytest.mark.parametrize("batched", ["single", "serial", "parallel"])
+    def test_env_specs(self, delay, batched, maybe_fork_ParallelEnv):
+        make_env = partial(_make_sim2real_action_env, ActionDelay, delay)
+        if batched == "single":
+            env = make_env()
+        elif batched == "serial":
+            env = SerialEnv(2, make_env)
+        else:
+            env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_delays_execution(self):
+        # CountingEnv counts the executed actions: with a delay of 2, the
+        # first two steps execute the zero-filled queue.
+        env = TransformedEnv(CountingEnv(max_steps=10), ActionDelay(2))
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(5, policy=policy)
+        assert rollout["next", "observation"].flatten().tolist() == [0, 0, 1, 2, 3]
+        # the returned action is the one the policy issued
+        assert rollout["action"].all()
+        assert rollout["next", "action_queue"][..., -1].all()
+
+    def test_random_delay_per_env(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            CountingEnv(max_steps=20, batch_size=[16]), ActionDelay((0, 3))
+        )
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(6, policy=policy)
+        delay = rollout["action_delay"]
+        assert (delay == delay[:, :1]).all(), "the delay is fixed for an episode"
+        assert set(delay[:, 0].tolist()) == {0, 1, 2, 3}
+        steps = torch.arange(1, 7)
+        expected = (steps - delay).clamp_min(0)
+        torch.testing.assert_close(
+            rollout["next", "observation"].squeeze(-1), expected.to(torch.int32)
+        )
+
+    def test_partial_reset(self):
+        env = TransformedEnv(CountingEnv(max_steps=20, batch_size=[2]), ActionDelay(2))
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        td = env.rollout(3, policy=policy, return_contiguous=False)[..., -1]
+        td = step_mdp(td)
+        assert td["action_queue"].all()
+        td["_reset"] = torch.tensor([[True], [False]])
+        td = env.reset(td)
+        assert not td["action_queue"][0].any()
+        assert td["action_queue"][1].all()
+
+    def test_nested_key(self):
+        env = TransformedEnv(
+            NestedCountingEnv(nest_obs_action=True, batch_size=[2], nested_dim=3),
+            ActionDelay(1),
+        )
+        check_env_specs(env)
+        assert env.transform.out_keys == [("data", "action_queue")]
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], action_key=env.action_key
+        )
+        rollout = env.rollout(3, policy=policy)
+        assert (rollout["next", "data", "states"][:, 0] == 0).all()
+        assert (rollout["next", "data", "states"][:, 1:] > 0).all()
+
+    @pytest.mark.parametrize("delay", [0, -1, (3, 1), 1.5])
+    def test_invalid_delay(self, delay):
+        with pytest.raises((ValueError, TypeError)):
+            ActionDelay(delay)
+
+
+class TestActuatorModel:
+    @staticmethod
+    def _make_env(transform, num_envs=None):
+        # The inner LastAction records the action the base env executes.
+        base_env = (
+            ContinuousActionVecMockEnv()
+            if num_envs is None
+            else SerialEnv(num_envs, ContinuousActionVecMockEnv)
+        )
+        base_env = TransformedEnv(base_env, LastAction(out_keys=["executed_action"]))
+        return TransformedEnv(base_env, transform)
+
+    @pytest.mark.parametrize("gain", [0.5, (0.2, 0.4)])
+    @pytest.mark.parametrize("batched", ["single", "serial", "parallel"])
+    def test_env_specs(self, gain, batched, maybe_fork_ParallelEnv):
+        make_env = partial(_make_sim2real_action_env, ActuatorModel, gain)
+        if batched == "single":
+            env = make_env()
+        elif batched == "serial":
+            env = SerialEnv(2, make_env)
+        else:
+            env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_first_order_lag(self):
+        env = self._make_env(ActuatorModel(0.25))
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(4, policy=policy)
+        expected = 1 - 0.75 ** torch.arange(1, 5, dtype=torch.float32)
+        expected = expected.unsqueeze(-1).expand(4, 7)
+        torch.testing.assert_close(rollout["next", "applied_action"], expected)
+        torch.testing.assert_close(rollout["next", "executed_action"], expected)
+        assert (rollout["action"] == 1).all()
+
+    def test_rate_limit_and_default(self):
+        env = self._make_env(ActuatorModel(max_delta=0.25, default=-1.0))
+        assert env.reset()["applied_action"].eq(-1).all()
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(4, policy=policy)
+        expected = torch.tensor([-0.75, -0.5, -0.25, 0.0]).unsqueeze(-1).expand(4, 7)
+        torch.testing.assert_close(rollout["next", "executed_action"], expected)
+
+    def test_random_gain(self):
+        env = self._make_env(ActuatorModel((0.2, 0.4)), num_envs=8)
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(2, policy=policy)
+        gain = rollout["actuator_gain"][:, 0]
+        assert ((gain >= 0.2) & (gain <= 0.4)).all()
+        assert gain.unique().numel() > 1
+        # from a zero state, the first applied action is gain * command
+        torch.testing.assert_close(
+            rollout["next", "executed_action"][:, 0],
+            gain.unsqueeze(-1).expand(8, 7),
+        )
+
+    def test_composes_after_delay(self):
+        # Inverse transforms run last-to-first: the delayed command reaches
+        # the actuator.
+        env = self._make_env(Compose(ActuatorModel(0.5), ActionDelay(1)))
+        policy = CountingEnvCountPolicy(env.full_action_spec["action"])
+        rollout = env.rollout(3, policy=policy)
+        expected = torch.tensor([0.0, 0.5, 0.75]).unsqueeze(-1).expand(3, 7)
+        torch.testing.assert_close(rollout["next", "executed_action"], expected)
+
+    def test_rejects_discrete_actions(self):
+        env = TransformedEnv(CountingEnv(), ActuatorModel(0.5))
+        with pytest.raises(TypeError, match="floating-point action"):
+            env.observation_spec
+
+    @pytest.mark.parametrize("gain", [0.0, 1.5, (0.5, 0.2)])
+    def test_invalid_gain(self, gain):
+        with pytest.raises(ValueError):
+            ActuatorModel(gain)
 
 
 if __name__ == "__main__":
