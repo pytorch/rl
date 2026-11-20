@@ -24,6 +24,7 @@ _END_KEY_GROUPS = (
     tuple(("next", key) for key in DEFAULT_DONE_KEYS),
     tuple(DEFAULT_DONE_KEYS),
 )
+_STEP_OUTPUT_KEYS = frozenset(("reward", *DEFAULT_DONE_KEYS))
 
 
 class Trajectory(TensorClass["nocast"]):
@@ -31,11 +32,14 @@ class Trajectory(TensorClass["nocast"]):
 
     A single-field tensorclass wrapping a :class:`~tensordict.TensorDictBase`
     that holds the transitions of one trajectory, exposing its entries as
-    attributes. Attribute lookup resolves keys against the root tensordict
-    first and falls back to the ``("next", ...)`` sub-tensordict, so
-    ``traj.reward`` and ``traj.done`` return the conventional post-step
-    entries while ``traj.observation``, ``traj.state`` or ``traj.action``
-    return root entries.
+    attributes. Step outputs (``reward``, ``done``, ``terminated`` and
+    ``truncated``) resolve to the ``("next", ...)`` entry first and fall back
+    to the root, so ``traj.reward`` and ``traj.done`` return the conventional
+    post-step entries even though ``env.rollout`` and collectors also write a
+    root ``done`` at every step. Every other key resolves against the root
+    first and falls back to ``("next", ...)``, so ``traj.observation``,
+    ``traj.state`` or ``traj.action`` return root entries. Index the
+    trajectory (``trajectory["done"]``) to read a root entry directly.
 
     Being a tensorclass, slicing and indexing return :class:`Trajectory`
     instances, and trajectories of different lengths can be assembled into a
@@ -83,13 +87,20 @@ class Trajectory(TensorClass["nocast"]):
         return self.reward.sum()
 
     def get(self, key: NestedKey, default=None) -> torch.Tensor | None:
-        """Resolve ``key`` against the root tensordict, then ``("next", key)``."""
+        """Resolve ``key`` against the root tensordict and ``("next", key)``.
+
+        Step outputs (``reward`` and the done keys) look up ``("next", key)``
+        first, every other string key looks up the root first. Nested keys
+        are resolved as given.
+        """
         data = self.data
-        value = data.get(key, None)
-        if value is not None:
-            return value
-        if isinstance(key, str):
-            value = data.get(("next", key), None)
+        if not isinstance(key, str):
+            return data.get(key, default)
+        candidates = (key, ("next", key))
+        if key in _STEP_OUTPUT_KEYS:
+            candidates = candidates[::-1]
+        for candidate in candidates:
+            value = data.get(candidate, None)
             if value is not None:
                 return value
         return default

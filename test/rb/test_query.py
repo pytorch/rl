@@ -23,6 +23,7 @@ from torchrl.data import (
     Trajectory,
 )
 from torchrl.envs.transforms import Transform
+from torchrl.testing.mocking_classes import CountingEnv
 
 
 class _CountingObsTransform(Transform):
@@ -308,6 +309,27 @@ class TestReplayBufferQuery:
         rb = self._make_rb()
         trajs = rb.query()
         assert [t.length for t in trajs] == [5, 3, 7]
+
+    def test_query_step_outputs_on_rollout_data(self):
+        """Episode-end predicates match rollout data, which also stores a root ``done``.
+
+        ``env.rollout`` writes a root ``done`` (False at every step) next to
+        ``("next", "done")``. Before the fix ``traj.done`` resolved the root
+        entry first, so no trajectory ever matched an episode-end predicate.
+        """
+        env = CountingEnv(max_steps=3)
+        episodes = [env.rollout(10), env.rollout(10)]
+        data = torch.cat(episodes)
+        data["episode"] = torch.cat(
+            [torch.full((len(episode),), i) for i, episode in enumerate(episodes)]
+        )
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(len(data)))
+        rb.extend(data)
+        assert len(rb.query(traj.done.last() == 1)) == 2
+        assert len(rb.query(traj.terminated.sum() > 0)) == 2
+        first = rb.query()[0]
+        assert torch.equal(first.done, episodes[0]["next", "done"])
+        assert not first["done"].any()
 
     def test_query_predicate(self):
         rb = self._make_rb()
