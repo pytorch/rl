@@ -12,7 +12,13 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from torchrl.data import LazyTensorStorage, OfflineToOnlineReplayBuffer, ReplayBuffer
+from torchrl.data import (
+    LazyTensorStorage,
+    OfflineToOnlineReplayBuffer,
+    ReplayBuffer,
+    TensorDictMaxValueWriter,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.datasets import utils as dataset_utils
 from torchrl.data.datasets.utils import load_dataset, register_dataset
 from torchrl.data.replay_buffers.offline_to_online import prefill_replay_buffer
@@ -322,15 +328,47 @@ class TestPrefillReplayBuffer:
         prefill_replay_buffer(target, offline, n_samples=60, chunk_size=25)
         assert torch.equal(target[:]["step"], torch.arange(50, 110))
 
+    def test_prefill_non_round_robin_dataset_keeps_storage_order(self):
+        """A full dataset whose writer is not round-robin is copied in storage order.
+
+        A max-value writer replaces the lowest-ranked slot, so the last write
+        position says nothing about which transition is oldest.
+        """
+        offline = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=TensorDictMaxValueWriter(rank_key="score"),
+        )
+        for step in range(15):
+            offline.extend(
+                TensorDict(
+                    {
+                        "step": torch.tensor([step]),
+                        "score": torch.tensor([float(step * 7 % 15)]),
+                    },
+                    batch_size=[1],
+                )
+            )
+        target = ReplayBuffer(storage=LazyTensorStorage(100))
+        prefill_replay_buffer(target, offline)
+        assert torch.equal(target[:]["step"], offline[:]["step"])
+
     def test_prefill_multidim_storage_is_sampled(self):
-        """A multi-dimensional dataset storage is still drawn with ``sample()``."""
+        """A multi-dimensional dataset storage is still drawn with ``dataset.sample()``.
+
+        Under a fixed seed the copy matches the dataset's own draws of 16, 16
+        and 8 transitions, the chunks ``n_samples=40`` and ``chunk_size=16``
+        ask for.
+        """
         offline = ReplayBuffer(storage=LazyTensorStorage(150, ndim=2))
         offline.extend(
             TensorDict({"step": torch.arange(150).reshape(50, 3)}, batch_size=[50, 3])
         )
+        torch.manual_seed(0)
+        expected = torch.cat([offline.sample(n)["step"] for n in (16, 16, 8)])
         target = ReplayBuffer(storage=LazyTensorStorage(1000))
+        torch.manual_seed(0)
         prefill_replay_buffer(target, offline, n_samples=40, chunk_size=16)
-        assert len(target) == 40
+        assert torch.equal(target[:]["step"], expected)
 
     def test_prefill_respects_chunk_size(self, monkeypatch):
         offline = _make_offline_buffer(n=1000)

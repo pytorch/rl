@@ -13,6 +13,7 @@ from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBufferEnsemble,
 )
 from torchrl.data.replay_buffers.storages import LazyTensorStorage, Storage
+from torchrl.data.replay_buffers.writers import RoundRobinWriter
 
 
 class OfflineToOnlineReplayBuffer:
@@ -237,12 +238,15 @@ def prefill_replay_buffer(
     who want a single flat buffer (no per-batch sampling ratio, slightly higher
     memory usage since offline data is copied).
 
-    For a one-dimensional storage, transitions are read with
-    ``dataset[index]`` in insertion order (oldest first once a circular
-    storage has wrapped), so each stored transition is copied exactly once,
-    the dataset's transforms are applied, and trajectories stay contiguous
-    for slice or sequence samplers on ``rb``. For a multi-dimensional storage
-    or a :class:`~torchrl.data.ReplayBufferEnsemble`, chunks are drawn with
+    For a buffer with a local one-dimensional storage, transitions are read
+    with ``dataset[index]``, so each stored transition is copied exactly once
+    and the dataset's transforms are applied. They are read in storage order,
+    starting from the oldest transition once a round-robin storage has
+    wrapped, so trajectories stay contiguous for slice or sequence samplers on
+    ``rb`` (a storage loaded from a state dict does not keep its write cursor
+    and is read from index 0). For a multi-dimensional storage, a
+    :class:`~torchrl.data.ReplayBufferEnsemble` or a buffer whose storage is
+    not local (such as a Ray-backed buffer), chunks are drawn with
     ``dataset.sample()``, which samples with the dataset's sampler.
 
     Args:
@@ -278,11 +282,13 @@ def prefill_replay_buffer(
 
         dataset = load_dataset(dataset, batch_size=chunk_size)
 
+    storage = vars(dataset).get("_storage")
     if (
         isinstance(dataset, ReplayBufferEnsemble)
-        or getattr(dataset.storage, "ndim", 1) > 1
+        or not isinstance(storage, Storage)
+        or getattr(storage, "ndim", 1) > 1
     ):
-        total = min(n_samples, len(dataset)) if n_samples is not None else len(dataset)
+        total = len(dataset) if n_samples is None else min(n_samples, len(dataset))
         copied = 0
         while copied < total:
             this_chunk = min(chunk_size, total - copied)
@@ -290,15 +296,18 @@ def prefill_replay_buffer(
             copied += this_chunk
         return rb
 
-    storage = dataset.storage
     storage_length = len(storage)
-    total = min(n_samples, storage_length) if n_samples is not None else storage_length
+    total = storage_length if n_samples is None else min(n_samples, storage_length)
     oldest = 0
     last_write = _last_write_index(getattr(storage, "_last_cursor_index", None))
-    if storage._is_full and last_write is not None:
+    if (
+        storage._is_full
+        and last_write is not None
+        and isinstance(dataset.writer, RoundRobinWriter)
+    ):
         oldest = (last_write % storage_length + 1) % storage_length
-    order = (torch.arange(total) + oldest) % storage_length
-    for start in range(0, total, chunk_size):
+    order = (torch.arange(max(total, 0)) + oldest) % storage_length
+    for start in range(0, len(order), chunk_size):
         rb.extend(dataset[order[start : start + chunk_size]])
 
     return rb
