@@ -954,22 +954,25 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert fake_data.shape == (tensordict.shape[0], 3)
 
     @pytest.mark.parametrize(
-        "estimator,expected",
+        "estimator,time_dim,expected",
         [
-            (ValueEstimators.TDLambda, [20.25, 28.5, 33.0]),
-            (ValueEstimators.TD0, [11.0, 22.0, 33.0]),
-            (ValueEstimators.TD1, [36.0, 35.0, 33.0]),
+            (ValueEstimators.TDLambda, None, [20.25, 28.5, 33.0]),
+            (ValueEstimators.TDLambda, -2, [20.25, 28.5, 33.0]),
+            (ValueEstimators.TD0, None, [11.0, 22.0, 33.0]),
+            (ValueEstimators.TD1, None, [36.0, 35.0, 33.0]),
+            (ValueEstimators.TD1, -2, [36.0, 35.0, 33.0]),
         ],
     )
     def test_dreamer_v3_lambda_target_without_continuation(
-        self, device, estimator, expected
+        self, device, estimator, time_dim, expected
     ):
         """Without a continuation model, targets follow the configured estimator over time.
 
         The returns are computed over dim ``-2`` of ``[batch, T, 1]`` inputs.
         Before the fix every estimator collapsed to the one-step target
         ``r + gamma * V'`` (``[11, 22, 33]`` here), because the trailing
-        singleton dim was taken as the time dim.
+        singleton dim was taken as the time dim. ``time_dim=-2`` on the
+        estimator, the old workaround, must give the same targets.
         """
         loss_module = DreamerV3ActorLoss(
             self._create_actor_model_with_log_prob().to(device),
@@ -978,6 +981,8 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             imagination_horizon=3,
         )
         hyperparams = {"gamma": 1.0}
+        if time_dim is not None:
+            hyperparams["time_dim"] = time_dim
         if estimator == ValueEstimators.TDLambda:
             hyperparams["lmbda"] = 0.5
         loss_module.make_value_estimator(estimator, **hyperparams)

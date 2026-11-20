@@ -967,7 +967,9 @@ class DreamerV3ActorLoss(LossModule):
             continuation (torch.Tensor, optional): continuation probabilities,
                 same shape as ``reward``. When given, the TD(lambda) recursion
                 is discounted by it at every step. When ``None``, the
-                configured value estimator is used, with time on dim ``-2``.
+                configured value estimator is used over dim ``-2``; a
+                ``time_dim`` set on the estimator is overridden, since the
+                layout is fixed.
 
         Returns:
             torch.Tensor: the targets, same shape as ``reward``.
@@ -998,7 +1000,7 @@ class DreamerV3ActorLoss(LossModule):
             },
             reward.shape[:-1],
         )
-        return self.value_estimator.value_estimate(input_tensordict)
+        return self.value_estimator.value_estimate(input_tensordict, time_dim=-1)
 
     SUPPORTED_VALUE_ESTIMATORS = (
         ValueEstimators.TD0,
