@@ -43,9 +43,9 @@ class WorldModelEnv(ModelBasedEnvBase):
 
     Specs are taken from a reference env so that the imagined env presents
     the same action / reward / done specs as the real one. The observation
-    spec defaults to the latent representation (under ``latent_key``); pass
-    ``observation_spec=`` to override (e.g. when a decoder is present and the
-    env should expose decoded observations).
+    spec defaults to the reference env's, with the latent representation
+    (under ``latent_key``) added when it is missing; pass
+    ``observation_spec=`` to override it.
 
     Args:
         world_model (WorldModel): the prediction module that the env drives.
@@ -58,18 +58,15 @@ class WorldModelEnv(ModelBasedEnvBase):
 
     Keyword Args:
         observation_spec (TensorSpec, optional): override for the observation
-            spec. When ``None`` and ``base_env`` declares ``latent_key`` (for
-            instance a reference env that only carries specs), its
-            observation spec is reused. When ``None`` and ``base_env`` does
-            not declare it (a real env exposing raw observations), the env
-            exposes only the latent state under ``latent_key``, with its spec
-            inferred by running the world model's encoder once on
-            ``base_env.fake_tensordict()`` (the world model must then already
-            be on ``device``). A non-composite override is stored under
-            ``"observation"``, as :class:`~torchrl.envs.EnvBase` does. When an
-            override does not contain ``latent_key``, the latent spec is added
-            to it so that the latent state is always carried from one imagined
-            step to the next.
+            spec. Defaults to ``base_env``'s observation spec, so keys a
+            decoder writes under ``("next", ...)`` are exposed too. A
+            non-composite override is stored under ``"observation"``, as
+            :class:`~torchrl.envs.EnvBase` does. When the spec does not
+            contain ``latent_key``, the latent spec is added to it so that the
+            latent state is always carried from one imagined step to the next;
+            its shape and dtype are inferred by running the world model's
+            encoder once on zeros from ``base_env``'s observation spec (the
+            world model must then already be on ``device``).
         batch_size (torch.Size, optional): batch size for the env. Defaults
             to ``base_env.batch_size``.
         device (torch.device, optional): device for the env. Defaults to
@@ -162,20 +159,18 @@ class WorldModelEnv(ModelBasedEnvBase):
         self.reward_spec = self._expand_base_spec(base_env.reward_spec, base_env)
         self.done_spec = self._expand_base_spec(base_env.done_spec, base_env)
 
-        if isinstance(observation_spec, Composite):
+        if observation_spec is None:
+            observation_spec = self._expand_base_spec(
+                base_env.observation_spec, base_env
+            )
+        elif isinstance(observation_spec, Composite):
             observation_spec = observation_spec.clone()
-        elif observation_spec is not None:
+        else:
             observation_spec = Composite(
                 observation=observation_spec.clone(),
                 shape=self.batch_size,
                 device=self.device,
             )
-        elif latent_key in base_env.observation_spec.keys(include_nested=True):
-            observation_spec = self._expand_base_spec(
-                base_env.observation_spec, base_env
-            )
-        else:
-            observation_spec = Composite(shape=self.batch_size, device=self.device)
         if latent_key not in observation_spec.keys(include_nested=True):
             observation_spec[latent_key] = self._latent_spec(
                 world_model, base_env, latent_key
@@ -185,12 +180,14 @@ class WorldModelEnv(ModelBasedEnvBase):
     def _expand_base_spec(self, spec: TensorSpec, base_env: EnvBase) -> TensorSpec:
         """Expand a reference-env spec to ``(*self.batch_size, *feature_shape)``.
 
-        The feature shape is what remains of the spec shape once the reference
-        env's own batch dimensions are dropped, so an unbatched reference env
-        with an action of shape ``(1,)`` gives ``(*self.batch_size, 1)``.
+        The reference env's own batch dimensions are indexed away first, so an
+        unbatched reference env with an action of shape ``(1,)`` gives
+        ``(*self.batch_size, 1)``, and a reference env with batch size ``[2]``
+        can back an imagined env of any batch size.
         """
-        feature_shape = spec.shape[len(base_env.batch_size) :]
-        return spec.expand(*self.batch_size, *feature_shape).clone()
+        if base_env.batch_size:
+            spec = spec[(0,) * len(base_env.batch_size)]
+        return spec.expand(*self.batch_size, *spec.shape).clone()
 
     def _latent_spec(
         self, world_model: WorldModel, base_env: EnvBase, latent_key: NestedKey
@@ -198,10 +195,10 @@ class WorldModelEnv(ModelBasedEnvBase):
         """Build the spec of the latent state stepped by the world model.
 
         The reference env's own spec is used when it already declares
-        ``latent_key``. Otherwise the encoder is run once on a fake tensordict
-        of the reference env, expanded to this env's batch size when the
-        reference env is unbatched and moved to this env's device, to read the
-        latent's feature shape and dtype. The pass runs without gradients, in
+        ``latent_key``. Otherwise the encoder is run once on zeros drawn from
+        the reference env's observation spec, expanded to this env's batch
+        size and device, to read the latent's feature shape and dtype. The
+        pass runs without gradients, in
         eval mode and with a forked RNG, and every encoder submodule gets its
         training flag back afterwards, so running statistics, dropout masks
         and the global seed are left untouched.
@@ -214,10 +211,11 @@ class WorldModelEnv(ModelBasedEnvBase):
         base_observation_spec = base_env.full_observation_spec
         if latent_key in base_observation_spec.keys(include_nested=True):
             return self._expand_base_spec(base_observation_spec[latent_key], base_env)
-        fake_tensordict = base_env.fake_tensordict()
-        if not base_env.batch_size:
-            fake_tensordict = fake_tensordict.expand(self.batch_size)
-        fake_tensordict = fake_tensordict.to(self.device)
+        observations = (
+            self._expand_base_spec(base_observation_spec, base_env)
+            .zero()
+            .to(self.device)
+        )
         encoder = world_model.encoder
         training_flags = [(module, module.training) for module in encoder.modules()]
         rng_devices = (
@@ -228,18 +226,19 @@ class WorldModelEnv(ModelBasedEnvBase):
         encoder.eval()
         try:
             with torch.no_grad(), torch.random.fork_rng(devices=rng_devices):
-                latent = world_model.encode(fake_tensordict).get(latent_key)
+                latent = world_model.encode(observations).get(latent_key)
         except (KeyError, RuntimeError) as err:
             raise ValueError(
                 f"WorldModelEnv could not infer the spec of {latent_key!r} by "
-                f"running the world model's encoder on base_env.fake_tensordict(). "
-                f"Pass an observation_spec that contains {latent_key!r}, or check "
-                f"that the world model is on the env device ({self.device})."
+                f"running the world model's encoder on the reference env's "
+                f"observations ({type(err).__name__}: {err}). Pass an "
+                f"observation_spec that contains {latent_key!r}, or check that "
+                f"the world model is on the env device ({self.device})."
             ) from err
         finally:
             for module, training in training_flags:
                 module.training = training
-        feature_shape = latent.shape[fake_tensordict.batch_dims :]
+        feature_shape = latent.shape[len(self.batch_size) :]
         return Unbounded(
             shape=(*self.batch_size, *feature_shape),
             dtype=latent.dtype,
