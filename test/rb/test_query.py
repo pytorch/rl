@@ -332,6 +332,37 @@ class TestReplayBufferQuery:
         assert torch.equal(first.done, episodes[0]["next", "done"])
         assert not first["done"].any()
 
+    def test_query_key_resolution(self):
+        """Done keys, flat or nested, resolve under ``"next"`` first; other keys at the root first.
+
+        A root ``reward`` (for instance a reward-model output) wins over
+        ``("next", "reward")``, a done key stored only at the root is still
+        found, ``("done",)`` resolves like ``"done"``, and a nested done key
+        reaches its post-step entry through query planning.
+        """
+        end = torch.tensor([False, False, False, True] * 2).unsqueeze(-1)
+        data = TensorDict(
+            {
+                "episode": torch.tensor([0] * 4 + [1] * 4),
+                "reward": torch.full((8, 1), 2.0),
+                "done": torch.zeros_like(end),
+                "terminated": end.clone(),
+                "agents": {"done": torch.zeros_like(end)},
+                "next": {
+                    "reward": torch.ones(8, 1),
+                    "done": end.clone(),
+                    "agents": {"done": end.clone()},
+                },
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(8))
+        rb.extend(data)
+        assert len(rb.query(traj[("agents", "done")].last() == 1)) == 2
+        assert len(rb.query(traj[("done",)].last() == 1)) == 2
+        assert len(rb.query(traj.terminated.last() == 1)) == 2
+        assert len(rb.query(traj.reward.sum() == 8.0)) == 2
+
     def test_query_predicate(self):
         rb = self._make_rb()
         kept = rb.query((traj.reward.sum() > 6.0) | (traj.length == 3))

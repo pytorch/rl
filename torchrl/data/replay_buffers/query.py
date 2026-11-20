@@ -27,15 +27,35 @@ _END_KEY_GROUPS = (
 _NEXT_FIRST_KEYS = frozenset(DEFAULT_DONE_KEYS)
 
 
+def _candidate_keys(key: NestedKey) -> tuple:
+    """The keys tried, in order, when a trajectory resolves ``key``.
+
+    A done key (``done``, ``terminated`` or ``truncated``, flat or as the
+    last element of a nested key such as ``("agents", "done")``) is looked up
+    under ``"next"`` first, then at the root. Any other flat key is looked up
+    at the root first, then under ``"next"``. Any other nested key is looked
+    up as given.
+    """
+    key = unravel_key(key)
+    if isinstance(key, str):
+        if key in _NEXT_FIRST_KEYS:
+            return (("next", key), key)
+        return (key, ("next", key))
+    if key[0] != "next" and key[-1] in _NEXT_FIRST_KEYS:
+        return (("next", *key), key)
+    return (key,)
+
+
 class Trajectory(TensorClass["nocast"]):
     """A trajectory-first view over a contiguous slice of transitions.
 
     A single-field tensorclass wrapping a :class:`~tensordict.TensorDictBase`
     that holds the transitions of one trajectory, exposing its entries as
-    attributes. The done keys (``done``, ``terminated`` and ``truncated``)
-    resolve to the ``("next", ...)`` entry first and fall back to the root,
-    because ``env.rollout`` and collectors write both and only the post-step
-    flags mark episode ends. Every other key resolves against the root first
+    attributes. The done keys (``done``, ``terminated`` and ``truncated``,
+    flat or nested such as ``("agents", "done")``) resolve to the
+    ``("next", ...)`` entry first and fall back to the root, because
+    ``env.rollout`` and collectors write both and only the post-step flags
+    mark episode ends. Every other flat key resolves against the root first
     and falls back to ``("next", ...)``, so ``traj.reward`` returns the
     post-step reward while ``traj.observation``, ``traj.state`` or
     ``traj.action`` return root entries. Query field expressions such as
@@ -89,19 +109,13 @@ class Trajectory(TensorClass["nocast"]):
         return self.reward.sum()
 
     def get(self, key: NestedKey, default=None) -> torch.Tensor | None:
-        """Resolve ``key`` against the root tensordict and ``("next", key)``.
+        """Resolve ``key`` against the root tensordict and ``("next", ...)``.
 
-        The done keys look up ``("next", key)`` first, every other string
-        key looks up the root first. Nested keys are resolved as given.
+        Done keys are looked up under ``"next"`` first, other flat keys at
+        the root first, and other nested keys as given.
         """
-        data = self.data
-        if not isinstance(key, str):
-            return data.get(key, default)
-        candidates = (key, ("next", key))
-        if key in _NEXT_FIRST_KEYS:
-            candidates = candidates[::-1]
-        for candidate in candidates:
-            value = data.get(candidate, None)
+        for candidate in _candidate_keys(key):
+            value = self.data.get(candidate, None)
             if value is not None:
                 return value
         return default
@@ -342,7 +356,8 @@ class _FieldExpr(_ComparableExpr):
         value = trajectory.get(self._key)
         if value is None:
             raise KeyError(
-                f"Key {self._key!r} not found in trajectory (looked up {self._key!r} and ('next', {self._key!r}))."
+                f"Key {self._key!r} not found in trajectory (looked up "
+                f"{', '.join(map(repr, _candidate_keys(self._key)))})."
             )
         return value
 
@@ -593,10 +608,7 @@ def _expand_required_keys(keys: frozenset) -> set:
     """Adds the ``("next", key)`` candidates used by attribute resolution."""
     expanded = set()
     for key in keys:
-        key = unravel_key(key)
-        expanded.add(key)
-        if isinstance(key, str):
-            expanded.add(("next", key))
+        expanded.update(_candidate_keys(key))
     return expanded
 
 
