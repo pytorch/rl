@@ -49,11 +49,12 @@ class _SafetyGymCostMixin:
 
     def _post_init_cost(self) -> None:
         self.observation_spec["cost"] = Unbounded(shape=(), dtype=torch.float64)
-        self._last_cost = torch.zeros((), dtype=torch.float64)
+        self._step_cost = torch.zeros((), dtype=torch.float64)
 
     def _output_transform(self, step_outputs_tuple):
         observations, reward, cost, terminated, truncated, info = step_outputs_tuple
-        self._last_cost = torch.as_tensor(cost, dtype=torch.float64)
+        # Called once per skipped frame, so the cost is summed like the reward.
+        self._step_cost = self._step_cost + torch.as_tensor(cost, dtype=torch.float64)
         return (
             observations,
             reward,
@@ -64,13 +65,14 @@ class _SafetyGymCostMixin:
         )
 
     def _step(self, tensordict):
+        self._step_cost = torch.zeros_like(self._step_cost)
         out = super()._step(tensordict)
-        out.set("cost", self._last_cost)
+        out.set("cost", self._step_cost)
         return out
 
     def _reset(self, tensordict=None, **kwargs):
         out = super()._reset(tensordict, **kwargs)
-        out.set("cost", torch.zeros_like(self._last_cost))
+        out.set("cost", torch.zeros_like(self._step_cost))
         return out
 
 
@@ -85,7 +87,8 @@ class SafetyGymnasiumWrapper(_SafetyGymCostMixin, GymWrapper):
 
     The underlying ``step`` API returns a 6-tuple. This wrapper folds
     ``cost`` into the output tensordict as a top-level key alongside
-    ``reward``.
+    ``reward``. With ``frame_skip > 1``, ``cost`` is summed over the skipped
+    frames, like ``reward``.
 
     Args:
         env (safety_gymnasium.Env): the environment to wrap.
