@@ -24,7 +24,7 @@ _END_KEY_GROUPS = (
     tuple(("next", key) for key in DEFAULT_DONE_KEYS),
     tuple(DEFAULT_DONE_KEYS),
 )
-_STEP_OUTPUT_KEYS = frozenset(("reward", *DEFAULT_DONE_KEYS))
+_NEXT_FIRST_KEYS = frozenset(DEFAULT_DONE_KEYS)
 
 
 class Trajectory(TensorClass["nocast"]):
@@ -32,14 +32,16 @@ class Trajectory(TensorClass["nocast"]):
 
     A single-field tensorclass wrapping a :class:`~tensordict.TensorDictBase`
     that holds the transitions of one trajectory, exposing its entries as
-    attributes. Step outputs (``reward``, ``done``, ``terminated`` and
-    ``truncated``) resolve to the ``("next", ...)`` entry first and fall back
-    to the root, so ``traj.reward`` and ``traj.done`` return the conventional
-    post-step entries even though ``env.rollout`` and collectors also write a
-    root ``done`` at every step. Every other key resolves against the root
-    first and falls back to ``("next", ...)``, so ``traj.observation``,
-    ``traj.state`` or ``traj.action`` return root entries. Index the
-    trajectory (``trajectory["done"]``) to read a root entry directly.
+    attributes. The done keys (``done``, ``terminated`` and ``truncated``)
+    resolve to the ``("next", ...)`` entry first and fall back to the root,
+    because ``env.rollout`` and collectors write both and only the post-step
+    flags mark episode ends. Every other key resolves against the root first
+    and falls back to ``("next", ...)``, so ``traj.reward`` returns the
+    post-step reward while ``traj.observation``, ``traj.state`` or
+    ``traj.action`` return root entries. Query field expressions such as
+    ``traj.done`` and ``traj["done"]`` resolve the same way, while indexing a
+    :class:`Trajectory` (``trajectory["done"]``) reads the entry exactly as
+    given.
 
     Being a tensorclass, slicing and indexing return :class:`Trajectory`
     instances, and trajectories of different lengths can be assembled into a
@@ -89,15 +91,14 @@ class Trajectory(TensorClass["nocast"]):
     def get(self, key: NestedKey, default=None) -> torch.Tensor | None:
         """Resolve ``key`` against the root tensordict and ``("next", key)``.
 
-        Step outputs (``reward`` and the done keys) look up ``("next", key)``
-        first, every other string key looks up the root first. Nested keys
-        are resolved as given.
+        The done keys look up ``("next", key)`` first, every other string
+        key looks up the root first. Nested keys are resolved as given.
         """
         data = self.data
         if not isinstance(key, str):
             return data.get(key, default)
         candidates = (key, ("next", key))
-        if key in _STEP_OUTPUT_KEYS:
+        if key in _NEXT_FIRST_KEYS:
             candidates = candidates[::-1]
         for candidate in candidates:
             value = data.get(candidate, None)
@@ -341,7 +342,7 @@ class _FieldExpr(_ComparableExpr):
         value = trajectory.get(self._key)
         if value is None:
             raise KeyError(
-                f"Key {self._key!r} not found in trajectory (looked up root and ('next', ...))."
+                f"Key {self._key!r} not found in trajectory (looked up {self._key!r} and ('next', {self._key!r}))."
             )
         return value
 
@@ -391,7 +392,8 @@ class _TrajectoryRef:
     """Entry point of the trajectory query language.
 
     Attribute access returns a field expression resolved against each
-    trajectory (root keys first, then ``("next", ...)``); indexing with an
+    trajectory with :meth:`Trajectory.get` (``("next", ...)`` first for the
+    done keys, root first for every other key); indexing with an
     explicit (possibly nested) key does the same for keys that are not valid
     attribute names. Field expressions support elementwise comparisons
     (reduce with ``.any()``/``.all()``) and reductions (``.sum()``,

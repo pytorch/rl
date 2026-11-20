@@ -23,7 +23,7 @@ from torchrl.data import (
     Trajectory,
 )
 from torchrl.envs.transforms import Transform
-from torchrl.testing.mocking_classes import CountingEnv
+from torchrl.testing.mocking_classes import CountingEnv, CountingEnvCountPolicy
 
 
 class _CountingObsTransform(Transform):
@@ -318,7 +318,8 @@ class TestReplayBufferQuery:
         entry first, so no trajectory ever matched an episode-end predicate.
         """
         env = CountingEnv(max_steps=3)
-        episodes = [env.rollout(10), env.rollout(10)]
+        policy = CountingEnvCountPolicy(env.action_spec)
+        episodes = [env.rollout(10, policy), env.rollout(10, policy)]
         data = torch.cat(episodes)
         data["episode"] = torch.cat(
             [torch.full((len(episode),), i) for i, episode in enumerate(episodes)]
