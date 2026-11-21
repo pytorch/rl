@@ -10,7 +10,13 @@ from typing import Any
 
 from omegaconf import MISSING
 
-from torchrl.envs.transforms import DoneTransform, ExpandAs, LastAction, RewardSum
+from torchrl.envs.transforms import (
+    DoneTransform,
+    ExpandAs,
+    LastAction,
+    MultiStepTransform,
+    RewardSum,
+)
 from torchrl.envs.utils import ExplorationType
 
 from torchrl.trainers.algorithms.configs.common import (
@@ -293,13 +299,17 @@ class EndOfLifeTransformConfig(TransformConfig):
 
 @dataclass
 class MultiStepTransformConfig(TransformConfig):
-    """Configuration for MultiStepTransform."""
+    """Hydra configuration for :class:`~torchrl.envs.transforms.MultiStepTransform`."""
 
     n_steps: int = 3
     gamma: float = 0.99
-    in_keys: list[str] | None = None
-    out_keys: list[str] | None = None
-    _target_: str = "torchrl.envs.transforms.rb_transforms.MultiStepTransform"
+    reward_keys: list[Any] | None = None
+    done_key: Any = None
+    done_keys: list[Any] | None = None
+    mask_key: Any = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.transforms._make_multi_step_transform"
+    )
 
     def __post_init__(self) -> None:
         """Post-initialization hook for MultiStepTransform configuration."""
@@ -1051,6 +1061,21 @@ def _make_last_action_transform(*args, **kwargs) -> LastAction:
         in_keys=in_keys,
         out_keys=out_keys,
         reset_key=reset_key,
+        **kwargs,
+    )
+
+
+def _make_multi_step_transform(*args, **kwargs) -> MultiStepTransform:
+    reward_keys = _normalize_hydra_keys(kwargs.pop("reward_keys", None))
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", None))
+    done_keys = _normalize_hydra_keys(kwargs.pop("done_keys", None))
+    mask_key = _normalize_hydra_key(kwargs.pop("mask_key", None))
+    return MultiStepTransform(
+        *args,
+        reward_keys=reward_keys,
+        done_key=done_key,
+        done_keys=done_keys,
+        mask_key=mask_key,
         **kwargs,
     )
 
