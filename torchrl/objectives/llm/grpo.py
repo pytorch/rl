@@ -410,6 +410,7 @@ class GRPOLoss(LossModule):
             (see table and description; enables per-token trust region).
         aggregation (str, optional): loss aggregation strategy for the policy objective.
             - "token_mean": global masked token mean (weights long sequences more). Default.
+              With ``reduction="sum"``, returns the masked token sum instead.
             - "prompt_mean": per-sample masked mean over tokens, then mean across samples (equal sample weight).
             - "none": return per-token loss (mask applied, no aggregation). Useful for downstream custom reductions.
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
@@ -801,7 +802,8 @@ class GRPOLoss(LossModule):
         """Aggregate a per-token loss tensor using the configured strategy.
 
         Supports:
-            - token_mean: masked mean across all tokens (default)
+            - token_mean: masked mean across all tokens (default), or masked sum
+              when reduction="sum"
             - prompt_mean: per-sample masked mean over tokens, then mean across batch
             - none: return per-token loss with masked-out tokens set to 0
 
@@ -820,10 +822,10 @@ class GRPOLoss(LossModule):
             sample_mean = token_sum / token_count
             return sample_mean.mean(dim=0, keepdim=False)
 
-        # token_mean (global masked mean)
+        # token_mean (global masked token reduction)
         mask_exp = expand_as_right(mask, value)
         return self._reduce_loss(
-            value, tensordict=tensordict, reduction="mean", mask=mask_exp
+            value, tensordict=tensordict, reduction=self.reduction, mask=mask_exp
         ).squeeze(-1)
 
     def _get_entropy(
