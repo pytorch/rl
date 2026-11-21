@@ -308,7 +308,7 @@ counting only generation-stale handles.
 
 ## Offline-to-online helpers
 
-| [`prefill_replay_buffer`](generated/torchrl.data.prefill_replay_buffer.html#torchrl.data.prefill_replay_buffer)(rb, dataset[, ...]) | Copy samples from an offline dataset into a mutable replay buffer. |
+| [`prefill_replay_buffer`](generated/torchrl.data.prefill_replay_buffer.html#torchrl.data.prefill_replay_buffer)(rb, dataset[, ...]) | Copy the transitions of an offline dataset into a mutable replay buffer. |
 | --- | --- |
 
 ## Trajectory queries
