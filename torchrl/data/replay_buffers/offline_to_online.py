@@ -7,11 +7,11 @@ from __future__ import annotations
 import torch
 from tensordict import TensorDictBase
 
-from torchrl.data.replay_buffers.query import _last_write_index
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
     ReplayBufferEnsemble,
 )
+from torchrl.data.replay_buffers.samplers import ConsumingSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage, Storage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 
@@ -243,11 +243,11 @@ def prefill_replay_buffer(
     and the dataset's transforms are applied. They are read in storage order,
     starting from the oldest transition once a round-robin storage has
     wrapped, so trajectories stay contiguous for slice or sequence samplers on
-    ``rb`` (a storage loaded from a state dict does not keep its write cursor
-    and is read from index 0). For a multi-dimensional storage, a
-    :class:`~torchrl.data.ReplayBufferEnsemble` or a buffer whose storage is
-    not local (such as a Ray-backed buffer), chunks are drawn with
-    ``dataset.sample()``, which samples with the dataset's sampler.
+    ``rb``. For a multi-dimensional storage, a
+    :class:`~torchrl.data.ReplayBufferEnsemble`, a buffer whose storage is not
+    local (such as a Ray-backed buffer) or a buffer with a
+    :class:`~torchrl.data.replay_buffers.ConsumingSampler`, chunks are drawn
+    with ``dataset.sample()``, which samples with the dataset's sampler.
 
     Args:
         rb (ReplayBuffer): a mutable replay buffer to seed.
@@ -287,6 +287,7 @@ def prefill_replay_buffer(
         isinstance(dataset, ReplayBufferEnsemble)
         or not isinstance(storage, Storage)
         or getattr(storage, "ndim", 1) > 1
+        or isinstance(dataset.sampler, ConsumingSampler)
     ):
         total = len(dataset) if n_samples is None else min(n_samples, len(dataset))
         copied = 0
@@ -299,13 +300,8 @@ def prefill_replay_buffer(
     storage_length = len(storage)
     total = storage_length if n_samples is None else min(n_samples, storage_length)
     oldest = 0
-    last_write = _last_write_index(getattr(storage, "_last_cursor_index", None))
-    if (
-        storage._is_full
-        and last_write is not None
-        and isinstance(dataset.writer, RoundRobinWriter)
-    ):
-        oldest = (last_write % storage_length + 1) % storage_length
+    if storage._is_full and isinstance(dataset.writer, RoundRobinWriter):
+        oldest = int(dataset.writer._cursor) % storage_length
     order = (torch.arange(max(total, 0)) + oldest) % storage_length
     for start in range(0, len(order), chunk_size):
         rb.extend(dataset[order[start : start + chunk_size]])
