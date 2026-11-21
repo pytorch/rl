@@ -960,10 +960,10 @@ class DreamerV3ActorLoss(LossModule):
         """Compute lambda-return targets over an imagined trajectory.
 
         Args:
-            reward (torch.Tensor): imagined rewards of shape ``[*batch, T, 1]``,
-                with time on dim ``-2``. Without ``continuation``, a reward of
-                shape ``[*batch, T]`` with ``T > 1`` is also accepted; a
-                trailing dim of size 1 is always read as the feature dim.
+            reward (torch.Tensor): imagined rewards of shape
+                ``[*batch, T, 1]`` (at least three dims), with time on dim
+                ``-2``. A two-dim reward is read as ``[batch, T]``, with time
+                on the last dim.
             value (torch.Tensor): values of the next states, same shape as
                 ``reward``.
             continuation (torch.Tensor, optional): continuation probabilities,
@@ -975,7 +975,28 @@ class DreamerV3ActorLoss(LossModule):
 
         Returns:
             torch.Tensor: the targets, same shape as ``reward``.
+
+        Raises:
+            ValueError: if ``value`` does not have the shape of ``reward``, or
+                if a reward with three or more dims does not end with a
+                singleton feature dim.
         """
+        if value.shape != reward.shape:
+            raise ValueError(
+                f"lambda_target expects value to have the shape of reward, got "
+                f"{tuple(value.shape)} and {tuple(reward.shape)}."
+            )
+        if reward.ndim == 2:
+            if continuation is not None:
+                continuation = continuation.unsqueeze(-1)
+            return self.lambda_target(
+                reward.unsqueeze(-1), value.unsqueeze(-1), continuation
+            ).squeeze(-1)
+        if reward.ndim < 2 or reward.shape[-1] != 1:
+            raise ValueError(
+                f"lambda_target expects a reward of shape [*batch, T, 1] or "
+                f"[batch, T], got {tuple(reward.shape)}."
+            )
         if continuation is not None:
             gamma = self.value_estimator.gamma.to(reward)
             lmbda = self.value_estimator.lmbda.to(reward)
@@ -991,10 +1012,6 @@ class DreamerV3ActorLoss(LossModule):
                 )
                 returns.append(next_return)
             return torch.stack(returns[::-1], dim=-2)
-        if reward.shape[-1] != 1:
-            return self.lambda_target(
-                reward.unsqueeze(-1), value.unsqueeze(-1)
-            ).squeeze(-1)
         done = torch.zeros_like(reward, dtype=torch.bool)
         input_tensordict = TensorDict(
             {

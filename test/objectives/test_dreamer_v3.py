@@ -1005,6 +1005,35 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             expected,
         )
 
+    def test_dreamer_v3_lambda_target_layouts(self, device):
+        """Flat ``[batch, T]`` inputs match ``[batch, T, 1]``; malformed shapes raise.
+
+        With a continuation of 0.5, rewards ``[1, 2, 3]``, next values
+        ``[10, 20, 30]``, ``gamma=1`` and ``lmbda=0.5``, the targets are
+        ``[6.375, 11.5, 18]`` (as in the continuation test below).
+        """
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model_with_log_prob().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+        )
+        loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=1.0, lmbda=0.5)
+        reward = torch.tensor([[1.0, 2.0, 3.0]], device=device)
+        value = torch.tensor([[10.0, 20.0, 30.0]], device=device)
+        continuation = torch.full_like(reward, 0.5)
+        torch.testing.assert_close(
+            loss_module.lambda_target(reward, value, continuation),
+            torch.tensor([[6.375, 11.5, 18.0]], device=device),
+        )
+        with pytest.raises(ValueError, match="shape of reward"):
+            loss_module.lambda_target(reward, value.unsqueeze(-1))
+        with pytest.raises(ValueError, match=r"\[\*batch, T, 1\]"):
+            loss_module.lambda_target(
+                reward.unsqueeze(-1).expand(1, 3, 2),
+                value.unsqueeze(-1).expand(1, 3, 2),
+            )
+
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
         class _ConstantContinuation(nn.Module):
             def forward(self_, state, belief):
