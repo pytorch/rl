@@ -261,6 +261,20 @@ commands = {
   buffer.size=120 \
   logger.backend=
 """,
+    "hil_serl": """python sota-implementations/hil_serl/hil_serl.py \
+  demos.num_demos=2 \
+  env.max_steps=20 \
+  collector.total_frames=48 \
+  collector.frames_per_batch=16 \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  optim.training_starts=16 \
+  replay.demo_capacity=1000 \
+  replay.online_capacity=1000 \
+  compile.compile=false \
+  logger.eval_every=48 \
+  logger.eval_episodes=1
+""",
     "sac": """python sota-implementations/sac/sac.py \
   env.max_episode_steps=20 \
   collector.total_frames=48 \
