@@ -532,6 +532,42 @@ class TestWorldModelEnv:
         torch.testing.assert_close(batch_norm.running_mean, running_mean)
         assert torch.equal(torch.get_rng_state(), rng_state)
 
+    def test_latent_spec_inference_reads_the_action(self):
+        """An encoder conditioned on the previous action gets its latent spec inferred."""
+        base_env = ContinuousActionVecMockEnv()
+        observation_dim = base_env.observation_spec["observation"].shape[-1]
+        action_dim = base_env.action_spec.shape[-1]
+        encoder = TensorDictModule(
+            CatLinear(observation_dim + action_dim, _WM_LATENT_DIM),
+            in_keys=["observation", "action"],
+            out_keys=["latent"],
+        )
+        wm = self._make_observation_world_model(
+            "latent", observation_dim, action_dim, encoder=encoder
+        )
+        env = WorldModelEnv(wm, base_env=base_env, batch_size=[_WM_BATCH])
+        assert env.observation_spec["latent"].shape == (_WM_BATCH, _WM_LATENT_DIM)
+
+    def test_latent_spec_inference_composite_latent(self):
+        """A latent stored as a sub-tensordict gets one spec entry per leaf."""
+        base_env = ContinuousActionVecMockEnv()
+        observation_dim = base_env.observation_spec["observation"].shape[-1]
+        action_dim = base_env.action_spec.shape[-1]
+        encoder = TensorDictModule(
+            lambda observation: (observation[..., :4], observation[..., :2].long()),
+            in_keys=["observation"],
+            out_keys=[("latent", "state"), ("latent", "belief")],
+        )
+        wm = self._make_observation_world_model(
+            "latent", observation_dim, action_dim, encoder=encoder
+        )
+        env = WorldModelEnv(wm, base_env=base_env, batch_size=[_WM_BATCH])
+        spec = env.observation_spec["latent"]
+        assert isinstance(spec, Composite)
+        assert spec["state"].shape == (_WM_BATCH, 4)
+        assert spec["belief"].shape == (_WM_BATCH, 2)
+        assert spec["belief"].dtype == torch.long
+
     def test_latent_spec_inference_error(self):
         """An encoder that reads a key the reference env does not declare gets a clear error."""
         base_env = ContinuousActionVecMockEnv()
