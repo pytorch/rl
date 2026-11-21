@@ -953,86 +953,81 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert torch.isfinite(loss_td["loss_actor"])
         assert fake_data.shape == (tensordict.shape[0], 3)
 
-    @pytest.mark.parametrize(
-        "estimator,time_dim,expected",
-        [
-            (ValueEstimators.TDLambda, None, [20.25, 28.5, 33.0]),
-            (ValueEstimators.TDLambda, -2, [20.25, 28.5, 33.0]),
-            (ValueEstimators.TD0, None, [11.0, 22.0, 33.0]),
-            (ValueEstimators.TD1, None, [36.0, 35.0, 33.0]),
-            (ValueEstimators.TD1, -2, [36.0, 35.0, 33.0]),
-        ],
-    )
-    def test_dreamer_v3_lambda_target_without_continuation(
-        self, device, estimator, time_dim, expected
-    ):
-        """Without a continuation model, targets follow the configured estimator over time.
-
-        The returns are computed over dim ``-2`` of ``[batch, T, 1]`` inputs,
-        and over the last dim of ``[batch, T]`` inputs. Before the fix every
-        estimator collapsed to the one-step target ``r + gamma * V'``
-        (``[11, 22, 33]`` for the first row), because the trailing singleton
-        dim was taken as the time dim. The second row (zero reward, unit
-        value) has the same targets for every estimator, so it catches
-        returns mixed across the batch. ``time_dim=-2`` on the estimator, the
-        old workaround, must give the same targets.
-        """
+    def _make_lambda_target_loss(self, device, estimator, **hyperparams):
         loss_module = DreamerV3ActorLoss(
             self._create_actor_model_with_log_prob().to(device),
             self._create_value_model().to(device),
             self._create_mb_env().to(device),
             imagination_horizon=3,
         )
-        hyperparams = {"gamma": 1.0}
-        if time_dim is not None:
-            hyperparams["time_dim"] = time_dim
-        if estimator == ValueEstimators.TDLambda:
-            hyperparams["lmbda"] = 0.5
-        loss_module.make_value_estimator(estimator, **hyperparams)
+        loss_module.make_value_estimator(estimator, gamma=1.0, **hyperparams)
+        return loss_module
 
+    @pytest.mark.parametrize(
+        "estimator,hyperparams,expected",
+        [
+            (ValueEstimators.TDLambda, {"lmbda": 0.5}, [20.25, 28.5, 33.0]),
+            (ValueEstimators.TD0, {}, [11.0, 22.0, 33.0]),
+            (ValueEstimators.TD1, {}, [36.0, 35.0, 33.0]),
+        ],
+    )
+    def test_dreamer_v3_lambda_target_without_continuation(
+        self, device, estimator, hyperparams, expected
+    ):
+        """Without a continuation model, ``[batch, T, 1]`` targets follow the estimator over T.
+
+        Rewards ``[1, 2, 3]`` and next values ``[10, 20, 30]`` with
+        ``gamma=1``. Before the fix every estimator returned the one-step
+        target ``r + gamma * V'`` (``[11, 22, 33]``), because the trailing
+        singleton dim was taken as time. The second row (zero reward, unit
+        value) has the same targets for every estimator, so it catches returns
+        mixed across the batch.
+        """
+        loss_module = self._make_lambda_target_loss(device, estimator, **hyperparams)
         reward = torch.tensor(
             [[[1.0], [2.0], [3.0]], [[0.0], [0.0], [0.0]]], device=device
         )
         value = torch.tensor(
             [[[10.0], [20.0], [30.0]], [[1.0], [1.0], [1.0]]], device=device
         )
-        expected = torch.tensor([expected, [1.0, 1.0, 1.0]], device=device)
         torch.testing.assert_close(
-            loss_module.lambda_target(reward, value), expected.unsqueeze(-1)
-        )
-        torch.testing.assert_close(
-            loss_module.lambda_target(reward.squeeze(-1), value.squeeze(-1)),
-            expected,
+            loss_module.lambda_target(reward, value),
+            torch.tensor([expected, [1.0, 1.0, 1.0]], device=device).unsqueeze(-1),
         )
 
-    def test_dreamer_v3_lambda_target_layouts(self, device):
-        """Flat ``[batch, T]`` inputs match ``[batch, T, 1]``; malformed shapes raise.
+    def test_dreamer_v3_lambda_target_other_layouts(self, device):
+        """Layouts outside ``[batch, T, 1]`` without ``time_dim`` keep their results.
 
-        With a continuation of 0.5, rewards ``[1, 2, 3]``, next values
-        ``[10, 20, 30]``, ``gamma=1`` and ``lmbda=0.5``, the targets are
-        ``[6.375, 11.5, 18]`` (as in the continuation test below).
+        A flat ``[batch, T]`` reward, an unbatched ``[T, 1]`` trajectory with a
+        continuation, and a time-major ``[T, batch, 1]`` input with the
+        estimator's ``time_dim=0`` were already handled and must not change.
+        With a continuation of 0.5 the targets are ``[6.375, 11.5, 18]``, as
+        in the continuation test below.
         """
-        loss_module = DreamerV3ActorLoss(
-            self._create_actor_model_with_log_prob().to(device),
-            self._create_value_model().to(device),
-            self._create_mb_env().to(device),
-            imagination_horizon=3,
+        reward = torch.tensor([1.0, 2.0, 3.0], device=device)
+        value = torch.tensor([10.0, 20.0, 30.0], device=device)
+        targets = torch.tensor([20.25, 28.5, 33.0], device=device)
+        loss_module = self._make_lambda_target_loss(
+            device, ValueEstimators.TDLambda, lmbda=0.5
         )
-        loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=1.0, lmbda=0.5)
-        reward = torch.tensor([[1.0, 2.0, 3.0]], device=device)
-        value = torch.tensor([[10.0, 20.0, 30.0]], device=device)
-        continuation = torch.full_like(reward, 0.5)
         torch.testing.assert_close(
-            loss_module.lambda_target(reward, value, continuation),
-            torch.tensor([[6.375, 11.5, 18.0]], device=device),
+            loss_module.lambda_target(reward[None], value[None]), targets[None]
         )
-        with pytest.raises(ValueError, match="shape of reward"):
-            loss_module.lambda_target(reward, value.unsqueeze(-1))
-        with pytest.raises(ValueError, match=r"\[\*batch, T, 1\]"):
+        torch.testing.assert_close(
             loss_module.lambda_target(
-                reward.unsqueeze(-1).expand(1, 3, 2),
-                value.unsqueeze(-1).expand(1, 3, 2),
-            )
+                reward[:, None],
+                value[:, None],
+                torch.full((3, 1), 0.5, device=device),
+            ),
+            torch.tensor([[6.375], [11.5], [18.0]], device=device),
+        )
+        time_major_loss = self._make_lambda_target_loss(
+            device, ValueEstimators.TDLambda, lmbda=0.5, time_dim=0
+        )
+        torch.testing.assert_close(
+            time_major_loss.lambda_target(reward[:, None, None], value[:, None, None]),
+            targets[:, None, None],
+        )
 
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
         class _ConstantContinuation(nn.Module):
