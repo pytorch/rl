@@ -14,7 +14,7 @@ import pytest
 import tensordict
 import torch
 from tensordict import lazy_stack, MetaData, TensorDict
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
 from torchrl.data.llm.history import _CHAT_TEMPLATES
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
@@ -942,6 +942,86 @@ def _sft_loss_data(ref_log_probs=None):
     return data
 
 
+def _ragged_sft_data(assistant_masks, attention_masks, ref_log_probs=None):
+    """Build a ragged batch of SFT inputs.
+
+    Each sequence keeps its own number of tokens. The history is a dummy since
+    the policies below score their own token ids.
+    """
+    items = []
+    for assistant_mask, attention_mask in zip(
+        assistant_masks, attention_masks, strict=True
+    ):
+        items.append(
+            TensorDict(
+                {
+                    ("history", "full"): torch.zeros(1, dtype=torch.long),
+                    ("masks", "all_assistant_mask"): assistant_mask.bool(),
+                    ("masks", "all_attention_mask"): attention_mask.bool(),
+                },
+                batch_size=[],
+            )
+        )
+    if ref_log_probs is not None:
+        for item, ref in zip(items, ref_log_probs, strict=True):
+            item[("next", "ref_log_probs", "full")] = ref
+    return lazy_stack(items)
+
+
+class _RaggedSFTPolicy(TensorDictModuleBase):
+    """Fixed per-sequence log-probabilities, returned as a ragged batch."""
+
+    in_keys = [("history", "full")]
+    out_keys = [("log_probs", "full")]
+
+    def __init__(self, log_probs):
+        super().__init__()
+        self.log_probs = log_probs
+
+    def forward(self, tensordict):
+        return lazy_stack(
+            [
+                TensorDict({("log_probs", "full"): lp}, batch_size=[])
+                for lp in self.log_probs
+            ]
+        )
+
+
+class _TrainableSFTPolicy(TensorDictModuleBase):
+    """Score fixed token ids with a trainable embedding and linear head.
+
+    The token ids belong to the policy so that sequences of different lengths
+    can be scored without padding.
+    """
+
+    in_keys = [("history", "full")]
+    out_keys = [("log_probs", "full")]
+
+    def __init__(self, token_ids, num_tokens=9, dim=4):
+        super().__init__()
+        self.token_ids = token_ids
+        self.embedding = torch.nn.Embedding(num_tokens, dim)
+        self.head = torch.nn.Linear(dim, num_tokens, bias=False)
+
+    def log_probs(self, token_ids):
+        logits = self.head(self.embedding(token_ids))
+        return (
+            torch.log_softmax(logits, dim=-1)
+            .gather(-1, token_ids.unsqueeze(-1))
+            .squeeze(-1)
+        )
+
+    def forward(self, tensordict):
+        return lazy_stack(
+            [
+                TensorDict(
+                    {("log_probs", "full"): self.log_probs(token_ids)}, batch_size=[]
+                )
+                for token_ids in self.token_ids
+            ]
+        )
+
+
 class TestSFT:
     @pytest.fixture(scope="class")
     def data(self):
@@ -1065,27 +1145,239 @@ class TestSFT:
 
         torch.testing.assert_close(loss.loss_sft, torch.tensor([0.3132617, 1.3132617]))
 
-    def test_sft_kl_to_reference(self):
-        policy = _FixedSFTPolicy(torch.tensor([[-2.0, -100.0], [-1.0, -3.0]]))
-        data = lazy_stack(
-            list(
-                _sft_loss_data(
-                    ref_log_probs=torch.tensor([[-4.0, 0.0], [-1.0, -1.0]])
-                ).unbind(0)
-            )
+    def test_sft_kl_uses_assistant_tokens_only(self):
+        cur = [
+            torch.tensor([-2.0, -0.7, -3.0, -1.1]),
+            torch.tensor([-0.9, -2.5, -1.3]),
+        ]
+        assistant = [
+            torch.tensor([False, True, False, True]),
+            torch.tensor([True, False, True]),
+        ]
+        attention = [
+            torch.ones(4, dtype=torch.bool),
+            torch.ones(3, dtype=torch.bool),
+        ]
+        # Full-length reference log-probs, with non-finite values on prompt
+        # positions: including any of them would change (or explode) the KL.
+        ref = [
+            torch.tensor([float("inf"), -0.6, float("inf"), -1.2]),
+            torch.tensor([-1.0, float("inf"), -1.0]),
+        ]
+        # k3 estimate on the assistant tokens only, computed by hand.
+        diff = torch.tensor([-0.6, -1.2, -1.0, -1.0]) - torch.tensor(
+            [-0.7, -1.1, -0.9, -1.3]
         )
+        expected_kl = (diff.expm1() - diff).mean()
         kl_to_ref_coeff = 0.25
-        loss = SFTLoss(
+
+        out = SFTLoss(
+            _RaggedSFTPolicy(cur),
+            tokenizer=object(),
+            kl_to_ref_coeff=kl_to_ref_coeff,
+        )(_ragged_sft_data(assistant, attention, ref))
+
+        torch.testing.assert_close(out.kl_to_ref, expected_kl)
+        torch.testing.assert_close(out.loss_kl_to_ref, kl_to_ref_coeff * expected_kl)
+        assert out.kl_to_ref.shape == ()
+        assert not out.kl_to_ref.requires_grad
+
+        # Zero-filling the excluded positions must leave the KL untouched.
+        ref_zeroed = [r.clone() for r in ref]
+        ref_zeroed[0][[0, 2]] = 0.0
+        ref_zeroed[1][1] = 0.0
+        out_zeroed = SFTLoss(
+            _RaggedSFTPolicy(cur),
+            tokenizer=object(),
+            kl_to_ref_coeff=kl_to_ref_coeff,
+        )(_ragged_sft_data(assistant, attention, ref_zeroed))
+        torch.testing.assert_close(out_zeroed.kl_to_ref, expected_kl)
+
+    def test_sft_kl_rejects_mismatched_reference_shape(self):
+        cur = [
+            torch.tensor([-2.0, -0.7, -3.0, -1.1]),
+            torch.tensor([-0.9, -2.5, -1.3]),
+        ]
+        assistant = [
+            torch.tensor([False, True, False, True]),
+            torch.tensor([True, False, True]),
+        ]
+        attention = [
+            torch.ones(4, dtype=torch.bool),
+            torch.ones(3, dtype=torch.bool),
+        ]
+        # The first reference sequence is one token too long: selecting the
+        # assistant mask on it would be silently misaligned.
+        ref = [
+            torch.tensor([0.0, -0.6, 0.0, -1.2, -0.3]),
+            torch.tensor([-1.0, 0.0, -1.0]),
+        ]
+        with pytest.raises(ValueError, match="different shapes"):
+            SFTLoss(
+                _RaggedSFTPolicy(cur),
+                tokenizer=object(),
+                kl_to_ref_coeff=0.25,
+            )(_ragged_sft_data(assistant, attention, ref))
+
+    @pytest.mark.parametrize("loss_function", ["sft", "minor_sft"])
+    def test_sft_objective_and_gradients_ignore_prompt_and_padding(self, loss_function):
+        assistant = [torch.tensor([True, True]), torch.tensor([True])]
+        attention = [torch.ones(2, dtype=torch.bool), torch.ones(1, dtype=torch.bool)]
+        ref = [torch.tensor([-0.6, -1.2]), torch.tensor([-1.0])]
+        base_ids = [torch.tensor([1, 2]), torch.tensor([3])]
+
+        long_assistant = [
+            torch.tensor([False, False, False, True, True]),
+            torch.tensor([False, False, True, True]),
+        ]
+        long_attention = [
+            torch.ones(5, dtype=torch.bool),
+            torch.tensor([True, True, True, False]),
+        ]
+        long_ids = [torch.tensor([4, 5, 6, 1, 2]), torch.tensor([7, 0, 3, 8])]
+        long_ref = [
+            torch.tensor([float("inf"), float("inf"), float("inf"), -0.6, -1.2]),
+            torch.tensor([float("inf"), float("inf"), -1.0, float("inf")]),
+        ]
+        other_ids = [torch.tensor([8, 7, 6, 1, 2]), torch.tensor([5, 4, 3, 0])]
+        other_ref = [
+            torch.tensor([0.0, 0.0, 0.0, -0.6, -1.2]),
+            torch.tensor([0.0, 0.0, -1.0, 0.0]),
+        ]
+
+        def run(token_ids, assistant_masks, attention_masks, ref_log_probs):
+            torch.manual_seed(0)
+            policy = _TrainableSFTPolicy(token_ids)
+            kwargs = {"tokenizer": object()}
+            if loss_function == "sft":
+                kwargs["kl_to_ref_coeff"] = 0.25
+            else:
+                kwargs["loss_function"] = "minor_sft"
+                kwargs["beta"] = 0.5
+            out = SFTLoss(policy, **kwargs)(
+                _ragged_sft_data(assistant_masks, attention_masks, ref_log_probs)
+            )
+            if loss_function == "sft":
+                out.sum(reduce=True).backward()
+            else:
+                out.loss_sft.backward()
+            return out, policy
+
+        out_base, policy_base = run(base_ids, assistant, attention, ref)
+        results = [
+            run(long_ids, long_assistant, long_attention, long_ref),
+            run(other_ids, long_assistant, long_attention, other_ref),
+        ]
+        excluded_ids = [0, 4, 5, 6, 7, 8]
+        assert policy_base.embedding.weight.grad[[1, 2, 3]].abs().sum() > 0
+        for out, policy in results:
+            torch.testing.assert_close(out.loss_sft, out_base.loss_sft)
+            if loss_function == "sft":
+                torch.testing.assert_close(out.loss_kl_to_ref, out_base.loss_kl_to_ref)
+            torch.testing.assert_close(
+                policy.head.weight.grad, policy_base.head.weight.grad
+            )
+            torch.testing.assert_close(
+                policy.embedding.weight.grad,
+                policy_base.embedding.weight.grad,
+                rtol=0,
+                atol=1e-6,
+            )
+            torch.testing.assert_close(
+                policy.embedding.weight.grad[excluded_ids],
+                torch.zeros(len(excluded_ids), policy.embedding.embedding_dim),
+                rtol=0,
+                atol=0,
+            )
+
+    @pytest.mark.parametrize("normalize_by_seq_length", [True, False])
+    def test_minor_sft_uses_assistant_masks_for_current_and_reference(
+        self, normalize_by_seq_length
+    ):
+        cur = [
+            torch.tensor([-2.0, -0.7, -3.0, -1.1]),
+            torch.tensor([-0.9, -2.5, -1.3]),
+        ]
+        assistant = [
+            torch.tensor([False, True, False, True]),
+            torch.tensor([True, False, True]),
+        ]
+        attention = [
+            torch.ones(4, dtype=torch.bool),
+            torch.ones(3, dtype=torch.bool),
+        ]
+        ref = [
+            torch.tensor([float("inf"), -0.6, float("inf"), -1.2]),
+            torch.tensor([-1.0, float("inf"), -1.0]),
+        ]
+        beta = 0.5
+        cur_sums = torch.stack(
+            [lp[mask].sum() for lp, mask in zip(cur, assistant, strict=True)]
+        )
+        ref_sums = torch.stack(
+            [lp[mask].sum() for lp, mask in zip(ref, assistant, strict=True)]
+        )
+        if normalize_by_seq_length:
+            lengths = torch.stack([mask.sum() for mask in assistant])
+            cur_sums = cur_sums / lengths
+            ref_sums = ref_sums / lengths
+        expected = -torch.nn.functional.logsigmoid(beta * (cur_sums - ref_sums))
+
+        out = SFTLoss(
+            _RaggedSFTPolicy(cur),
+            tokenizer=object(),
+            loss_function="minor_sft",
+            normalize_by_seq_length=normalize_by_seq_length,
+            reduction="none",
+            beta=beta,
+        )(_ragged_sft_data(assistant, attention, ref))
+
+        torch.testing.assert_close(out.loss_sft, expected)
+
+    def test_sft_gradients_match_assistant_only_oracle(self):
+        assistant = [torch.tensor([True, True]), torch.tensor([True])]
+        attention = [torch.ones(2, dtype=torch.bool), torch.ones(1, dtype=torch.bool)]
+        ref = [torch.tensor([-0.6, -1.2]), torch.tensor([-1.0])]
+        token_ids = [torch.tensor([1, 2]), torch.tensor([3])]
+        kl_to_ref_coeff = 0.25
+
+        torch.manual_seed(0)
+        policy = _TrainableSFTPolicy(token_ids)
+        out = SFTLoss(
             policy,
             tokenizer=object(),
             kl_to_ref_coeff=kl_to_ref_coeff,
-        )(data)
+        )(_ragged_sft_data(assistant, attention, ref))
+        out.sum(reduce=True).backward()
 
-        expected_kl = (
-            torch.exp(torch.tensor(-2.0)) + torch.exp(torch.tensor(2.0)) - 2
-        ) / 4
-        torch.testing.assert_close(loss.kl_to_ref, expected_kl)
-        torch.testing.assert_close(loss.loss_kl_to_ref, kl_to_ref_coeff * expected_kl)
+        # Independent objective: masked SFT sums plus the k3 estimate over the
+        # assistant tokens only, expressed directly from the policy outputs.
+        torch.manual_seed(0)
+        oracle_policy = _TrainableSFTPolicy(token_ids)
+        log_probs = [oracle_policy.log_probs(ids) for ids in token_ids]
+        lengths = torch.stack([mask.sum() for mask in assistant])
+        sft = -torch.stack(
+            [
+                lp[mask].sum() / length.clamp(min=1)
+                for lp, mask, length in zip(log_probs, assistant, lengths, strict=True)
+            ]
+        ).mean()
+        cur_tokens = torch.cat(
+            [lp[mask] for lp, mask in zip(log_probs, assistant, strict=True)]
+        )
+        ref_tokens = torch.cat(
+            [lp[mask] for lp, mask in zip(ref, assistant, strict=True)]
+        )
+        diff = ref_tokens - cur_tokens
+        kl = kl_to_ref_coeff * (diff.expm1() - diff).mean()
+        (sft + kl).backward()
+
+        torch.testing.assert_close(
+            policy.head.weight.grad, oracle_policy.head.weight.grad
+        )
+        torch.testing.assert_close(
+            policy.embedding.weight.grad, oracle_policy.embedding.weight.grad
+        )
 
     def test_sft_assistant_only(self, data):
         from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
