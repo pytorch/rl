@@ -32,18 +32,20 @@ def _candidate_keys(key: NestedKey) -> tuple:
 
     A done key (``done``, ``terminated`` or ``truncated``, flat or as the
     last element of a nested key such as ``("agents", "done")``) is looked up
-    under ``"next"`` first, then at the root. Any other flat key is looked up
-    at the root first, then under ``"next"``. Any other nested key is looked
-    up as given.
+    under ``"next"`` first, then at the root. Any other key is looked up at
+    the root first, then under ``"next"``. A key that already starts with
+    ``"next"`` is looked up as given.
     """
     key = unravel_key(key)
     if isinstance(key, str):
         if key in _NEXT_FIRST_KEYS:
             return (("next", key), key)
         return (key, ("next", key))
-    if key[0] != "next" and key[-1] in _NEXT_FIRST_KEYS:
+    if key[0] == "next":
+        return (key,)
+    if key[-1] in _NEXT_FIRST_KEYS:
         return (("next", *key), key)
-    return (key,)
+    return (key, ("next", *key))
 
 
 class Trajectory(TensorClass["nocast"]):
@@ -55,7 +57,7 @@ class Trajectory(TensorClass["nocast"]):
     flat or nested such as ``("agents", "done")``) resolve to the
     ``("next", ...)`` entry first and fall back to the root, because
     ``env.rollout`` and collectors write both and only the post-step flags
-    mark episode ends. Every other flat key resolves against the root first
+    mark episode ends. Every other key resolves against the root first
     and falls back to ``("next", ...)``, so ``traj.reward`` returns the
     post-step reward while ``traj.observation``, ``traj.state`` or
     ``traj.action`` return root entries. Query field expressions such as
@@ -111,8 +113,8 @@ class Trajectory(TensorClass["nocast"]):
     def get(self, key: NestedKey, default=None) -> torch.Tensor | None:
         """Resolve ``key`` against the root tensordict and ``("next", ...)``.
 
-        Done keys are looked up under ``"next"`` first, other flat keys at
-        the root first, and other nested keys as given.
+        Done keys are looked up under ``"next"`` first, other keys at the
+        root first, and keys starting with ``"next"`` as given.
         """
         for candidate in _candidate_keys(key):
             value = self.data.get(candidate, None)
@@ -144,7 +146,8 @@ def _trajectory_getattr(self, name: str):
         value = self.get(name)
         if value is None:
             raise AttributeError(
-                f"Trajectory has no entry {name!r} in its data (looked up {name!r} and {('next', name)!r}). "
+                f"Trajectory has no entry {name!r} in its data (looked up "
+                f"{', '.join(map(repr, _candidate_keys(name)))}). "
                 f"Available keys: {sorted(map(str, self.data.keys(include_nested=True, leaves_only=True)))}"
             ) from None
         return value

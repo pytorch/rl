@@ -337,8 +337,9 @@ class TestReplayBufferQuery:
 
         A root ``reward`` (for instance a reward-model output) wins over
         ``("next", "reward")``, a done key stored only at the root is still
-        found, ``("done",)`` resolves like ``"done"``, and a nested done key
-        reaches its post-step entry through query planning.
+        found, ``("done",)`` resolves like ``"done"``, a nested done key
+        reaches its post-step entry through query planning, and a nested key
+        stored only under ``"next"`` falls back to it like a flat key.
         """
         end = torch.tensor([False, False, False, True] * 2).unsqueeze(-1)
         data = TensorDict(
@@ -351,7 +352,7 @@ class TestReplayBufferQuery:
                 "next": {
                     "reward": torch.ones(8, 1),
                     "done": end.clone(),
-                    "agents": {"done": end.clone()},
+                    "agents": {"done": end.clone(), "reward": torch.ones(8, 1)},
                 },
             },
             batch_size=[8],
@@ -362,6 +363,7 @@ class TestReplayBufferQuery:
         assert len(rb.query(traj[("done",)].last() == 1)) == 2
         assert len(rb.query(traj.terminated.last() == 1)) == 2
         assert len(rb.query(traj.reward.sum() == 8.0)) == 2
+        assert len(rb.query(traj[("agents", "reward")].sum() == 4.0)) == 2
 
     def test_query_predicate(self):
         rb = self._make_rb()
