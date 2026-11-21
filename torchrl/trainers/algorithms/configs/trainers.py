@@ -690,13 +690,15 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
         actor_network = actor_network()
     if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
-    else:
-        critic_network = loss_module.critic_network
+    if isinstance(loss_module, LossModule):
+        # The loss is already built, so its critic is the one being trained.
+        critic_network = getattr(loss_module, "critic_network", None)
 
     # Ensure GAE in replay buffer uses the same value network instance as loss module
     # This fixes the issue where Hydra instantiates separate instances of value_model
     if (
-        replay_buffer is not None
+        critic_network is not None
+        and replay_buffer is not None
         and hasattr(replay_buffer, "_transform")
         and len(replay_buffer._transform) > 1
         and hasattr(replay_buffer._transform[1], "module")
@@ -1291,11 +1293,11 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
     log_observations = kwargs.pop("log_observations", False)
     hooks = kwargs.pop("hooks", None)
 
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if qvalue_network is not None:
+    if qvalue_network is not None and not isinstance(qvalue_network, torch.nn.Module):
         qvalue_network = qvalue_network()
-    if value_network is not None:
+    if value_network is not None and not isinstance(value_network, torch.nn.Module):
         value_network = value_network()
 
     if not isinstance(collector, BaseCollector):
@@ -1438,9 +1440,9 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     log_observations = kwargs.pop("log_observations", False)
     hooks = kwargs.pop("hooks", None)
 
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if qvalue_network is not None:
+    if qvalue_network is not None and not isinstance(qvalue_network, torch.nn.Module):
         qvalue_network = qvalue_network()
 
     if not isinstance(collector, BaseCollector):
