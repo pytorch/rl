@@ -129,6 +129,99 @@ def test_routed_streaming_replay_buffer(benchmark, operation):
         benchmark.pedantic(sample, setup=prepare_sample, rounds=50)
 
 
+_MIXED_CAPACITY = 100_000
+_MIXED_FRAMES = 1_000
+_MIXED_BATCH = 256
+
+
+def _mixed_source_members(device):
+    demo = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(_MIXED_CAPACITY, device=device),
+        sampler=PrioritizedSampler(_MIXED_CAPACITY, alpha=0.6, beta=0.4),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+    )
+    online = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(_MIXED_CAPACITY, device=device),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+    )
+    return demo, online
+
+
+def _mixed_source_batch(device, generator):
+    intervention = torch.rand(_MIXED_FRAMES, generator=generator) < 0.1
+    return TensorDict(
+        {
+            "observation": torch.randn(_MIXED_FRAMES, 32, generator=generator),
+            "action": torch.randn(_MIXED_FRAMES, 7, generator=generator),
+            ("next", "reward"): torch.zeros(_MIXED_FRAMES, 1),
+            "intervention": intervention.unsqueeze(-1),
+            "route": torch.stack([intervention, torch.ones_like(intervention)], -1),
+        },
+        [_MIXED_FRAMES],
+    ).to(device)
+
+
+@pytest.mark.parametrize("implementation", ["ensemble", "hand_wired"])
+@pytest.mark.parametrize("operation", ["extend", "sample", "update_priority"])
+def test_mixed_source_replay_buffer(benchmark, operation, implementation):
+    """HIL-SERL-style replay: PER demo member plus uniform online member, 50/50 batches.
+
+    ``ensemble`` uses one ``ReplayBufferEnsemble`` with mask routing and
+    exact fractions; ``hand_wired`` uses two buffers with the equivalent
+    manual extend, concatenation and priority calls.
+    """
+    device = _replay_boundary_device()
+    generator = torch.Generator().manual_seed(0)
+    demo, online = _mixed_source_members(device)
+    data = _mixed_source_batch(device, generator)
+    half = _MIXED_BATCH // 2
+    if implementation == "ensemble":
+        rb = ReplayBufferEnsemble(
+            demo,
+            online,
+            routing_key="route",
+            routing_mode="mask",
+            fractions=[0.5, 0.5],
+            batch_size=_MIXED_BATCH,
+        )
+
+        def write():
+            rb.extend(data)
+
+        def draw():
+            return rb.sample()
+
+        def update(batch):
+            rb.update_tensordict_priority(batch)
+
+    else:
+
+        def write():
+            online.extend(data)
+            demo.extend(data[data["intervention"].squeeze(-1)])
+
+        def draw():
+            online_batch = online.sample(half)
+            online_batch.set(
+                "priority_weight", torch.ones(half, device=online_batch.device)
+            )
+            return torch.cat([demo.sample(half), online_batch])
+
+        def update(batch):
+            demo.update_tensordict_priority(batch[:half])
+
+    for _ in range(20):
+        write()
+    if operation == "extend":
+        benchmark(write)
+    elif operation == "sample":
+        benchmark(draw)
+    else:
+        batch = draw()
+        batch.set("td_error", torch.rand(_MIXED_BATCH, device=device))
+        benchmark(update, batch)
+
+
 def _replay_boundary_device():
     device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
     if device == "GPU":

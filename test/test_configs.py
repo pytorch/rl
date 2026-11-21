@@ -934,6 +934,7 @@ class TestDataConfigs:
             ({"p": [0.0, 1.0]}, [[1] * 4, [1] * 4]),
             ({"sample_from_all": True}, [[0] * 4, [1] * 4]),
             ({"p": [1.0, 0.0], "num_buffer_sampled": 1}, [[0] * 8]),
+            ({"fractions": [0.25, 0.75]}, [0] * 2 + [1] * 6),
         ],
     )
     def test_sampler_ensemble_config(self, strategy, expected_members):
