@@ -145,7 +145,9 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
             an actor with this name already exists, the existing actor will be used.
         observation_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the observation
             after it has been transformed by the module, or a function that modifies the existing spec.
-            Defaults to `None` (observation specs remain unchanged).
+            When set, the module also runs at reset, so the observations it
+            adds exist from the first step. Defaults to None (specs unchanged,
+            and the module only runs after steps).
         done_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the done
             after it has been transformed by the module, or a function that modifies the existing spec.
             Defaults to `None` (done specs remain unchanged).
@@ -292,6 +294,13 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
                 else nullcontext(tensordict)
             ) as td:
                 return self.module(td)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        if self.inverse or self.observation_spec_transform is None:
+            return tensordict_reset
+        return self._call(tensordict_reset)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.inverse:

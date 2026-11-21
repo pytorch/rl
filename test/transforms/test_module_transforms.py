@@ -20,7 +20,7 @@ from torchrl import logger as torchrl_logger, merge_ray_runtime_env
 
 from torchrl.collectors import Collector
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
-from torchrl.data import ReplayBuffer
+from torchrl.data import ReplayBuffer, Unbounded
 from torchrl.envs import Compose, SerialEnv, TransformedEnv
 from torchrl.envs.transforms import ModuleTransform
 from torchrl.envs.transforms.module import RayModuleTransform
@@ -134,6 +134,30 @@ class TestModuleTransform(TransformBase):
             env.check_env_specs()
         finally:
             env.close(raise_if_closed=False)
+
+    def test_new_observation_entry_is_present_at_reset(self):
+        def add_feature(spec):
+            spec = spec.clone()
+            spec["feature"] = Unbounded(shape=(*spec.shape, 2))
+            return spec
+
+        env = ContinuousActionVecMockEnv().append_transform(
+            ModuleTransform(
+                module=TensorDictModule(
+                    lambda obs: obs[..., :2] * 2,
+                    in_keys=["observation"],
+                    out_keys=["feature"],
+                ),
+                observation_spec_transform=add_feature,
+            )
+        )
+
+        reset = env.reset()
+        rollout = env.rollout(3)
+
+        torch.testing.assert_close(reset["feature"], reset["observation"][..., :2] * 2)
+        assert rollout["feature"].shape == (3, 2)
+        env.check_env_specs()
 
     def test_transform_no_env(self):
         t = ModuleTransform(module_factory=self._module_factory_samespec)
