@@ -174,3 +174,7 @@ trainer:
   checkpoint_rotation: ${checkpoint_rotation}
   optim_steps_per_batch: 16  # Match SOTA utd_ratio
   async_collection: true
+
+hydra:
+  job:
+    chdir: true
