@@ -39,6 +39,7 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers.checkpointers import H5StorageCheckpointer
 from torchrl.data.replay_buffers.samplers import (
+    ConsumingSampler,
     PrioritizedSampler,
     PrioritizedSliceSampler,
     RandomSampler,
@@ -76,6 +77,114 @@ from torchrl.testing.mocking_classes import CountingEnv
 
 
 class TestEnsemble:
+    @pytest.mark.parametrize(
+        "selection", ["sampleable", "repeated", "all", "used", "mixed"]
+    )
+    def test_consuming_sample_rejects_before_consuming(self, selection):
+        lengths = (4, 0) if selection in ("all", "mixed") else (2, 8)
+        members = [
+            ReplayBuffer(
+                storage=LazyTensorStorage(10),
+                sampler=RandomSampler()
+                if selection == "mixed" and i == 1
+                else ConsumingSampler(max_sample_count=2 if selection == "used" else 1),
+            )
+            for i in range(len(lengths))
+        ]
+        for member, length in zip(members, lengths):
+            if length:
+                member.extend(torch.arange(length))
+        already_sampled = members[0].sample(1) if selection == "used" else None
+        options = (
+            {"sample_from_all": True}
+            if selection in ("all", "mixed")
+            else {"p": "sampleable" if selection == "sampleable" else [1.0, 0.0]}
+        )
+        rb = ReplayBufferEnsemble(
+            *members,
+            **options,
+            num_buffer_sampled=2,
+            generator=torch.Generator().manual_seed(1),
+        )
+
+        with pytest.raises(RuntimeError):
+            rb.sample(4 if selection == "used" else 8)
+
+        assert [len(member) for member in members] == list(lengths)
+        for member, length in zip(members, lengths):
+            if length:
+                assert sorted(member.sample(length).tolist()) == list(range(length))
+        if selection == "used":
+            assert members[0].sample(1).item() == 1 - already_sampled.item()
+
+    def test_consuming_grouped_sample_uses_remaining_draws(self):
+        member = ReplayBuffer(
+            storage=LazyTensorStorage(2), sampler=ConsumingSampler(max_sample_count=2)
+        )
+        member.extend(torch.arange(2))
+        rb = ReplayBufferEnsemble(member, num_buffer_sampled=2)
+
+        assert sorted(rb.sample(4).flatten().tolist()) == [0, 0, 1, 1]
+        assert len(member) == 0
+
+    def test_consuming_sample_from_all_preserves_partial_batches(self):
+        members = [
+            ReplayBuffer(storage=LazyTensorStorage(2), sampler=ConsumingSampler())
+            for _ in range(2)
+        ]
+        for member in members:
+            member.extend(torch.arange(2))
+        rb = ReplayBufferEnsemble(*members, sample_from_all=True)
+
+        assert sorted(rb.sample(8).flatten().tolist()) == [0, 0, 1, 1]
+        assert [len(member) for member in members] == [0, 0]
+
+    def test_consuming_grouped_alias_demand_rejects_before_consuming(self):
+        member = ReplayBuffer(storage=LazyTensorStorage(2), sampler=ConsumingSampler())
+        member.extend(torch.arange(2))
+        rb = ReplayBufferEnsemble(
+            member,
+            member,
+            generator=torch.Generator().manual_seed(0),
+        )
+
+        with pytest.raises(RuntimeError):
+            rb.sample(4)
+
+        assert sorted(member.sample(2).tolist()) == [0, 1]
+
+    @pytest.mark.parametrize("sample_from_all", [False, True])
+    def test_consuming_aliases_with_sufficient_capacity(self, sample_from_all):
+        member = ReplayBuffer(storage=LazyTensorStorage(4), sampler=ConsumingSampler())
+        member.extend(torch.arange(4))
+        rb = ReplayBufferEnsemble(
+            member,
+            member,
+            sample_from_all=sample_from_all,
+            generator=torch.Generator().manual_seed(0),
+        )
+
+        assert sorted(rb.sample(4).flatten().tolist()) == [0, 1, 2, 3]
+        assert len(member) == 0
+
+    def test_consuming_aliases_preserve_partial_batches(self):
+        member = ReplayBuffer(
+            storage=LazyTensorStorage(2), sampler=ConsumingSampler(max_sample_count=2)
+        )
+        member.extend(torch.arange(2))
+        rb = ReplayBufferEnsemble(member, member, sample_from_all=True)
+
+        assert sorted(rb.sample(8).flatten().tolist()) == [0, 0, 1, 1]
+        assert len(member) == 0
+
+    def test_consuming_unselected_alias_is_allowed(self):
+        member = ReplayBuffer(storage=LazyTensorStorage(2), sampler=ConsumingSampler())
+        member.extend(torch.arange(2))
+        rb = ReplayBufferEnsemble(member, member, p=[1.0, 0.0])
+
+        assert sorted(rb.sample(2).flatten().tolist()) == [0, 1]
+        assert len(member) == 0
+
     def _make_data(self, data_type):
         if data_type is torch.Tensor:
             return torch.ones(90)
