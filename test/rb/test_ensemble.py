@@ -178,6 +178,36 @@ class TestEnsemble:
         assert stats["size"] == stats["sampleable_size"] == 6
         assert stats["storage_size"] == 8
 
+    @pytest.mark.parametrize("member_type", ["tensor", "tensordict", "slices"])
+    def test_stats_count_sampled_records(self, member_type):
+        if member_type == "tensor":
+            members = [ReplayBuffer(storage=LazyTensorStorage(8)) for _ in range(2)]
+            data = torch.arange(8)
+        else:
+            members = [
+                TensorDictReplayBuffer(
+                    storage=LazyTensorStorage(8),
+                    sampler=SliceSampler(slice_len=3, traj_key="episode")
+                    if member_type == "slices"
+                    else RandomSampler(),
+                )
+                for _ in range(2)
+            ]
+            data = TensorDict(
+                {"value": torch.arange(8), "episode": torch.zeros(8, dtype=torch.long)},
+                [8],
+            )
+        for member in members:
+            member.extend(data)
+        rb = ReplayBufferEnsemble(*members, num_buffer_sampled=2, batch_size=6)
+
+        returned = sum(rb.sample().numel() for _ in range(3))
+
+        assert returned == 18
+        stats = rb.stats()
+        assert stats["sample_calls"] == 3
+        assert stats["samples_returned"] == 18
+
     @pytest.mark.parametrize(
         "device",
         [
