@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-11-20T06:18:05.647342+00:00",
+  "generated_at": "2026-11-21T06:18:39.101917+00:00",
   "analysis_period": {
-    "start": "2026-11-17",
-    "end": "2026-11-19",
+    "start": "2026-11-19",
+    "end": "2026-11-21",
     "runs_analyzed": 60
   },
   "summary": {
-    "total_tests": 33012,
+    "total_tests": 33015,
     "flaky_count": 1,
     "new_flaky_count": 1,
     "resolved_count": 0
@@ -14,23 +14,22 @@
   "flaky_tests": [
     {
       "nodeid": ".github/unittest/linux_sota/scripts/test_sota.py::test_commands[discrete_cql_offline]",
-      "executions": 25,
-      "failures": 5,
-      "failure_rate": 0.2,
-      "flaky_score": 0.4,
-      "passed": 20,
-      "failed": 5,
+      "executions": 26,
+      "failures": 4,
+      "failure_rate": 0.1538,
+      "flaky_score": 0.2462,
+      "passed": 22,
+      "failed": 4,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 237.579,
+      "avg_duration": 251.512,
       "recent_failures": [
-        "2026-11-17T04:28:45Z",
         "2026-11-19T01:42:43Z",
         "2026-11-19T01:50:18Z",
         "2026-11-19T02:10:33Z",
         "2026-11-19T02:22:22Z"
       ],
-      "first_seen_flaky": "2026-11-17T04:28:45Z",
+      "first_seen_flaky": "2026-11-19T01:42:43Z",
       "is_new": true
     }
   ],
