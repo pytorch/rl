@@ -11,9 +11,26 @@ from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
     ReplayBufferEnsemble,
 )
-from torchrl.data.replay_buffers.samplers import ConsumingSampler
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    PrioritizedSliceSampler,
+    RandomSampler,
+    SamplerWithoutReplacement,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+)
 from torchrl.data.replay_buffers.storages import LazyTensorStorage, Storage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+
+
+_NON_FILTERING_SAMPLERS = (
+    RandomSampler,
+    SamplerWithoutReplacement,
+    PrioritizedSampler,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+    PrioritizedSliceSampler,
+)
 
 
 class OfflineToOnlineReplayBuffer:
@@ -245,18 +262,21 @@ def prefill_replay_buffer(
     wrapped, so trajectories stay contiguous for slice or sequence samplers on
     ``rb``. For a multi-dimensional storage, a
     :class:`~torchrl.data.ReplayBufferEnsemble`, a buffer whose storage is not
-    local (such as a Ray-backed buffer) or a buffer with a
-    :class:`~torchrl.data.replay_buffers.ConsumingSampler`, chunks are drawn
-    with ``dataset.sample()``, which samples with the dataset's sampler.
+    local (such as a Ray-backed buffer) or a buffer whose sampler may filter
+    entries (any sampler other than the random, without-replacement,
+    prioritized and slice samplers, such as a consuming or staleness-aware
+    one), chunks are drawn with ``dataset.sample()``, which samples with the
+    dataset's sampler.
 
     Args:
         rb (ReplayBuffer): a mutable replay buffer to seed.
         dataset (str or ReplayBuffer): offline dataset or a prefixed ID string
             (``"minari:..."`` / ``"d4rl:..."``).
-        n_samples (int, optional): number of transitions to copy. For a
-            one-dimensional storage they are the oldest ``n_samples`` stored
-            transitions, capped at the storage length. Defaults to the full
-            dataset.
+        n_samples (int, optional): number of transitions to copy. When the
+            dataset is copied in storage order they are the oldest
+            ``n_samples`` stored transitions, capped at the storage length;
+            otherwise they are drawn with ``dataset.sample()``. Defaults to
+            the full dataset.
         chunk_size (int, optional): number of transitions copied per
             iteration. When ``dataset`` is a string, this is also used as the
             dataset constructor batch size. Default: ``1000``.
@@ -287,7 +307,7 @@ def prefill_replay_buffer(
         isinstance(dataset, ReplayBufferEnsemble)
         or not isinstance(storage, Storage)
         or getattr(storage, "ndim", 1) > 1
-        or isinstance(dataset.sampler, ConsumingSampler)
+        or type(dataset.sampler) not in _NON_FILTERING_SAMPLERS
     ):
         total = len(dataset) if n_samples is None else min(n_samples, len(dataset))
         copied = 0

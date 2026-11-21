@@ -23,7 +23,7 @@ from torchrl.data import (
 from torchrl.data.datasets import utils as dataset_utils
 from torchrl.data.datasets.utils import load_dataset, register_dataset
 from torchrl.data.replay_buffers.offline_to_online import prefill_replay_buffer
-from torchrl.data.replay_buffers.samplers import ConsumingSampler
+from torchrl.data.replay_buffers.samplers import ConsumingSampler, SliceSampler
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.testing.gym_helpers import PENDULUM_VERSIONED
 
@@ -308,15 +308,27 @@ class TestPrefillReplayBuffer:
         assert result is target
 
     @pytest.mark.parametrize("n_samples", [None, 120])
-    def test_prefill_copies_each_transition_once_in_order(self, n_samples):
+    @pytest.mark.parametrize("slice_sampler", [False, True])
+    def test_prefill_copies_each_transition_once_in_order(
+        self, n_samples, slice_sampler
+    ):
         """The prefix of the dataset is copied once each, in storage order.
 
         Before the fix the copy was drawn with ``dataset.sample``, which
         samples with replacement: transitions were duplicated or missing and
-        trajectories were shuffled.
+        trajectories were shuffled. A dataset built with a slice sampler, as
+        offline datasets often are, is copied the same way.
         """
-        offline = ReplayBuffer(storage=LazyTensorStorage(300))
-        offline.extend(TensorDict({"step": torch.arange(300)}, batch_size=[300]))
+        sampler = (
+            SliceSampler(num_slices=2, traj_key="episode") if slice_sampler else None
+        )
+        offline = ReplayBuffer(storage=LazyTensorStorage(300), sampler=sampler)
+        offline.extend(
+            TensorDict(
+                {"step": torch.arange(300), "episode": torch.arange(300) // 50},
+                batch_size=[300],
+            )
+        )
         target = ReplayBuffer(storage=LazyTensorStorage(1000))
         prefill_replay_buffer(target, offline, n_samples=n_samples, chunk_size=37)
         expected = torch.arange(300 if n_samples is None else n_samples)
