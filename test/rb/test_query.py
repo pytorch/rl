@@ -23,6 +23,7 @@ from torchrl.data import (
     Trajectory,
 )
 from torchrl.envs.transforms import Transform
+from torchrl.testing.mocking_classes import CountingEnv, CountingEnvCountPolicy
 
 
 class _CountingObsTransform(Transform):
@@ -308,6 +309,61 @@ class TestReplayBufferQuery:
         rb = self._make_rb()
         trajs = rb.query()
         assert [t.length for t in trajs] == [5, 3, 7]
+
+    def test_query_step_outputs_on_rollout_data(self):
+        """Episode-end predicates match rollout data, which also stores a root ``done``.
+
+        ``env.rollout`` writes a root ``done`` (False at every step) next to
+        ``("next", "done")``. Before the fix ``traj.done`` resolved the root
+        entry first, so no trajectory ever matched an episode-end predicate.
+        """
+        env = CountingEnv(max_steps=3)
+        policy = CountingEnvCountPolicy(env.action_spec)
+        episodes = [env.rollout(10, policy), env.rollout(10, policy)]
+        data = torch.cat(episodes)
+        data["episode"] = torch.cat(
+            [torch.full((len(episode),), i) for i, episode in enumerate(episodes)]
+        )
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(len(data)))
+        rb.extend(data)
+        assert len(rb.query(traj.done.last() == 1)) == 2
+        assert len(rb.query(traj.terminated.sum() > 0)) == 2
+        first = rb.query()[0]
+        assert torch.equal(first.done, episodes[0]["next", "done"])
+        assert not first["done"].any()
+
+    def test_query_key_resolution(self):
+        """Done keys, flat or nested, resolve under ``"next"`` first; other keys at the root first.
+
+        A root ``reward`` (for instance a reward-model output) wins over
+        ``("next", "reward")``, a done key stored only at the root is still
+        found, ``("done",)`` resolves like ``"done"``, a nested done key
+        reaches its post-step entry through query planning, and a nested key
+        stored only under ``"next"`` falls back to it like a flat key.
+        """
+        end = torch.tensor([False, False, False, True] * 2).unsqueeze(-1)
+        data = TensorDict(
+            {
+                "episode": torch.tensor([0] * 4 + [1] * 4),
+                "reward": torch.full((8, 1), 2.0),
+                "done": torch.zeros_like(end),
+                "terminated": end.clone(),
+                "agents": {"done": torch.zeros_like(end)},
+                "next": {
+                    "reward": torch.ones(8, 1),
+                    "done": end.clone(),
+                    "agents": {"done": end.clone(), "reward": torch.ones(8, 1)},
+                },
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(8))
+        rb.extend(data)
+        assert len(rb.query(traj[("agents", "done")].last() == 1)) == 2
+        assert len(rb.query(traj[("done",)].last() == 1)) == 2
+        assert len(rb.query(traj.terminated.last() == 1)) == 2
+        assert len(rb.query(traj.reward.sum() == 8.0)) == 2
+        assert len(rb.query(traj[("agents", "reward")].sum() == 4.0)) == 2
 
     def test_query_predicate(self):
         rb = self._make_rb()

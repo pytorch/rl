@@ -24,6 +24,28 @@ _END_KEY_GROUPS = (
     tuple(("next", key) for key in DEFAULT_DONE_KEYS),
     tuple(DEFAULT_DONE_KEYS),
 )
+_NEXT_FIRST_KEYS = frozenset(DEFAULT_DONE_KEYS)
+
+
+def _candidate_keys(key: NestedKey) -> tuple[NestedKey, ...]:
+    """The keys tried, in order, when a trajectory resolves ``key``.
+
+    A done key (``done``, ``terminated`` or ``truncated``, flat or as the
+    last element of a nested key such as ``("agents", "done")``) is looked up
+    under ``"next"`` first, then at the root. Any other key is looked up at
+    the root first, then under ``"next"``. A key that already starts with
+    ``"next"`` is looked up as given.
+    """
+    key = unravel_key(key)
+    if isinstance(key, str):
+        if key in _NEXT_FIRST_KEYS:
+            return (("next", key), key)
+        return (key, ("next", key))
+    if key[0] == "next":
+        return (key,)
+    if key[-1] in _NEXT_FIRST_KEYS:
+        return (("next", *key), key)
+    return (key, ("next", *key))
 
 
 class Trajectory(TensorClass["nocast"]):
@@ -31,11 +53,17 @@ class Trajectory(TensorClass["nocast"]):
 
     A single-field tensorclass wrapping a :class:`~tensordict.TensorDictBase`
     that holds the transitions of one trajectory, exposing its entries as
-    attributes. Attribute lookup resolves keys against the root tensordict
-    first and falls back to the ``("next", ...)`` sub-tensordict, so
-    ``traj.reward`` and ``traj.done`` return the conventional post-step
-    entries while ``traj.observation``, ``traj.state`` or ``traj.action``
-    return root entries.
+    attributes. The done keys (``done``, ``terminated`` and ``truncated``,
+    flat or nested such as ``("agents", "done")``) resolve to the
+    ``("next", ...)`` entry first and fall back to the root, because
+    ``env.rollout`` and collectors write both and only the post-step flags
+    mark episode ends. Every other key resolves against the root first
+    and falls back to ``("next", ...)``, so ``traj.reward`` returns the
+    post-step reward while ``traj.observation``, ``traj.state`` or
+    ``traj.action`` return root entries. Query field expressions such as
+    ``traj.done`` and ``traj["done"]`` resolve the same way, while indexing a
+    :class:`Trajectory` (``trajectory["done"]``) reads the entry exactly as
+    given.
 
     Being a tensorclass, slicing and indexing return :class:`Trajectory`
     instances, and trajectories of different lengths can be assembled into a
@@ -83,13 +111,13 @@ class Trajectory(TensorClass["nocast"]):
         return self.reward.sum()
 
     def get(self, key: NestedKey, default=None) -> torch.Tensor | None:
-        """Resolve ``key`` against the root tensordict, then ``("next", key)``."""
-        data = self.data
-        value = data.get(key, None)
-        if value is not None:
-            return value
-        if isinstance(key, str):
-            value = data.get(("next", key), None)
+        """Resolve ``key`` against the root tensordict and ``("next", ...)``.
+
+        Done keys are looked up under ``"next"`` first, other keys at the
+        root first, and keys starting with ``"next"`` as given.
+        """
+        for candidate in _candidate_keys(key):
+            value = self.data.get(candidate, None)
             if value is not None:
                 return value
         return default
@@ -118,7 +146,8 @@ def _trajectory_getattr(self, name: str):
         value = self.get(name)
         if value is None:
             raise AttributeError(
-                f"Trajectory has no entry {name!r} in its data (looked up {name!r} and {('next', name)!r}). "
+                f"Trajectory has no entry {name!r} in its data (looked up "
+                f"{', '.join(map(repr, _candidate_keys(name)))}). "
                 f"Available keys: {sorted(map(str, self.data.keys(include_nested=True, leaves_only=True)))}"
             ) from None
         return value
@@ -330,7 +359,8 @@ class _FieldExpr(_ComparableExpr):
         value = trajectory.get(self._key)
         if value is None:
             raise KeyError(
-                f"Key {self._key!r} not found in trajectory (looked up root and ('next', ...))."
+                f"Key {self._key!r} not found in trajectory (looked up "
+                f"{', '.join(map(repr, _candidate_keys(self._key)))})."
             )
         return value
 
@@ -380,7 +410,8 @@ class _TrajectoryRef:
     """Entry point of the trajectory query language.
 
     Attribute access returns a field expression resolved against each
-    trajectory (root keys first, then ``("next", ...)``); indexing with an
+    trajectory with :meth:`Trajectory.get` (``("next", ...)`` first for the
+    done keys, root first for every other key); indexing with an
     explicit (possibly nested) key does the same for keys that are not valid
     attribute names. Field expressions support elementwise comparisons
     (reduce with ``.any()``/``.all()``) and reductions (``.sum()``,
@@ -580,10 +611,7 @@ def _expand_required_keys(keys: frozenset) -> set:
     """Adds the ``("next", key)`` candidates used by attribute resolution."""
     expanded = set()
     for key in keys:
-        key = unravel_key(key)
-        expanded.add(key)
-        if isinstance(key, str):
-            expanded.add(("next", key))
+        expanded.update(_candidate_keys(key))
     return expanded
 
 
