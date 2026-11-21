@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, unravel_key
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.envs.common import EnvBase
@@ -43,9 +43,9 @@ class WorldModelEnv(ModelBasedEnvBase):
 
     Specs are taken from a reference env so that the imagined env presents
     the same action / reward / done specs as the real one. The observation
-    spec defaults to the reference env's, with the latent representation
-    (under ``latent_key``) added when it is missing; pass
-    ``observation_spec=`` to override it.
+    spec defaults to the reference env's entries that the world model
+    writes, with the latent representation (under ``latent_key``) added when
+    it is missing; pass ``observation_spec=`` to override it.
 
     Args:
         world_model (WorldModel): the prediction module that the env drives.
@@ -58,8 +58,10 @@ class WorldModelEnv(ModelBasedEnvBase):
 
     Keyword Args:
         observation_spec (TensorSpec, optional): override for the observation
-            spec. Defaults to ``base_env``'s observation spec, so keys a
-            decoder writes under ``("next", ...)`` are exposed too. A
+            spec. Defaults to the entries of ``base_env``'s observation spec
+            that the world model writes under ``("next", ...)`` (for instance
+            a decoder's reconstruction), so entries it never writes are not
+            listed with a stale value. A
             non-composite override is stored under ``"observation"``, as
             :class:`~torchrl.envs.EnvBase` does. When the spec does not
             contain ``latent_key``, the latent spec is added to it so that the
@@ -161,9 +163,7 @@ class WorldModelEnv(ModelBasedEnvBase):
         self.done_spec = self._expand_base_spec(base_env.done_spec, base_env)
 
         if observation_spec is None:
-            observation_spec = self._expand_base_spec(
-                base_env.observation_spec, base_env
-            )
+            observation_spec = self._produced_base_spec(world_model, base_env)
         elif isinstance(observation_spec, Composite):
             observation_spec = observation_spec.clone()
         else:
@@ -177,6 +177,27 @@ class WorldModelEnv(ModelBasedEnvBase):
                 world_model, base_env, latent_key
             )
         self.observation_spec = observation_spec
+
+    def _produced_base_spec(
+        self, world_model: WorldModel, base_env: EnvBase
+    ) -> Composite:
+        """The reference env's observation entries that an imagined step produces.
+
+        An entry is kept when the step module (dynamics, heads and decoder)
+        writes it under ``("next", ...)``; entries it never writes would only
+        carry the reset value forward.
+        """
+        produced = set()
+        for key in world_model.step_module.out_keys:
+            key = unravel_key(key)
+            if isinstance(key, tuple) and key[0] == "next" and len(key) > 1:
+                produced.add(unravel_key(key[1:]))
+        base_spec = self._expand_base_spec(base_env.observation_spec, base_env)
+        spec = Composite(shape=self.batch_size, device=self.device)
+        for key in base_spec.keys(include_nested=True, leaves_only=True):
+            if unravel_key(key) in produced:
+                spec[key] = base_spec[key]
+        return spec
 
     def _expand_base_spec(
         self,
@@ -203,8 +224,8 @@ class WorldModelEnv(ModelBasedEnvBase):
     ) -> TensorSpec:
         """Build the spec of the latent state stepped by the world model.
 
-        The reference env's own spec is used when it already declares
-        ``latent_key``. Otherwise the encoder is run once on a batch of one,
+        The reference env's own spec is used when its observation or state
+        spec already declares ``latent_key``. Otherwise the encoder is run once on a batch of one,
         made of zeros drawn from the reference env's observation, state and
         action specs on this env's device, to read the latent's feature shape
         and dtype; a latent stored as a sub-tensordict gets a
@@ -220,8 +241,9 @@ class WorldModelEnv(ModelBasedEnvBase):
                 does not declare or lives on another device.
         """
         base_observation_spec = base_env.full_observation_spec
-        if latent_key in base_observation_spec.keys(include_nested=True):
-            return self._expand_base_spec(base_observation_spec[latent_key], base_env)
+        for declared in (base_observation_spec, base_env.full_state_spec):
+            if latent_key in declared.keys(include_nested=True):
+                return self._expand_base_spec(declared[latent_key], base_env)
         input_spec = base_observation_spec.clone()
         input_spec.update(base_env.full_state_spec)
         input_spec.update(base_env.full_action_spec)
@@ -241,7 +263,7 @@ class WorldModelEnv(ModelBasedEnvBase):
         try:
             with torch.no_grad(), torch.random.fork_rng(devices=rng_devices):
                 latent = world_model.encode(inputs).get(latent_key)
-        except (KeyError, RuntimeError) as err:
+        except (KeyError, RuntimeError, TypeError, ValueError) as err:
             raise ValueError(
                 f"WorldModelEnv could not infer the spec of {latent_key!r} by "
                 f"running the world model's encoder on the reference env's "

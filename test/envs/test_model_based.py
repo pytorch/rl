@@ -436,6 +436,10 @@ class TestWorldModelEnv:
         assert env.action_spec.shape == (_WM_BATCH, action_dim)
         assert env.reward_spec.shape == (_WM_BATCH, 1)
         assert env.observation_spec[latent_key].shape == (_WM_BATCH, _WM_LATENT_DIM)
+        if override is None:
+            assert list(env.observation_spec.keys(True, True)) == [
+                unravel_key(latent_key)
+            ]
         if override == "leaf":
             assert "observation" in env.observation_spec.keys()
 
@@ -468,6 +472,9 @@ class TestWorldModelEnv:
     def test_decoded_observations_are_exposed(self, reference):
         """With the default spec, a decoder's ``("next", "observation")`` reaches the rollout.
 
+        Reference entries the world model never writes (here
+        ``"observation_orig"``) are left out, so the specs check passes.
+
         The reference env is unbatched, or batched with a batch size (2) that
         differs from the imagined one, which only works once the reference
         env's batch dims are dropped from its specs.
@@ -494,7 +501,9 @@ class TestWorldModelEnv:
                 batch_size=[_WM_BATCH],
             )
         )
+        assert set(env.observation_spec.keys()) == {"latent", "observation"}
         with torch.no_grad():
+            check_env_specs(env, tensordict=env.reset(start_td.clone()))
             rollout = env.rollout(3, tensordict=start_td)
             expected = wm.decoder.module(rollout["next", "latent"])
         torch.testing.assert_close(rollout["next", "observation"], expected)
