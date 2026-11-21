@@ -999,8 +999,9 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         """Layouts outside ``[batch, T, 1]`` without ``time_dim`` keep their results.
 
         A flat ``[batch, T]`` reward, an unbatched ``[T, 1]`` trajectory with a
-        continuation, and a time-major ``[T, batch, 1]`` input with the
-        estimator's ``time_dim=0`` were already handled and must not change.
+        continuation, a time-major ``[T, batch, 1]`` input with the
+        estimator's ``time_dim=0``, and a ``[batch, T, 1]`` input with an
+        explicit ``time_dim=-2`` were already handled and must not change.
         With a continuation of 0.5 the targets are ``[6.375, 11.5, 18]``, as
         in the continuation test below.
         """
@@ -1027,6 +1028,15 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         torch.testing.assert_close(
             time_major_loss.lambda_target(reward[:, None, None], value[:, None, None]),
             targets[:, None, None],
+        )
+        explicit_time_dim_loss = self._make_lambda_target_loss(
+            device, ValueEstimators.TDLambda, lmbda=0.5, time_dim=-2
+        )
+        torch.testing.assert_close(
+            explicit_time_dim_loss.lambda_target(
+                reward[None, :, None], value[None, :, None]
+            ),
+            targets[None, :, None],
         )
 
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
