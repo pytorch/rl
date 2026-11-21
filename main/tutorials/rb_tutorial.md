@@ -231,8 +231,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmpk4biojnp/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmpk4biojnp/b/c.memmap
+the 'a' tensor is stored in /tmp/tmp00n0gket/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmp00n0gket/b/c.memmap
 samples: a= tensor([[ 0, 1, 2, 3],
  [ 8, 9, 10, 11],
  [ 0, 1, 2, 3],
@@ -1199,7 +1199,7 @@ trajectory queries, consuming samples, statistics, and generation-aware
 updates.
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.865 seconds)
+**Total running time of the script:** (0 minutes 0.919 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 
