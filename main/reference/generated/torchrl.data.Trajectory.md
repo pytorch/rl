@@ -6,11 +6,17 @@ A trajectory-first view over a contiguous slice of transitions.
 
 A single-field tensorclass wrapping a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 that holds the transitions of one trajectory, exposing its entries as
-attributes. Attribute lookup resolves keys against the root tensordict
-first and falls back to the `("next", ...)` sub-tensordict, so
-`traj.reward` and `traj.done` return the conventional post-step
-entries while `traj.observation`, `traj.state` or `traj.action`
-return root entries.
+attributes. The done keys (`done`, `terminated` and `truncated`,
+flat or nested such as `("agents", "done")`) resolve to the
+`("next", ...)` entry first and fall back to the root, because
+`env.rollout` and collectors write both and only the post-step flags
+mark episode ends. Every other key resolves against the root first
+and falls back to `("next", ...)`, so `traj.reward` returns the
+post-step reward while `traj.observation`, `traj.state` or
+`traj.action` return root entries. Query field expressions such as
+`traj.done` and `traj["done"]` resolve the same way, while indexing a
+`Trajectory` (`trajectory["done"]`) reads the entry exactly as
+given.
 
 Being a tensorclass, slicing and indexing return `Trajectory`
 instances, and trajectories of different lengths can be assembled into a
@@ -1500,7 +1506,10 @@ True
 
 get(*key: [NestedKey](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NestedKey.html#tensordict.NestedKey)*, *default=None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory.get)
 
-Resolve `key` against the root tensordict, then `("next", key)`.
+Resolve `key` against the root tensordict and `("next", ...)`.
+
+Done keys are looked up under `"next"` first, other keys at the
+root first, and keys starting with `"next"` as given.
 
 keys(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory.keys)
 
