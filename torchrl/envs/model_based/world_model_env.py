@@ -224,8 +224,8 @@ class WorldModelEnv(ModelBasedEnvBase):
     ) -> TensorSpec:
         """Build the spec of the latent state stepped by the world model.
 
-        The reference env's own spec is used when its observation or state
-        spec already declares ``latent_key``. Otherwise the encoder is run once on a batch of one,
+        The reference env's own spec is used when it already declares
+        ``latent_key``. Otherwise the encoder is run once on a batch of one,
         made of zeros drawn from the reference env's observation, state and
         action specs on this env's device, to read the latent's feature shape
         and dtype; a latent stored as a sub-tensordict gets a
@@ -241,9 +241,8 @@ class WorldModelEnv(ModelBasedEnvBase):
                 does not declare or lives on another device.
         """
         base_observation_spec = base_env.full_observation_spec
-        for declared in (base_observation_spec, base_env.full_state_spec):
-            if latent_key in declared.keys(include_nested=True):
-                return self._expand_base_spec(declared[latent_key], base_env)
+        if latent_key in base_observation_spec.keys(include_nested=True):
+            return self._expand_base_spec(base_observation_spec[latent_key], base_env)
         input_spec = base_observation_spec.clone()
         input_spec.update(base_env.full_state_spec)
         input_spec.update(base_env.full_action_spec)
@@ -263,7 +262,7 @@ class WorldModelEnv(ModelBasedEnvBase):
         try:
             with torch.no_grad(), torch.random.fork_rng(devices=rng_devices):
                 latent = world_model.encode(inputs).get(latent_key)
-        except (KeyError, RuntimeError, TypeError, ValueError) as err:
+        except (KeyError, RuntimeError) as err:
             raise ValueError(
                 f"WorldModelEnv could not infer the spec of {latent_key!r} by "
                 f"running the world model's encoder on the reference env's "
