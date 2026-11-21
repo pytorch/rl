@@ -29,8 +29,6 @@ class LowLevelController(TensorDictModuleBase):
     Args:
         policy (TensorDictModuleBase): pretrained policy with explicit TensorDict
             inputs, outputs, and primers for persistent state.
-        decision_spec (Composite): unbatched spec for one controller's high-level
-            decisions. All leaves are held fixed during a closed-loop macro step.
 
     Keyword Args:
         adapter (TensorDictModuleBase or Transform, optional): module applied
@@ -61,9 +59,13 @@ class LowLevelController(TensorDictModuleBase):
         >>> from torchrl.testing.mocking_classes import CountingEnv
         >>> policy = TensorDictModule(
         ...     torch.nn.Identity(), in_keys=["command"], out_keys=["action"])
-        >>> controller = LowLevelController(
-        ...     policy, Composite(command=Bounded(0, 1, shape=(1,))))
-        >>> env = ClosedLoopMultiAction.from_env(CountingEnv(), controller, steps=2)
+        >>> controller = LowLevelController(policy)
+        >>> env = ClosedLoopMultiAction.from_env(
+        ...     CountingEnv(),
+        ...     controller,
+        ...     steps=2,
+        ...     decision_spec=Composite(command=Bounded(0, 1, shape=(1,))),
+        ... )
         >>> td = env.reset().set("command", torch.ones(1))
         >>> env.step(td)["next", "observation"]
         tensor([2], dtype=torch.int32)
@@ -83,7 +85,6 @@ class LowLevelController(TensorDictModuleBase):
     def __init__(
         self,
         policy: TensorDictModuleBase,
-        decision_spec: Composite,
         *,
         adapter: TensorDictModuleBase | Transform | None = None,
         group_key: NestedKey | None = None,
@@ -93,13 +94,6 @@ class LowLevelController(TensorDictModuleBase):
         reset_key: NestedKey | None = None,
     ):
         super().__init__()
-        if not isinstance(decision_spec, Composite) or decision_spec.shape:
-            raise ValueError(
-                "decision_spec must be an unbatched Composite for one controller."
-            )
-        if not list(decision_spec.keys(True, True)):
-            raise ValueError("decision_spec must contain at least one decision.")
-        self.decision_spec = decision_spec.clone()
         self.group_key = None if group_key is None else unravel_key(group_key)
         self.state_key = unravel_key(state_key)
         self.policy_action_key = unravel_key(policy_action_key)
