@@ -27,7 +27,7 @@ _END_KEY_GROUPS = (
 _NEXT_FIRST_KEYS = frozenset(DEFAULT_DONE_KEYS)
 
 
-def _candidate_keys(key: NestedKey) -> tuple:
+def _candidate_keys(key: NestedKey) -> tuple[NestedKey, ...]:
     """The keys tried, in order, when a trajectory resolves ``key``.
 
     A done key (``done``, ``terminated`` or ``truncated``, flat or as the
