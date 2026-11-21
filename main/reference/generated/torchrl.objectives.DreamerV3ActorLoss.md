@@ -167,6 +167,30 @@ A new tensordict with no batch dimension containing various loss scalars which w
 is essential that the losses are returned with this name as they will be read by the trainer before
 backpropagation.
 
+lambda_target(*reward: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *continuation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/objectives/dreamer_v3.html#DreamerV3ActorLoss.lambda_target)
+
+Compute lambda-return targets over an imagined trajectory.
+
+Parameters:
+
+- **reward** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - imagined rewards, typically of shape
+`[*batch, T, 1]` with time on dim `-2`.
+- **value** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - values of the next states, same shape as
+`reward`.
+- **continuation** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - continuation probabilities,
+same shape as `reward`. When given, the TD(lambda) recursion
+is discounted by it at every step; when `None`, the
+configured value estimator computes the targets. Defaults to
+`None`.
+
+Returns:
+
+the targets, same shape as `reward`.
+
+Return type:
+
+[torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/dreamer_v3.html#DreamerV3ActorLoss.make_value_estimator)
 
 Value-function constructor.

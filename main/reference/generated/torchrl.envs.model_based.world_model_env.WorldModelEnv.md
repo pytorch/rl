@@ -43,8 +43,13 @@ stepped -- only its specs are read.
 Keyword Arguments:
 
 - **observation_spec** ([*TensorSpec*](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*,**optional*) - override for the observation
-spec. When `None`, the env exposes the latent state under
-`latent_key` with shape inferred from `base_env`.
+spec. When `None`, the reference env's observation spec is used
+if it declares `latent_key`, and only the latent is exposed
+otherwise. The latent spec is added to the spec when missing, so
+the latent is carried from one imagined step to the next; its
+shape and dtype come from running the world model's encoder once
+on a zero observation of `base_env`, so the world model must
+already be on `device`.
 - **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - batch size for the env. Defaults
 to `base_env.batch_size`.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - device for the env. Defaults to
@@ -60,7 +65,7 @@ Examples
 >>> from tensordict.nn import TensorDictModule
 >>> from torchrl.envs import GymEnv
 >>> from torchrl.envs.model_based import WorldModelEnv
->>> from torchrl.modules import WorldModel
+>>> from torchrl.modules import MLP, WorldModel
 >>> base_env = GymEnv("Pendulum-v1")
 >>> obs_dim = base_env.observation_spec["observation"].shape[-1]
 >>> action_dim = base_env.action_spec.shape[-1]
@@ -70,7 +75,7 @@ Examples
 ... in_keys=["observation"], out_keys=["latent"],
 ... )
 >>> dynamics = TensorDictModule(
-... torch.nn.Linear(latent_dim + action_dim, latent_dim),
+... MLP(in_features=latent_dim + action_dim, out_features=latent_dim, depth=0),
 ... in_keys=["latent", "action"], out_keys=[("next", "latent")],
 ... )
 >>> reward_head = TensorDictModule(
@@ -79,7 +84,10 @@ Examples
 ... )
 >>> world_model = WorldModel(encoder, dynamics, reward_head)
 >>> wm_env = WorldModelEnv(world_model, base_env=base_env, batch_size=[3])
->>> # Seed the env with a starting latent and roll it out.
+>>> wm_env.observation_spec["latent"].shape
+torch.Size([3, 4])
+>>> wm_env.action_spec.shape
+torch.Size([3, 1])
 >>> obs_td = TensorDict(
 ... {"observation": torch.randn(3, obs_dim)}, batch_size=[3]
 ... )
@@ -87,4 +95,6 @@ Examples
 >>> rollout = wm_env.rollout(max_steps=5, tensordict=start_td)
 >>> rollout.shape
 torch.Size([3, 5])
+>>> bool((rollout["next", "latent"][:, -1] != start_td["latent"]).any())
+True
 ```
