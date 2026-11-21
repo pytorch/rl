@@ -16,7 +16,7 @@ from tensordict.nn import TensorDictModule
 from torch import nn
 
 from torchrl.data import Composite, Unbounded
-from torchrl.envs import EnvBase
+from torchrl.envs import check_env_specs, EnvBase
 from torchrl.envs.model_based.imagined import ImaginedEnv
 from torchrl.envs.transforms import MeanActionSelector, TransformedEnv
 from torchrl.modules.models.gp import GPWorldModel
@@ -530,6 +530,13 @@ class TestMeanActionSelector:
         obs_spec = env.observation_spec
         assert ("observation", "mean") in obs_spec.keys(True)
         assert ("observation", "var") in obs_spec.keys(True)
+
+    def test_check_env_specs(self):
+        obs_dim, action_dim = 4, 1
+        base_env = self._make_base_env(obs_dim, action_dim)
+        env = TransformedEnv(base_env, MeanActionSelector())
+
+        check_env_specs(env)
 
     def test_zero_variance_on_reset(self):
         obs_dim, action_dim = 4, 1
