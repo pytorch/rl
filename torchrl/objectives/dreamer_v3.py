@@ -1004,8 +1004,6 @@ class DreamerV3ActorLoss(LossModule):
             },
             reward.shape[:-1] if time_on_dim_minus_two else [],
         )
-        if time_on_dim_minus_two:
-            return self.value_estimator.value_estimate(input_tensordict, time_dim=-1)
         return self.value_estimator.value_estimate(input_tensordict)
 
     SUPPORTED_VALUE_ESTIMATORS = (
