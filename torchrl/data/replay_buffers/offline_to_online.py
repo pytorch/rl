@@ -7,8 +7,30 @@ from __future__ import annotations
 import torch
 from tensordict import TensorDictBase
 
-from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+from torchrl.data.replay_buffers.replay_buffers import (
+    ReplayBuffer,
+    ReplayBufferEnsemble,
+)
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    PrioritizedSliceSampler,
+    RandomSampler,
+    SamplerWithoutReplacement,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+)
 from torchrl.data.replay_buffers.storages import LazyTensorStorage, Storage
+from torchrl.data.replay_buffers.writers import RoundRobinWriter
+
+
+_NON_FILTERING_SAMPLERS = (
+    RandomSampler,
+    SamplerWithoutReplacement,
+    PrioritizedSampler,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+    PrioritizedSliceSampler,
+)
 
 
 class OfflineToOnlineReplayBuffer:
@@ -227,21 +249,37 @@ def prefill_replay_buffer(
     n_samples: int | None = None,
     chunk_size: int = 1000,
 ) -> ReplayBuffer:
-    """Copy samples from an offline dataset into a mutable replay buffer.
+    """Copy the transitions of an offline dataset into a mutable replay buffer.
 
     A simpler alternative to :class:`OfflineToOnlineReplayBuffer` for users
     who want a single flat buffer (no per-batch sampling ratio, slightly higher
     memory usage since offline data is copied).
 
+    For a buffer with a local one-dimensional storage, transitions are read
+    with ``dataset[index]``, so each stored transition is copied exactly once
+    and the dataset's transforms are applied. They are read in storage order,
+    starting from the oldest transition once a round-robin storage has
+    wrapped, so trajectories stay contiguous for slice or sequence samplers on
+    ``rb``. For a multi-dimensional storage, a
+    :class:`~torchrl.data.ReplayBufferEnsemble`, a buffer whose storage is not
+    local (such as a Ray-backed buffer) or a buffer whose sampler may filter
+    entries (any sampler other than the random, without-replacement,
+    prioritized and slice samplers, such as a consuming or staleness-aware
+    one), chunks are drawn with ``dataset.sample()``, which samples with the
+    dataset's sampler.
+
     Args:
         rb (ReplayBuffer): a mutable replay buffer to seed.
         dataset (str or ReplayBuffer): offline dataset or a prefixed ID string
             (``"minari:..."`` / ``"d4rl:..."``).
-        n_samples (int, optional): maximum number of samples to copy.
-            Defaults to the full dataset.
-        chunk_size (int, optional): number of samples copied per iteration.
-            When ``dataset`` is a string, this is also used as the dataset
-            constructor batch size. Default: ``1000``.
+        n_samples (int, optional): number of transitions to copy. When the
+            dataset is copied in storage order they are the oldest
+            ``n_samples`` stored transitions, capped at the storage length;
+            otherwise they are drawn with ``dataset.sample()``. Defaults to
+            the full dataset.
+        chunk_size (int, optional): number of transitions copied per
+            iteration. When ``dataset`` is a string, this is also used as the
+            dataset constructor batch size. Default: ``1000``.
 
     Returns:
         ReplayBuffer: ``rb`` mutated in-place (also returned for chaining).
@@ -264,13 +302,28 @@ def prefill_replay_buffer(
 
         dataset = load_dataset(dataset, batch_size=chunk_size)
 
-    total = min(n_samples, len(dataset)) if n_samples is not None else len(dataset)
-    copied = 0
+    storage = vars(dataset).get("_storage")
+    if (
+        isinstance(dataset, ReplayBufferEnsemble)
+        or not isinstance(storage, Storage)
+        or getattr(storage, "ndim", 1) > 1
+        or type(dataset.sampler) not in _NON_FILTERING_SAMPLERS
+    ):
+        total = len(dataset) if n_samples is None else min(n_samples, len(dataset))
+        copied = 0
+        while copied < total:
+            this_chunk = min(chunk_size, total - copied)
+            rb.extend(dataset.sample(this_chunk))
+            copied += this_chunk
+        return rb
 
-    while copied < total:
-        this_chunk = min(chunk_size, total - copied)
-        data = dataset.sample(this_chunk)
-        rb.extend(data)
-        copied += this_chunk
+    storage_length = len(storage)
+    total = storage_length if n_samples is None else min(n_samples, storage_length)
+    oldest = 0
+    if storage._is_full and isinstance(dataset.writer, RoundRobinWriter):
+        oldest = int(dataset.writer._cursor) % storage_length
+    order = (torch.arange(max(total, 0)) + oldest) % storage_length
+    for start in range(0, len(order), chunk_size):
+        rb.extend(dataset[order[start : start + chunk_size]])
 
     return rb

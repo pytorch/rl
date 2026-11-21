@@ -12,10 +12,18 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from torchrl.data import LazyTensorStorage, OfflineToOnlineReplayBuffer, ReplayBuffer
+from torchrl.data import (
+    LazyTensorStorage,
+    ListStorage,
+    OfflineToOnlineReplayBuffer,
+    ReplayBuffer,
+    TensorDictMaxValueWriter,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.datasets import utils as dataset_utils
 from torchrl.data.datasets.utils import load_dataset, register_dataset
 from torchrl.data.replay_buffers.offline_to_online import prefill_replay_buffer
+from torchrl.data.replay_buffers.samplers import ConsumingSampler, SliceSampler
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.testing.gym_helpers import PENDULUM_VERSIONED
 
@@ -298,6 +306,105 @@ class TestPrefillReplayBuffer:
         target = ReplayBuffer(storage=LazyTensorStorage(10_000))
         result = prefill_replay_buffer(target, offline, n_samples=50)
         assert result is target
+
+    @pytest.mark.parametrize("n_samples", [None, 120])
+    @pytest.mark.parametrize("slice_sampler", [False, True])
+    def test_prefill_copies_each_transition_once_in_order(
+        self, n_samples, slice_sampler
+    ):
+        """The prefix of the dataset is copied once each, in storage order.
+
+        Before the fix the copy was drawn with ``dataset.sample``, which
+        samples with replacement: transitions were duplicated or missing and
+        trajectories were shuffled. A dataset built with a slice sampler, as
+        offline datasets often are, is copied the same way.
+        """
+        sampler = (
+            SliceSampler(num_slices=2, traj_key="episode") if slice_sampler else None
+        )
+        offline = ReplayBuffer(storage=LazyTensorStorage(300), sampler=sampler)
+        offline.extend(
+            TensorDict(
+                {"step": torch.arange(300), "episode": torch.arange(300) // 50},
+                batch_size=[300],
+            )
+        )
+        target = ReplayBuffer(storage=LazyTensorStorage(1000))
+        prefill_replay_buffer(target, offline, n_samples=n_samples, chunk_size=37)
+        expected = torch.arange(300 if n_samples is None else n_samples)
+        assert torch.equal(target[:]["step"], expected)
+
+    @pytest.mark.parametrize("layout", ["tensor", "list", "reloaded"])
+    def test_prefill_wrapped_dataset_copies_oldest_first(self, layout):
+        """A circular dataset that wrapped is copied from its oldest transition.
+
+        The oldest slot comes from the round-robin writer's cursor, which list
+        storages use too and which survives ``load_state_dict``.
+        """
+        make_storage = ListStorage if layout == "list" else LazyTensorStorage
+        offline = ReplayBuffer(storage=make_storage(100))
+        offline.extend(TensorDict({"step": torch.arange(150)}, batch_size=[150]))
+        if layout == "reloaded":
+            reloaded = ReplayBuffer(storage=LazyTensorStorage(100))
+            reloaded.load_state_dict(offline.state_dict())
+            offline = reloaded
+        target = ReplayBuffer(storage=LazyTensorStorage(1000))
+        prefill_replay_buffer(target, offline, n_samples=60, chunk_size=25)
+        assert torch.equal(target[:]["step"], torch.arange(50, 110))
+
+    def test_prefill_non_round_robin_dataset_keeps_storage_order(self):
+        """A full dataset whose writer is not round-robin is copied in storage order.
+
+        A max-value writer replaces the lowest-ranked slot, so the last write
+        position says nothing about which transition is oldest.
+        """
+        offline = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=TensorDictMaxValueWriter(rank_key="score"),
+        )
+        for step in range(15):
+            offline.extend(
+                TensorDict(
+                    {
+                        "step": torch.tensor([step]),
+                        "score": torch.tensor([float(step * 7 % 15)]),
+                    },
+                    batch_size=[1],
+                )
+            )
+        target = ReplayBuffer(storage=LazyTensorStorage(100))
+        prefill_replay_buffer(target, offline)
+        assert torch.equal(target[:]["step"], offline[:]["step"])
+
+    def test_prefill_consuming_sampler_skips_consumed_transitions(self):
+        """A dataset with a ``ConsumingSampler`` only hands over unconsumed transitions."""
+        offline = ReplayBuffer(
+            storage=LazyTensorStorage(10), sampler=ConsumingSampler()
+        )
+        offline.extend(TensorDict({"step": torch.arange(10)}, batch_size=[10]))
+        consumed = set(offline.sample(4)["step"].tolist())
+        target = ReplayBuffer(storage=LazyTensorStorage(100))
+        prefill_replay_buffer(target, offline)
+        copied = target[:]["step"].tolist()
+        assert sorted(copied) == sorted(set(range(10)) - consumed)
+
+    def test_prefill_multidim_storage_is_sampled(self):
+        """A multi-dimensional dataset storage is still drawn with ``dataset.sample()``.
+
+        Under a fixed seed the copy matches the dataset's own draws of 16, 16
+        and 8 transitions, the chunks ``n_samples=40`` and ``chunk_size=16``
+        ask for.
+        """
+        offline = ReplayBuffer(storage=LazyTensorStorage(150, ndim=2))
+        offline.extend(
+            TensorDict({"step": torch.arange(150).reshape(50, 3)}, batch_size=[50, 3])
+        )
+        torch.manual_seed(0)
+        expected = torch.cat([offline.sample(n)["step"] for n in (16, 16, 8)])
+        target = ReplayBuffer(storage=LazyTensorStorage(1000))
+        torch.manual_seed(0)
+        prefill_replay_buffer(target, offline, n_samples=40, chunk_size=16)
+        assert torch.equal(target[:]["step"], expected)
 
     def test_prefill_respects_chunk_size(self, monkeypatch):
         offline = _make_offline_buffer(n=1000)
