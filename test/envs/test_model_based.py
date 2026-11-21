@@ -4,24 +4,30 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
 import re
 
 import numpy as np
 import pytest
 import torch
 
-from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
+from tensordict import TensorDict, unravel_key
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl.data import Composite, TensorDictReplayBuffer, Unbounded
 from torchrl.data.tensor_specs import Categorical
+from torchrl.envs import SerialEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import WorldModelEnv
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import SafeModule, WorldModel
 from torchrl.modules.tensordict_module import WorldModelWrapper
 from torchrl.testing import CatLinear, get_default_devices
-from torchrl.testing.mocking_classes import ActionObsMergeLinear, DummyModelBasedEnvBase
+from torchrl.testing.mocking_classes import (
+    ActionObsMergeLinear,
+    ContinuousActionVecMockEnv,
+    DummyModelBasedEnvBase,
+)
 
 
 class TestModelBasedEnvBase:
@@ -362,3 +368,176 @@ class TestWorldModelEnv:
         env = self._make_env(wm)
         with pytest.raises(RuntimeError, match="initial latent"):
             env.reset()
+
+    @staticmethod
+    def _make_observation_world_model(
+        latent_key, observation_dim, action_dim, *, encoder=None
+    ):
+        next_latent_key = unravel_key(("next", latent_key))
+        if encoder is None:
+            encoder = TensorDictModule(
+                nn.Sequential(
+                    nn.Linear(observation_dim, _WM_LATENT_DIM),
+                    nn.BatchNorm1d(_WM_LATENT_DIM),
+                ),
+                in_keys=["observation"],
+                out_keys=[latent_key],
+            )
+        dynamics = TensorDictModule(
+            CatLinear(_WM_LATENT_DIM + action_dim, _WM_LATENT_DIM),
+            in_keys=[latent_key, "action"],
+            out_keys=[next_latent_key],
+        )
+        reward_head = TensorDictModule(
+            nn.Linear(_WM_LATENT_DIM, 1),
+            in_keys=[next_latent_key],
+            out_keys=[("next", "reward")],
+        )
+        return WorldModel(encoder, dynamics, reward_head)
+
+    @staticmethod
+    def _expected_latents(wm, policy, start_td, latent_key, horizon):
+        latent = start_td.get(latent_key)
+        expected = []
+        for _ in range(horizon):
+            latent = wm.dynamics.module(latent, policy.module(latent))
+            expected.append(latent)
+        return torch.stack(expected, dim=1)
+
+    @pytest.mark.parametrize("latent_key", ["latent", ("encoded", "latent")])
+    @pytest.mark.parametrize("override", [None, "composite", "leaf"])
+    def test_latent_advances_with_observation_env(self, latent_key, override):
+        """The imagined latent follows the dynamics when the reference env exposes raw observations.
+
+        :class:`ContinuousActionVecMockEnv` is unbatched and declares
+        ``"observation"`` rather than the latent, as a real env does, so the
+        latent spec (dim 4, unlike the 7-dim observation) comes from the
+        encoder and is added to an override that omits it (a non-composite
+        override is stored under ``"observation"``). Before the fix the latent
+        was dropped after each step, so every step restarted from the reset
+        latent, and action / reward specs lost their feature dim.
+        """
+        base_env = ContinuousActionVecMockEnv()
+        observation_dim = base_env.observation_spec["observation"].shape[-1]
+        action_dim = base_env.action_spec.shape[-1]
+        wm = self._make_observation_world_model(latent_key, observation_dim, action_dim)
+        observation_spec = None
+        if override == "composite":
+            observation_spec = Composite(
+                pixels=Unbounded(shape=(_WM_BATCH, 3)), shape=[_WM_BATCH]
+            )
+        elif override == "leaf":
+            observation_spec = Unbounded(shape=(_WM_BATCH, observation_dim))
+        env = WorldModelEnv(
+            wm,
+            base_env=base_env,
+            batch_size=[_WM_BATCH],
+            observation_spec=observation_spec,
+            latent_key=latent_key,
+        )
+        assert env.action_spec.shape == (_WM_BATCH, action_dim)
+        assert env.reward_spec.shape == (_WM_BATCH, 1)
+        assert env.observation_spec[latent_key].shape == (_WM_BATCH, _WM_LATENT_DIM)
+        if override is None:
+            assert list(env.observation_spec.keys(True, True)) == [
+                unravel_key(latent_key)
+            ]
+        if override == "leaf":
+            assert "observation" in env.observation_spec.keys()
+
+        policy = TensorDictModule(
+            nn.Linear(_WM_LATENT_DIM, action_dim),
+            in_keys=[latent_key],
+            out_keys=["action"],
+        )
+        wm.eval()
+        start_td = wm.encode(
+            TensorDict(
+                {"observation": torch.randn(_WM_BATCH, observation_dim)},
+                batch_size=[_WM_BATCH],
+            )
+        )
+        with torch.no_grad():
+            rollout = env.rollout(4, policy=policy, tensordict=start_td)
+            expected = self._expected_latents(wm, policy, start_td, latent_key, 4)
+        torch.testing.assert_close(
+            rollout.get(unravel_key(("next", latent_key))), expected
+        )
+
+    def test_batched_reference_env(self):
+        """A batched reference env backs an imagined env of another batch size."""
+        base_env = SerialEnv(2, ContinuousActionVecMockEnv)
+        observation_dim = base_env.observation_spec["observation"].shape[-1]
+        action_dim = base_env.action_spec.shape[-1]
+        wm = self._make_observation_world_model("latent", observation_dim, action_dim)
+        env = WorldModelEnv(wm, base_env=base_env, batch_size=[_WM_BATCH])
+        assert env.action_spec.shape == (_WM_BATCH, action_dim)
+        assert env.done_spec.shape == (_WM_BATCH,)
+        policy = TensorDictModule(
+            nn.Linear(_WM_LATENT_DIM, action_dim),
+            in_keys=["latent"],
+            out_keys=["action"],
+        )
+        wm.eval()
+        start_td = wm.encode(
+            TensorDict(
+                {"observation": torch.randn(_WM_BATCH, observation_dim)},
+                batch_size=[_WM_BATCH],
+            )
+        )
+        with torch.no_grad():
+            rollout = env.rollout(3, policy=policy, tensordict=start_td)
+            expected = self._expected_latents(wm, policy, start_td, "latent", 3)
+        torch.testing.assert_close(rollout["next", "latent"], expected)
+
+    def test_latent_spec_inference_leaves_encoder_untouched(self):
+        """Inferring the latent spec leaves a train-mode encoder and the global RNG untouched.
+
+        The encoder holds a BatchNorm (whose running statistics a train-mode
+        pass would update) and samples noise (which would advance the RNG).
+        """
+        base_env = ContinuousActionVecMockEnv()
+        observation_dim = base_env.observation_spec["observation"].shape[-1]
+        action_dim = base_env.action_spec.shape[-1]
+        batch_norm = nn.BatchNorm1d(_WM_LATENT_DIM)
+        encoder = TensorDictSequential(
+            TensorDictModule(
+                nn.Sequential(nn.Linear(observation_dim, _WM_LATENT_DIM), batch_norm),
+                in_keys=["observation"],
+                out_keys=["latent"],
+            ),
+            TensorDictModule(
+                lambda latent: latent + torch.randn_like(latent),
+                in_keys=["latent"],
+                out_keys=["latent"],
+            ),
+        )
+        wm = self._make_observation_world_model(
+            "latent", observation_dim, action_dim, encoder=encoder
+        )
+        wm.train()
+        running_mean = batch_norm.running_mean.clone()
+        rng_state = torch.get_rng_state()
+        WorldModelEnv(wm, base_env=base_env, batch_size=[_WM_BATCH])
+        assert batch_norm.training
+        torch.testing.assert_close(batch_norm.running_mean, running_mean)
+        assert torch.equal(torch.get_rng_state(), rng_state)
+
+    def test_latent_spec_inference_error(self):
+        """An encoder that reads a key the reference env does not declare gets a clear error."""
+        base_env = ContinuousActionVecMockEnv()
+        observation_dim = base_env.observation_spec["observation"].shape[-1]
+        encoder = TensorDictModule(
+            CatLinear(2 * observation_dim, _WM_LATENT_DIM),
+            in_keys=["observation", "belief"],
+            out_keys=["latent"],
+        )
+        wm = _make_linear_world_model()
+        wm = WorldModel(encoder, wm.dynamics, wm.reward_head)
+        with pytest.raises(ValueError, match="Pass an observation_spec"):
+            WorldModelEnv(wm, base_env=base_env, batch_size=[_WM_BATCH])
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
