@@ -962,7 +962,8 @@ class DreamerV3ActorLoss(LossModule):
         Args:
             reward (torch.Tensor): imagined rewards of shape ``[*batch, T, 1]``,
                 with time on dim ``-2``. Without ``continuation``, a reward of
-                shape ``[*batch, T]`` is also accepted.
+                shape ``[*batch, T]`` with ``T > 1`` is also accepted; a
+                trailing dim of size 1 is always read as the feature dim.
             value (torch.Tensor): values of the next states, same shape as
                 ``reward``.
             continuation (torch.Tensor, optional): continuation probabilities,
