@@ -957,6 +957,22 @@ class DreamerV3ActorLoss(LossModule):
         value: torch.Tensor,
         continuation: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        """Compute lambda-return targets over an imagined trajectory.
+
+        Args:
+            reward (torch.Tensor): imagined rewards, typically of shape
+                ``[*batch, T, 1]`` with time on dim ``-2``.
+            value (torch.Tensor): values of the next states, same shape as
+                ``reward``.
+            continuation (torch.Tensor, optional): continuation probabilities,
+                same shape as ``reward``. When given, the TD(lambda) recursion
+                is discounted by it at every step; when ``None``, the
+                configured value estimator computes the targets. Defaults to
+                ``None``.
+
+        Returns:
+            torch.Tensor: the targets, same shape as ``reward``.
+        """
         if continuation is not None:
             gamma = self.value_estimator.gamma.to(reward)
             lmbda = self.value_estimator.lmbda.to(reward)
@@ -974,6 +990,11 @@ class DreamerV3ActorLoss(LossModule):
             return torch.stack(returns[::-1], dim=-2)
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         terminated = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
+        time_on_dim_minus_two = (
+            getattr(self.value_estimator, "time_dim", None) is None
+            and reward.ndim >= 3
+            and reward.shape[-1] == 1
+        )
         input_tensordict = TensorDict(
             {
                 ("next", self.tensor_keys.reward): reward,
@@ -981,7 +1002,7 @@ class DreamerV3ActorLoss(LossModule):
                 ("next", self.tensor_keys.done): done,
                 ("next", self.tensor_keys.terminated): terminated,
             },
-            [],
+            reward.shape[:-1] if time_on_dim_minus_two else [],
         )
         return self.value_estimator.value_estimate(input_tensordict)
 

@@ -953,6 +953,92 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert torch.isfinite(loss_td["loss_actor"])
         assert fake_data.shape == (tensordict.shape[0], 3)
 
+    def _make_lambda_target_loss(self, device, estimator, **hyperparams):
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model_with_log_prob().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+        )
+        loss_module.make_value_estimator(estimator, gamma=1.0, **hyperparams)
+        return loss_module
+
+    @pytest.mark.parametrize(
+        "estimator,hyperparams,expected",
+        [
+            (ValueEstimators.TDLambda, {"lmbda": 0.5}, [20.25, 28.5, 33.0]),
+            (ValueEstimators.TD0, {}, [11.0, 22.0, 33.0]),
+            (ValueEstimators.TD1, {}, [36.0, 35.0, 33.0]),
+        ],
+    )
+    def test_dreamer_v3_lambda_target_without_continuation(
+        self, device, estimator, hyperparams, expected
+    ):
+        """Without a continuation model, ``[batch, T, 1]`` targets follow the estimator over T.
+
+        Rewards ``[1, 2, 3]`` and next values ``[10, 20, 30]`` with
+        ``gamma=1``. Before the fix every estimator returned the one-step
+        target ``r + gamma * V'`` (``[11, 22, 33]``), because the trailing
+        singleton dim was taken as time. The second row (zero reward, unit
+        value) has the same targets for every estimator, so it catches returns
+        mixed across the batch.
+        """
+        loss_module = self._make_lambda_target_loss(device, estimator, **hyperparams)
+        reward = torch.tensor(
+            [[[1.0], [2.0], [3.0]], [[0.0], [0.0], [0.0]]], device=device
+        )
+        value = torch.tensor(
+            [[[10.0], [20.0], [30.0]], [[1.0], [1.0], [1.0]]], device=device
+        )
+        torch.testing.assert_close(
+            loss_module.lambda_target(reward, value),
+            torch.tensor([expected, [1.0, 1.0, 1.0]], device=device).unsqueeze(-1),
+        )
+
+    def test_dreamer_v3_lambda_target_other_layouts(self, device):
+        """Layouts outside ``[batch, T, 1]`` without ``time_dim`` keep their results.
+
+        A flat ``[batch, T]`` reward, an unbatched ``[T, 1]`` trajectory with a
+        continuation, a time-major ``[T, batch, 1]`` input with the
+        estimator's ``time_dim=0``, and a ``[batch, T, 1]`` input with an
+        explicit ``time_dim=-2`` were already handled and must not change.
+        With a continuation of 0.5 the targets are ``[6.375, 11.5, 18]``, as
+        in the continuation test below.
+        """
+        reward = torch.tensor([1.0, 2.0, 3.0], device=device)
+        value = torch.tensor([10.0, 20.0, 30.0], device=device)
+        targets = torch.tensor([20.25, 28.5, 33.0], device=device)
+        loss_module = self._make_lambda_target_loss(
+            device, ValueEstimators.TDLambda, lmbda=0.5
+        )
+        torch.testing.assert_close(
+            loss_module.lambda_target(reward[None], value[None]), targets[None]
+        )
+        torch.testing.assert_close(
+            loss_module.lambda_target(
+                reward[:, None],
+                value[:, None],
+                torch.full((3, 1), 0.5, device=device),
+            ),
+            torch.tensor([[6.375], [11.5], [18.0]], device=device),
+        )
+        time_major_loss = self._make_lambda_target_loss(
+            device, ValueEstimators.TDLambda, lmbda=0.5, time_dim=0
+        )
+        torch.testing.assert_close(
+            time_major_loss.lambda_target(reward[:, None, None], value[:, None, None]),
+            targets[:, None, None],
+        )
+        explicit_time_dim_loss = self._make_lambda_target_loss(
+            device, ValueEstimators.TDLambda, lmbda=0.5, time_dim=-2
+        )
+        torch.testing.assert_close(
+            explicit_time_dim_loss.lambda_target(
+                reward[None, :, None], value[None, :, None]
+            ),
+            targets[None, :, None],
+        )
+
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
         class _ConstantContinuation(nn.Module):
             def forward(self_, state, belief):
