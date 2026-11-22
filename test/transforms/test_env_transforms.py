@@ -1624,6 +1624,29 @@ class TestFrameSkipTransform(TransformBase):
             out[env.reward_key], expected["next", env.reward_key].sum(0)
         )
 
+    @pytest.mark.parametrize(
+        "action,count,reward",
+        [
+            # Element 0 is done on the first step, so no repeat runs.
+            ([[2], [3]], [[2], [3]], [[2.0], [3.0]]),
+            # Element 0 is done on the second step.
+            ([[1], [3]], [[2], [6]], [[3.0], [9.0]]),
+        ],
+    )
+    def test_frame_skip_batched_stops_all_elements(self, action, count, reward):
+        """In a batched env, the repeats stop for every element as soon as
+        any element is done, like the built-in frame_skip of gym-like envs."""
+        env = TransformedEnv(SerialEnv(2, _StatelessEpisodeEnv), FrameSkipTransform(4))
+        td = env.reset()
+        # Element 1 counts by 3 and is never done, but must stop with
+        # element 0.
+        td["action"] = torch.tensor(action)
+        out = env.step(td)["next"]
+        assert (out["count"] == torch.tensor(count)).all()
+        torch.testing.assert_close(out["reward"], torch.tensor(reward))
+        for done_key in env.done_keys:
+            assert (out[done_key] == torch.tensor([[True], [False]])).all()
+
     def test_frame_skip_keeps_next_preset(self):
         """Entries the policy writes in "next" before the step, such as the
         next recurrent state, must survive the repeated steps."""
