@@ -340,6 +340,21 @@ class TestRanges:
         torch.testing.assert_close(projected, torch.tensor(expected, dtype=dtype))
         assert spec.is_in(projected)
 
+    def test_masked_categorical_project_and_is_in_handle_out_of_bounds(self):
+        mask = torch.tensor([True, True, False, True])
+        spec = Categorical(4, mask=mask)
+
+        assert not spec.is_in(torch.tensor(7))
+        assert not spec.is_in(torch.tensor(-1))
+
+        projected = spec.project(torch.tensor(7))
+        assert spec.is_in(projected)
+
+        int32_spec = Categorical(4, dtype=torch.int32, mask=mask)
+        projected = int32_spec.project(torch.tensor(2, dtype=torch.int32))
+        assert projected.dtype == torch.int32
+        assert int32_spec.is_in(projected)
+
     @pytest.mark.parametrize("n", [1, 4, 7, 99])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("shape", [None, [], [1], [1, 2]])
