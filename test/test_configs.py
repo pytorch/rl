@@ -3958,8 +3958,12 @@ trainer:
 """
 
 
+_SOTA_DIR = Path(__file__).parents[1] / "sota-implementations"
 _SOTA_TRAINER_CONFIGS = sorted(
-    (Path(__file__).parents[1] / "sota-implementations").glob("*_trainer/config/*.yaml")
+    [
+        *_SOTA_DIR.glob("*_trainer/config/*.yaml"),
+        *_SOTA_DIR.glob("vla_grpo/config/*.yaml"),
+    ]
 )
 
 
