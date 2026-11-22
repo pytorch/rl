@@ -1,25 +1,18 @@
-# Flaky Test Report - 2026-11-21
+# Flaky Test Report - 2026-11-22
 
 ## Summary
 
-- **Flaky tests**: 1
-- **Newly flaky** (last 7 days): 1
+- **Flaky tests**: 0
+- **Newly flaky** (last 7 days): 0
 - **Resolved**: 0
-- **Total tests analyzed**: 33015
+- **Total tests analyzed**: 33040
 - **CI runs analyzed**: 60
 
 ---
 
-## Flaky Tests
+## No Flaky Tests Detected! 🎉
 
-| Test | Failure Rate | Failures | Flaky Score | Last Failed |
-|------|--------------|----------|-------------|-------------|
-| `...scripts/test_sota.py::test_commands[discrete_cql_offline]` 🆕 | 15.4% (4/26) | 4 | 0.25 | 2026-11-19 |
-
-
-### Newly Flaky Tests
-
-- `.github/unittest/linux_sota/scripts/test_sota.py::test_commands[discrete_cql_offline]`
+All tests are passing consistently.
 
 ---
 
@@ -32,4 +25,4 @@
 
 ---
 
-*Generated at 2026-11-21T06:18:39.101917+00:00*
+*Generated at 2026-11-22T06:18:31.318664+00:00*
