@@ -194,9 +194,9 @@ class ObservationNorm(ObservationTransform):
             if isinstance(buffer, nn.UninitializedBuffer) and isinstance(
                 value, torch.Tensor
             ):
-                buffer.materialize(
-                    shape=value.shape, dtype=value.dtype, device=value.device
-                )
+                # Leave the device to the module (like init_stats does), so a
+                # CPU checkpoint loads into a transform that lives on CUDA.
+                buffer.materialize(shape=value.shape, dtype=value.dtype)
         super()._load_from_state_dict(
             state_dict,
             prefix,
