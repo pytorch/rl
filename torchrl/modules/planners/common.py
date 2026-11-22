@@ -140,7 +140,10 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
         in_keys = list(env.observation_spec.keys(True, True))
         super().__init__(env, in_keys=in_keys, out_keys=out_keys)
         self.env = env
-        self.action_spec = env.action_spec
+        # ``env.action_spec`` is the whole Composite when the env action key is
+        # not "action", so read the leaf spec through the env action key.
+        self._env_action_key = env.action_key
+        self.action_spec = env.full_action_spec[self._env_action_key]
         self.to(env.device)
 
     @abc.abstractmethod
