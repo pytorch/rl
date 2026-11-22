@@ -2147,8 +2147,10 @@ class OneHot(TensorSpec):
         shape = torch.broadcast_shapes(shape, val.shape)
         mask_expand = self.mask.expand(shape)
         gathered = mask_expand & val
-        oob = ~gathered.any(-1)
-        new_val = torch.multinomial(mask_expand[oob].float(), 1)
+        oob = ~(gathered.any(-1) & (val.sum(-1) == 1))
+        # Keep the allowed entries of a multi-hot value, or else sample any allowed one.
+        weights = torch.where(gathered.any(-1, keepdim=True), gathered, mask_expand)
+        new_val = torch.multinomial(weights[oob].float(), 1)
         new_val = torch.scatter(torch.zeros_like(val[oob]), -1, new_val, 1)
         val = val.masked_scatter(expand_as_right(oob, val), new_val)
         return val
@@ -2167,7 +2169,7 @@ class OneHot(TensorSpec):
         shape = torch.broadcast_shapes(shape, val.shape)
         mask_expand = self.mask.expand(shape)
         gathered = mask_expand & val
-        return gathered.any(-1).all()
+        return gathered.any(-1).all() and (val.sum(-1) == 1).all()
 
     def __eq__(self, other):
         if not hasattr(other, "mask"):

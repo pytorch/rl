@@ -1572,6 +1572,23 @@ class TestSpec:
         assert projected.shape == expected.shape
         assert (projected == expected).all()
 
+    def test_one_hot_masked_rejects_multi_hot(self):
+        # Index 1 is masked out.
+        mask = torch.tensor([True, False, True, True])
+        spec = OneHot(4, shape=(3, 4), mask=mask.expand(3, 4))
+        val = torch.tensor([[1, 1, 0, 0], [1, 0, 1, 0], [0, 0, 0, 1]], dtype=torch.bool)
+        assert not spec.is_in(val)
+        projected = spec.project(val)
+        assert spec.is_in(projected)
+        # Each row keeps one of its allowed entries; a valid row is unchanged.
+        assert projected[0].tolist() == [True, False, False, False]
+        assert projected[1, [1, 3]].tolist() == [False, False]
+        assert projected[2].tolist() == [False, False, False, True]
+
+        multi = MultiOneHot([2, 2], mask=mask)
+        assert not multi.is_in(torch.tensor([1, 1, 1, 0], dtype=torch.bool))
+        assert multi.is_in(torch.tensor([1, 0, 1, 0], dtype=torch.bool))
+
     def test_bounded_rand(self):
         spec = Bounded(-3, 3, torch.Size((1,)))
         sample = torch.stack([spec.rand() for _ in range(100)])
