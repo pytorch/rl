@@ -134,21 +134,26 @@ _MIXED_FRAMES = 1_000
 _MIXED_BATCH = 256
 
 
-def _mixed_source_members(device):
-    demo = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(_MIXED_CAPACITY, device=device),
-        sampler=PrioritizedSampler(_MIXED_CAPACITY, alpha=0.6, beta=0.4),
-        writer=TensorDictRoundRobinWriter(track_generations=True),
-    )
-    online = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(_MIXED_CAPACITY, device=device),
-        writer=TensorDictRoundRobinWriter(track_generations=True),
-    )
-    return demo, online
+def _mixed_source_members(device, samplers):
+    members = []
+    for kind in samplers.split("_"):
+        sampler = (
+            PrioritizedSampler(_MIXED_CAPACITY, alpha=0.6, beta=0.4)
+            if kind == "per"
+            else None
+        )
+        members.append(
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(_MIXED_CAPACITY, device=device),
+                sampler=sampler,
+                writer=TensorDictRoundRobinWriter(track_generations=True),
+            )
+        )
+    return members
 
 
-def _mixed_source_batch(device, generator):
-    intervention = torch.rand(_MIXED_FRAMES, generator=generator) < 0.1
+def _mixed_source_batch(device, generator, shared):
+    intervention = torch.rand(_MIXED_FRAMES, generator=generator) < shared
     return TensorDict(
         {
             "observation": torch.randn(_MIXED_FRAMES, 32, generator=generator),
@@ -163,22 +168,31 @@ def _mixed_source_batch(device, generator):
 
 @pytest.mark.parametrize("implementation", ["ensemble", "hand_wired"])
 @pytest.mark.parametrize("operation", ["extend", "sample", "update_priority"])
-def test_mixed_source_replay_buffer(benchmark, operation, implementation):
-    """HIL-SERL-style replay: PER demo member plus uniform online member, 50/50 batches.
+@pytest.mark.parametrize("samplers", ["per_uniform", "per_per", "uniform_uniform"])
+@pytest.mark.parametrize("shared", [0.1, 1.0])
+def test_mixed_source_replay_buffer(
+    benchmark, shared, samplers, operation, implementation
+):
+    """HIL-SERL-style replay: a demo member and an online member, 50/50 batches.
 
-    ``ensemble`` uses one ``ReplayBufferEnsemble`` with mask routing and
-    exact fractions; ``hand_wired`` uses two buffers with the equivalent
-    manual extend, concatenation and priority calls.
+    ``shared`` is the share of written rows routed to both members, as
+    interventions are. ``ensemble`` uses one ``ReplayBufferEnsemble`` with mask
+    routing and exact fractions; ``hand_wired`` does the same work with two
+    buffers: the same writes, returning the write generation of every copy; a
+    50/50 batch carrying each row's member, index and write generation (what
+    routed write-back needs); and priority updates sent to the prioritized
+    members.
     """
+    if operation == "update_priority" and samplers == "uniform_uniform":
+        pytest.skip("no prioritized member to update")
     device = _replay_boundary_device()
     generator = torch.Generator().manual_seed(0)
-    demo, online = _mixed_source_members(device)
-    data = _mixed_source_batch(device, generator)
+    members = _mixed_source_members(device, samplers)
+    data = _mixed_source_batch(device, generator, shared)
     half = _MIXED_BATCH // 2
     if implementation == "ensemble":
         rb = ReplayBufferEnsemble(
-            demo,
-            online,
+            *members,
             routing_key="route",
             routing_mode="mask",
             fractions=[0.5, 0.5],
@@ -195,20 +209,48 @@ def test_mixed_source_replay_buffer(benchmark, operation, implementation):
             rb.update_tensordict_priority(batch)
 
     else:
+        demo, online = members
+        prioritized = [
+            isinstance(member.sampler, PrioritizedSampler) for member in members
+        ]
 
         def write():
-            online.extend(data)
-            demo.extend(data[data["intervention"].squeeze(-1)])
+            online_index = online.extend(data)
+            demo_index = demo.extend(data[data["intervention"].squeeze(-1)])
+            return (
+                online.writer.generations_of(online_index),
+                demo.writer.generations_of(demo_index),
+            )
 
         def draw():
-            online_batch = online.sample(half)
-            online_batch.set(
-                "priority_weight", torch.ones(half, device=online_batch.device)
-            )
-            return torch.cat([demo.sample(half), online_batch])
+            parts = []
+            for member_id, member in enumerate(members):
+                batch = member.sample(half)
+                local = batch.get("index")
+                batch = batch.exclude("index")
+                batch.set(
+                    "index",
+                    TensorDict(
+                        {
+                            "buffer_ids": torch.full_like(local, member_id),
+                            "index": local,
+                        },
+                        [half],
+                    ),
+                )
+                batch.set("index_generation", member.writer.generations_of(local))
+                if "priority_weight" not in batch.keys():
+                    batch.set("priority_weight", torch.ones(half, device=device))
+                parts.append(batch)
+            return torch.cat(parts)
 
         def update(batch):
-            demo.update_tensordict_priority(batch[:half])
+            for member_id, member in enumerate(members):
+                if not prioritized[member_id]:
+                    continue
+                part = batch[member_id * half : (member_id + 1) * half]
+                part = part.exclude("index").set("index", part.get(("index", "index")))
+                member.update_tensordict_priority(part)
 
     for _ in range(20):
         write()
