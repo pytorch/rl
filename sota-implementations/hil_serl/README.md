@@ -39,6 +39,9 @@ python train_reward_classifier.py classifier.out=classifier.pt
 python hil_serl.py demos.path=... reward.source=classifier reward.classifier_path=classifier.pt
 ```
 
+On Apple silicon, add `network.device=cpu`: the default device is MPS, which
+crashes inside Metal when used with the robosuite collector.
+
 The classifier script labels Lift states with the simulator, keeps 200
 successes and 1000 failures, and saves the held-out error rates next to the
 model.
