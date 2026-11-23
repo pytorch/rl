@@ -2055,7 +2055,11 @@ class Trainer:
             else:
                 prog = range(optim_steps_per_batch)
 
-            for j in prog:
+            # Steps in this epoch that reported each key. A key can be missing
+            # from some steps, e.g. a stepper with gradient accumulation only
+            # reports ``grad_norm`` on the steps that step the optimizer.
+            key_counts = {}
+            for j in prog:  # noqa: B007 (j is read after the loop)
                 self._optim_count += 1
                 try:
                     sub_batch = self._process_optim_batch_hook(batch_processed)
@@ -2082,10 +2086,16 @@ class Trainer:
 
                 if average_losses is None:
                     average_losses: TensorDictBase = losses_detached
+                    key_counts = dict.fromkeys(losses_detached.keys(), 1)
                 else:
                     for key, item in losses_detached.items():
-                        val = average_losses.get(key)
-                        average_losses.set(key, val * j / (j + 1) + item / (j + 1))
+                        n = key_counts.get(key, 0) + 1
+                        key_counts[key] = n
+                        val = average_losses.get(key, None)
+                        if val is None:
+                            average_losses.set(key, item)
+                        else:
+                            average_losses.set(key, val * (n - 1) / n + item / n)
                 del sub_batch, losses_detached
 
             # LOGGING POINT 5: Post-epoch logging (e.g., epoch completion metrics)
