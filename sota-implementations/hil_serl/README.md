@@ -8,6 +8,7 @@ Robosuite Lift stands in for the robot.
 
 - Corrections: a scripted controller plays the human. It takes over when the
   policy gets stuck or wanders off, for up to 30 steps, with some noise.
+  `intervention.reaction_delay` makes it wait a few steps before taking over.
 - Replay: one demo buffer and one online buffer. Each batch is half from each,
   and corrected steps are stored in both.
 - Reward: the simulator's success, or a success classifier. Whichever is used

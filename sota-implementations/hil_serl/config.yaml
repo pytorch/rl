@@ -22,6 +22,7 @@ intervention:
   workspace_radius: 0.35
   max_takeover: 30
   noise_std: 0.1
+  reaction_delay: 0
 
 collector:
   total_frames: 40_000

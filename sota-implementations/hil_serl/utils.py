@@ -305,9 +305,10 @@ class StallIntervener(nn.Module):
 
     The policy is stuck when the gripper barely moves for stall_steps steps in a
     row, and has wandered off when the gripper is more than workspace_radius
-    from the cube. Each takeover lasts at most max_takeover steps. Noise is
-    added to the controller's actions so the help is imperfect. The takeover
-    state resets at the start of each episode. It is kept out of the module's
+    from the cube. A takeover starts reaction_delay steps after either is
+    noticed and lasts at most max_takeover steps. Noise is added to the
+    controller's actions so the help is imperfect. The takeover state resets at
+    the start of each episode. It is kept out of the module's
     buffers so collector weight updates never copy it.
     """
 
@@ -320,6 +321,7 @@ class StallIntervener(nn.Module):
         workspace_radius: float = 0.35,
         max_takeover: int = 20,
         noise_std: float = 0.1,
+        reaction_delay: int = 0,
         enabled: bool = True,
     ):
         super().__init__()
@@ -329,10 +331,12 @@ class StallIntervener(nn.Module):
         self.workspace_radius = workspace_radius
         self.max_takeover = max_takeover
         self.noise_std = noise_std
+        self.reaction_delay = reaction_delay
         self.enabled = enabled
         self.last_eef = None
         self.stalled = None
         self.takeover_left = None
+        self.delay_left = None
 
     def forward(self, observation, is_init):
         eef = observation[..., EEF_POS]
@@ -341,6 +345,7 @@ class StallIntervener(nn.Module):
             self.last_eef = eef.clone()
             self.stalled = torch.zeros(batch, dtype=torch.long, device=eef.device)
             self.takeover_left = torch.zeros_like(self.stalled)
+            self.delay_left = torch.zeros_like(self.stalled)
         reset = is_init.reshape(batch)
         speed = (eef - self.last_eef).norm(dim=-1)
         self.stalled = torch.where(
@@ -350,11 +355,19 @@ class StallIntervener(nn.Module):
             dim=-1
         ) > self.workspace_radius
         trigger = (self.stalled >= self.stall_steps) | outside
+        waiting = self.delay_left > 0
+        noticed = (self.takeover_left == 0) & ~waiting & trigger
+        self.delay_left = torch.where(
+            reset | ~(noticed | waiting),
+            0,
+            torch.where(noticed, self.reaction_delay, self.delay_left - 1),
+        )
+        start = (noticed | waiting) & (self.delay_left == 0)
         self.takeover_left = torch.where(
             reset,
             0,
             torch.where(
-                (self.takeover_left == 0) & trigger,
+                start,
                 self.max_takeover,
                 (self.takeover_left - 1).clamp_min(0),
             ),
@@ -379,6 +392,7 @@ def make_intervener(cfg) -> TensorDictModule:
             workspace_radius=icfg.workspace_radius,
             max_takeover=icfg.max_takeover,
             noise_std=icfg.noise_std,
+            reaction_delay=icfg.reaction_delay,
             enabled=icfg.enabled,
         ),
         in_keys=["observation", "is_init"],
