@@ -206,7 +206,6 @@ def _make_planner(
     planning_horizon=TWO_SEQ_HORIZON,
     num_candidates=4,
     top_k=2,
-    action_key="action",
 ):
     if name == "cem":
         return CEMPlanner(
@@ -216,7 +215,6 @@ def _make_planner(
             num_candidates=num_candidates,
             top_k=top_k,
             reward_key=("next", "reward"),
-            action_key=action_key,
         )
     return MPPIPlanner(
         env,
@@ -227,20 +225,17 @@ def _make_planner(
         num_candidates=num_candidates,
         top_k=top_k,
         reward_key=("next", "reward"),
-        action_key=action_key,
     )
 
 
-def _assert_planner_selects(
-    env, planner_name, device, expected_action, action_key="action"
-):
+def _assert_planner_selects(env, planner_name, device, expected_action):
     die_seq = _die_then_jackpot_sequence(device)
     live_seq = _steady_live_sequence(device)
-    planner = _make_planner(planner_name, env, action_key=action_key)
+    planner = _make_planner(planner_name, env)
     td = env.reset()
     with _fixed_planner_candidates(planner_name, die_seq, live_seq, die_seq, live_seq):
         out = planner(td)
-    torch.testing.assert_close(out.get(action_key), expected_action)
+    torch.testing.assert_close(out.get(env.action_key), expected_action)
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -342,13 +337,32 @@ class TestPlannerActionKey:
     @pytest.mark.parametrize("action_key", ["action", "force", ("agent", "action")])
     def test_planner_uses_env_action_key(self, device, planner_name, action_key):
         # For any key other than "action", env.action_spec is the whole
-        # Composite, so the planner must read the leaf spec and write the
-        # candidates through the env action key.
+        # Composite, so the planner must read the leaf spec, write the
+        # candidates through the env action key and, by default, output the
+        # action under that key too.
         env = _TwoSequenceEnv(device=device, action_key=action_key)
         expected = _steady_live_sequence(device)[0]
-        _assert_planner_selects(
-            env, planner_name, device, expected, action_key=action_key
+        _assert_planner_selects(env, planner_name, device, expected)
+
+    @pytest.mark.parametrize("planner_name", ["cem", "mppi"])
+    @pytest.mark.parametrize("action_key", ["action", "force", ("agent", "action")])
+    def test_planner_as_rollout_policy(self, device, planner_name, action_key):
+        # With the default action_key the planner output is the action the
+        # env steps with, so every step takes the live sequence and earns
+        # LIVE_REWARD.
+        env = _TwoSequenceEnv(device=device, action_key=action_key)
+        planner = _make_planner(planner_name, env)
+        die_seq = _die_then_jackpot_sequence(device)
+        live_seq = _steady_live_sequence(device)
+        with _fixed_planner_candidates(
+            planner_name, die_seq, live_seq, die_seq, live_seq
+        ):
+            rollout = env.rollout(2, planner)
+        expected = torch.full(
+            (2, 1), LIVE_REWARD, device=device, dtype=torch.get_default_dtype()
         )
+        torch.testing.assert_close(rollout.get(action_key), expected)
+        torch.testing.assert_close(rollout.get(("next", "reward")), expected)
 
 
 TDMPC2_OBSERVATION_DIM = 5

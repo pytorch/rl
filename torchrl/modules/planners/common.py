@@ -124,18 +124,22 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
     Args:
         env (EnvBase): The environment to perform the planning step on (Can be :obj:`ModelBasedEnvBase` or :obj:`EnvBase`).
         action_key (NestedKey, optional): The key that will point to the computed action.
+            Defaults to ``env.action_key``, so the planner can be used as the
+            policy of ``env.rollout``.
     """
 
     def __init__(
         self,
         env: EnvBase,
-        action_key: NestedKey = "action",
+        action_key: NestedKey | None = None,
     ):
         # Check if env is stateless
         if env.batch_locked:
             raise ValueError(
                 "Environment is batch_locked. MPCPlanners need an environment that accepts batched inputs with any batch size"
             )
+        if action_key is None:
+            action_key = env.action_key
         out_keys = [action_key]
         in_keys = list(env.observation_spec.keys(True, True))
         super().__init__(env, in_keys=in_keys, out_keys=out_keys)

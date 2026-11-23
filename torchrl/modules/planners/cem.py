@@ -52,7 +52,7 @@ class CEMPlanner(MPCPlannerBase):
         reward_key (NestedKey, optional): The key in the TensorDict to use to
             retrieve the reward. Defaults to ``("next", "reward")``.
         action_key (NestedKey, optional): The key in the TensorDict to use to store
-            the action. Defaults to ``"action"``.
+            the action. Defaults to ``env.action_key``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -131,7 +131,7 @@ class CEMPlanner(MPCPlannerBase):
         num_candidates: int,
         top_k: int,
         reward_key: NestedKey = ("next", "reward"),
-        action_key: NestedKey = "action",
+        action_key: NestedKey | None = None,
     ):
         super().__init__(env=env, action_key=action_key)
         self.planning_horizon = planning_horizon
