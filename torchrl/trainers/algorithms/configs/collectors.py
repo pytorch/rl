@@ -24,6 +24,16 @@ else:
     _CollectorBackend = str
 
 
+def _set_env_configs_partial(create_env_fn) -> None:
+    # Multi-collectors take one env config per worker, or a single one that
+    # every worker uses (with ``num_workers``).
+    env_cfgs = (
+        [create_env_fn] if isinstance(create_env_fn, ConfigBase) else create_env_fn
+    )
+    for env_cfg in env_cfgs:
+        env_cfg._partial_ = True
+
+
 @dataclass
 class BaseCollectorConfig(ConfigBase):
     """Parent class to configure a data collector."""
@@ -208,8 +218,7 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     _partial_: bool = False
 
     def __post_init__(self):
-        for env_cfg in self.create_env_fn:
-            env_cfg._partial_ = True
+        _set_env_configs_partial(self.create_env_fn)
         if self.policy_factory is not None:
             self.policy_factory._partial_ = True
         if self.weight_updater is not None:
@@ -276,8 +285,7 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     _partial_: bool = False
 
     def __post_init__(self):
-        for env_cfg in self.create_env_fn:
-            env_cfg._partial_ = True
+        _set_env_configs_partial(self.create_env_fn)
         if self.policy_factory is not None:
             self.policy_factory._partial_ = True
         if self.weight_updater is not None:

@@ -2195,6 +2195,42 @@ class TestCollectorsConfig:
         finally:
             collector_instance.shutdown(timeout=10)
 
+    @pytest.mark.parametrize("collector", ["multi_sync", "multi_async"])
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_multi_collector_config_single_env(self, collector):
+        """A single env config plus ``num_workers`` is shared by every worker."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.collectors import (
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
+        )
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+
+        cfg_cls = {
+            "multi_sync": MultiSyncCollectorConfig,
+            "multi_async": MultiAsyncCollectorConfig,
+        }[collector]
+        cfg = cfg_cls(
+            create_env_fn=GymEnvConfig(env_name="Pendulum-v1"),
+            num_workers=2,
+            frames_per_batch=10,
+            total_frames=10,
+        )
+        assert cfg.create_env_fn._partial_
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="SharedMemWeightSyncScheme was created without",
+                category=FutureWarning,
+            )
+            collector_instance = instantiate(cfg)
+        try:
+            assert collector_instance.num_workers == 2
+            assert next(iter(collector_instance)).numel() == 10
+        finally:
+            collector_instance.shutdown(timeout=10)
+
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
