@@ -310,6 +310,28 @@ class TestInterventionModule:
         assert torch.equal(out["policy_action"], policy_action)
         assert out["action"][1].data_ptr() != policy_action.data_ptr()
 
+    def test_intervener_action_takes_policy_dtype(self):
+        class DoubleAction(nn.Module):
+            def forward(self, observation):
+                return torch.full(
+                    observation.shape, 0.5, dtype=torch.float64
+                ), torch.ones(observation.shape[:-1], dtype=torch.bool)
+
+        intervener = TensorDictModule(
+            DoubleAction(),
+            in_keys=["observation"],
+            out_keys=[("intervener", "action"), ("intervener", "active")],
+        )
+        td = TensorDict(
+            {"observation": torch.zeros(2, 1), "action": torch.zeros(2, 1)}, [2]
+        )
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            out = InterventionModule(intervener)(td)
+
+        assert out["action"].dtype == torch.float32
+        assert out["action"].tolist() == [[0.5], [0.5]]
+
     def test_projects_intervener_action_onto_spec(self):
         class Overshoot(nn.Module):
             def forward(self, observation):
