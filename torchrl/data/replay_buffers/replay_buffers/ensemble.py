@@ -227,6 +227,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
     """
 
     _collate_fn_val = None
+    routing_mode = "id"
 
     def __init__(
         self,
@@ -856,7 +857,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
 
     def update_priority(
         self,
-        index: TensorDictBase,
+        index: TensorDictBase | torch.Tensor,
         priority: float | torch.Tensor,
     ) -> None:
         """Sends new priorities to the members that hold the records.
@@ -866,9 +867,11 @@ class ReplayBufferEnsemble(ReplayBuffer):
         sampling inside a member.
 
         Args:
-            index (TensorDictBase): record addresses, such as the "index"
-                entry of a sampled batch or the result of extend. Rows marked
-                False in an optional "present" entry are skipped.
+            index (TensorDictBase or torch.Tensor): record addresses, such
+                as the "index" entry of a sampled batch or the result of
+                extend. Rows marked False in an optional "present" entry are
+                skipped. A plain tensor index, without member addresses, is
+                passed to the ensemble's sampler as before.
             priority (float or torch.Tensor): the new priorities, one value
                 for all records or one per record.
 
@@ -890,6 +893,8 @@ class ReplayBufferEnsemble(ReplayBuffer):
             >>> (demo.sample(100)["obs"] == 1).float().mean() > 0.9
             tensor(True)
         """
+        if not isinstance(index, TensorDictBase):
+            return super().update_priority(index, priority)
         flat_buffer_ids, flat_local_index, leading_shape = self._flat_routed_index(
             index
         )

@@ -610,6 +610,20 @@ class TestEnsemble:
         demo_index = demo.sample(256, return_info=True)[1]["index"]
         assert (demo_index == 3).float().mean() > 0.95
 
+    def test_update_priority_plain_index_keeps_previous_behavior(self):
+        demo, online, rb = self._make_demo_online()
+        before = demo.sampler.state_dict()
+
+        with pytest.warns(UserWarning, match="update_priority"):
+            rb.update_priority(torch.tensor([0, 1]), torch.tensor([1e4, 1e4]))
+
+        after = demo.sampler.state_dict()
+        assert all(
+            torch.equal(before[key], after[key])
+            for key in before
+            if isinstance(before[key], torch.Tensor)
+        )
+
     def test_fractions_exact_quotas_flat_output(self):
         demo, online, rb = self._make_demo_online(fractions=[0.25, 0.75], batch_size=8)
 
