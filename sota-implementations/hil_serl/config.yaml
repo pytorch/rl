@@ -53,6 +53,7 @@ optim:
   tau: 0.005
   alpha_init: 0.01
   num_qvalue_nets: 10
+  backup_entropy: false
   bc_weight: 0.0
 
 compile:

@@ -459,6 +459,7 @@ def make_loss(cfg, actor, qvalue):
         delay_actor=False,
         delay_qvalue=True,
         alpha_init=cfg.optim.alpha_init,
+        backup_entropy=cfg.optim.backup_entropy,
     )
     loss.make_value_estimator(gamma=cfg.optim.gamma)
     loss.target_entropy
