@@ -11,6 +11,11 @@ failures recorded by a person. Two sources are supported:
 - classifier.source=synthetic runs the scripted controller (with noise) and
   random actions, and labels every state with the simulator.
 
+Rollouts use classifier.collect_env (the full-pose controller and hard
+resets by default) and last classifier.episode_steps steps, whatever the
+training env uses, so the classifier sees the same states however the policy
+is set up.
+
 Both keep the paper's 1 to 5 ratio, and states just before a success count as
 failures. The classifier is saved with its error rates.
 
@@ -25,7 +30,7 @@ import json
 
 import hydra
 import torch
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
@@ -158,13 +163,14 @@ def main(cfg: DictConfig):
     ccfg = cfg.classifier
     torch.manual_seed(ccfg.seed)
     generator = torch.Generator().manual_seed(ccfg.seed)
-    steps = cfg.env.max_steps // 2
+    steps = ccfg.episode_steps
+    collect_cfg = OmegaConf.merge(cfg, {"env": ccfg.collect_env})
 
     def dataset(episodes):
         return torch.cat(
             [
-                collect(cfg, episodes, ccfg.controller_noise, steps),
-                collect(cfg, max(episodes // 4, 1), ccfg.random_noise, steps),
+                collect(collect_cfg, episodes, ccfg.controller_noise, steps),
+                collect(collect_cfg, max(episodes // 4, 1), ccfg.random_noise, steps),
             ]
         )
 

@@ -74,6 +74,10 @@ classifier:
   positives: 200
   negatives: 1000
   near_miss_share: 0.3
+  episode_steps: 100
+  collect_env:
+    position_only: false
+    hard_reset: true
   controller_noise: 0.3
   random_noise: 2.0
   train_episodes: 40
