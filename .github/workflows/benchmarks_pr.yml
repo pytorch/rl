@@ -32,14 +32,15 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euxo pipefail
-          mkdir -p benchmark-definitions/payload
+          mkdir -p benchmark-definitions/payload/sota-implementations
           cp -a benchmarks benchmark-definitions/payload/
+          cp -a sota-implementations/dreamer_v3 benchmark-definitions/payload/sota-implementations/
           (
             cd benchmark-definitions/payload
-            find benchmarks -type f -print0 \
+            find benchmarks sota-implementations/dreamer_v3 -type f -print0 \
               | sort -z \
               | xargs -0 sha256sum > ../definitions.sha256
-            tar -czf ../benchmark-definitions.tar.gz benchmarks
+            tar -czf ../benchmark-definitions.tar.gz benchmarks sota-implementations/dreamer_v3
           )
           DEFINITIONS_SHA="$(sha256sum benchmark-definitions/definitions.sha256 | cut -d' ' -f1)"
           export DEFINITIONS_SHA
