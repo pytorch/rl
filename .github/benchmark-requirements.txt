@@ -3,7 +3,7 @@
 # cache recreates the same user-space environment.
 absl-py==2.5.0
 accelerate==1.14.0
-ale-py==0.9.0
+ale-py==0.9.1
 annotated-doc==0.0.4
 antlr4-python3-runtime==4.9.3
 anyio==4.14.2
@@ -25,12 +25,14 @@ dm-env==1.6
 dm-tree==0.1.10
 etils==1.13.0
 exceptiongroup==1.3.1
+farama-notifications==0.0.6
 filelock==4.2.1
 fonttools==4.63.0
 fsspec==2026.6.0
 glfw==2.10.0
 gym==0.26.2
 gym-notices==0.1.0
+gymnasium==1.2.3
 h11==0.16.0
 hf-xet==1.5.1
 hoptorch==0.1.4
