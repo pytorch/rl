@@ -1090,6 +1090,36 @@ class TestSAC(LossModuleTestBase):
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
+    @pytest.mark.parametrize("backup_entropy", [True, False])
+    def test_sac_backup_entropy(self, backup_entropy, version):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+
+        def critic_loss(alpha):
+            torch.manual_seed(self.seed)
+            actor = self._create_mock_actor()
+            qvalue = self._create_mock_qvalue()
+            value = self._create_mock_value() if version == 1 else None
+            loss_fn = SACLoss(
+                actor_network=actor,
+                qvalue_network=qvalue,
+                value_network=value,
+                num_qvalue_nets=2,
+                alpha_init=alpha,
+                loss_function="l2",
+                backup_entropy=backup_entropy,
+            )
+            torch.manual_seed(0)
+            out = loss_fn(td.clone())
+            return out["loss_value"] if version == 1 else out["loss_qvalue"]
+
+        low, high = critic_loss(1e-3), critic_loss(10.0)
+
+        if backup_entropy:
+            assert not torch.allclose(low, high)
+        else:
+            torch.testing.assert_close(low, high)
+
     @pytest.mark.parametrize("action_key", ["action", "action2"])
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
@@ -1677,6 +1707,34 @@ class TestDiscreteSAC(LossModuleTestBase):
             action_space="one-hot",
         )
         self.reset_parameters_recursive_test(loss_fn)
+
+    @pytest.mark.parametrize("skip_done_states", [True, False])
+    @pytest.mark.parametrize("backup_entropy", [True, False])
+    def test_discrete_sac_backup_entropy(self, backup_entropy, skip_done_states):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+
+        def critic_loss(alpha):
+            torch.manual_seed(self.seed)
+            actor = self._create_mock_actor()
+            loss_fn = DiscreteSACLoss(
+                actor_network=actor,
+                qvalue_network=self._create_mock_qvalue(),
+                num_actions=actor.spec["action"].space.n,
+                action_space="one-hot",
+                alpha_init=alpha,
+                loss_function="l2",
+                skip_done_states=skip_done_states,
+                backup_entropy=backup_entropy,
+            )
+            return loss_fn(td.clone())["loss_qvalue"]
+
+        low, high = critic_loss(1e-3), critic_loss(10.0)
+
+        if backup_entropy:
+            assert not torch.allclose(low, high)
+        else:
+            torch.testing.assert_close(low, high)
 
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
