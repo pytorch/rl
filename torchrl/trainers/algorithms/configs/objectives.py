@@ -185,6 +185,7 @@ class SACLossConfig(LossConfig):
     deactivate_vmap: bool = False
     use_prioritized_weights: str | bool = "auto"
     scalar_output_mode: str | None = None
+    backup_entropy: bool = True
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_sac_loss"
 
     def __post_init__(self) -> None:
