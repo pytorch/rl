@@ -42,13 +42,14 @@ class TestSafetyGymnasium:
         td = env.rollout(5)
         assert ("next", "cost") in td.keys(True)
         assert td["next", "cost"].dtype == torch.float64
-        assert td["next", "cost"].shape == td["next", "reward"].shape[:-1]
+        assert td["next", "cost"].shape == td["next", "reward"].shape
 
     def test_cost_fires_on_hazard_contact(self):
         # SafetyCarPush2-v0 has dense hazards; under random actions we expect
         # at least one positive cost in a long rollout. Without this signal
         # being plumbed through, every cost would be zero.
         env = SafetyGymnasiumEnv(env_name="SafetyCarPush2-v0")
+        torch.manual_seed(0)
         env.set_seed(0)
         td = env.rollout(2000, break_when_any_done=False)
         assert (td["next", "cost"] > 0).any(), (
@@ -67,6 +68,18 @@ class TestSafetyGymnasium:
         td = env.rollout(1000, break_when_any_done=False)
         assert td["next", "cost"].max() > 1
         assert td["next", "cost"].max() <= 4
+
+    def test_vector_env(self):
+        """A vector env gets one cost per sub-env, shaped like the reward (#4749)."""
+        import safety_gymnasium
+
+        base = safety_gymnasium.vector.make(
+            "SafetyCarPush2-v0", num_envs=3, asynchronous=False
+        )
+        env = SafetyGymnasiumWrapper(base)
+        check_env_specs(env)
+        td = env.rollout(10)
+        assert td["next", "cost"].shape == td["next", "reward"].shape == (3, 10, 1)
 
 
 @pytest.mark.skipif(not _has_gymnasium, reason="gymnasium not installed")
@@ -109,7 +122,7 @@ class TestSafetyGymnasiumFrameSkip:
         rollout = env.rollout(10)
         torch.testing.assert_close(
             rollout["next", "cost"],
-            torch.tensor(expected_costs, dtype=torch.float64),
+            torch.tensor(expected_costs, dtype=torch.float64).unsqueeze(-1),
         )
 
 
