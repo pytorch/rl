@@ -954,6 +954,78 @@ class TestEnsemble:
 
         assert restored.fractions.tolist() == [0.25, 0.75]
 
+    def test_fractions_dumps_round_trip(self, tmp_path):
+        demo, online, rb = self._make_demo_online(fractions=[0.5, 0.5], batch_size=8)
+        rb.fractions = [0.25, 0.75]
+        rb.dumps(tmp_path)
+
+        restored_demo, restored_online, restored = self._make_demo_online(
+            fractions=[0.5, 0.5], batch_size=8
+        )
+        restored.loads(tmp_path)
+
+        assert restored.fractions.tolist() == [0.25, 0.75]
+
+    def test_fractions_change_during_prefetch_keeps_labels(self):
+        members = [
+            TensorDictReplayBuffer(storage=LazyTensorStorage(500)) for _ in range(2)
+        ]
+        for member_id, member in enumerate(members):
+            member.extend(TensorDict({"member": torch.full((500,), member_id)}, [500]))
+        rb = ReplayBufferEnsemble(
+            *members, fractions=[0.1, 0.9], batch_size=1024, prefetch=2
+        )
+
+        for step in range(100):
+            rb.fractions = [0.9, 0.1] if step % 2 else [0.1, 0.9]
+            sample = rb.sample()
+            assert (sample["member"] == sample["index", "buffer_ids"]).all()
+
+    def test_fractions_reject_non_strict_slices(self):
+        members = [
+            self._make_routed_member(
+                16,
+                sampler=SliceSampler(
+                    slice_len=4, traj_key="episode", strict_length=False
+                ),
+            )
+            for _ in range(2)
+        ]
+        with pytest.raises(ValueError, match="strict_length"):
+            ReplayBufferEnsemble(*members, fractions=[0.5, 0.5]).sampler.quota_counts(8)
+
+    def test_fractions_stats_count_multidim_members(self):
+        members = [
+            TensorDictReplayBuffer(storage=LazyTensorStorage(20, ndim=2))
+            for _ in range(2)
+        ]
+        for member in members:
+            member.extend(TensorDict({"obs": torch.arange(10).view(2, 5)}, [2, 5]))
+        rb = ReplayBufferEnsemble(*members, fractions=[0.5, 0.5])
+
+        rb.sample(6)
+
+        assert rb.stats()["samples_returned"] == 6
+
+    def test_update_priority_one_value_per_masked_record(self):
+        demo, online = (
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(5),
+                sampler=PrioritizedSampler(5, alpha=1.0, beta=1.0),
+            )
+            for _ in range(2)
+        )
+        rb = ReplayBufferEnsemble(
+            demo, online, routing_key="route", routing_mode="mask"
+        )
+        meta = rb.extend(TensorDict({"route": torch.ones(3, 2, dtype=torch.bool)}, [3]))
+
+        rb.update_priority(meta, torch.tensor([1.0, 1.0, 1e4]))
+
+        for member in (demo, online):
+            index = member.sample(256, return_info=True)[1]["index"]
+            assert (index == 2).float().mean() > 0.95
+
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
     def test_fractions_mixed_index_devices(self):

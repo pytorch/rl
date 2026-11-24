@@ -47,9 +47,10 @@ class SamplerEnsemble(Sampler):
             batch gets the same counts, rounded so they add up to the batch
             size. The sampled index is flat and ordered by member. With slice
             samplers the counts are in slices, so the batch size must be a
-            multiple of the slice length. If a member cannot provide its
-            share, sampling fails instead of taking more from the others.
-            Cannot be combined with p, sample_from_all or num_buffer_sampled.
+            multiple of the slice length. An empty member makes sampling
+            fail instead of taking more from the others, and a member with
+            fewer records than its share repeats records, even with a
+            without-replacement sampler. Cannot be combined with p, sample_from_all or num_buffer_sampled.
             Can be changed between batches. Defaults to None.
 
     .. warning::
@@ -164,6 +165,11 @@ class SamplerEnsemble(Sampler):
                 raise ValueError(
                     f"fractions requires slice samplers to set slice_len; member "
                     f"{member_id} sets num_slices instead."
+                )
+            if not getattr(sampler, "strict_length", True):
+                raise ValueError(
+                    f"fractions requires slice samplers with strict_length=True; "
+                    f"member {member_id} can return short batches."
                 )
             units.add(int(sampler.slice_len))
         if len(units) > 1:
@@ -541,11 +547,16 @@ class SamplerEnsemble(Sampler):
         path.mkdir(parents=True, exist_ok=True)
         for i, sampler in enumerate(self._samplers):
             sampler.dumps(path / str(i))
+        if self._fractions is not None:
+            torch.save(self._fractions, path / "fractions.pt")
 
     def loads(self, path: Path):
         path = Path(path).absolute()
         for i, sampler in enumerate(self._samplers):
             sampler.loads(path / str(i))
+        fractions = path / "fractions.pt"
+        if fractions.exists():
+            self.fractions = torch.load(fractions, weights_only=True)
 
     def state_dict(self) -> dict[str, Any]:
         state_dict = OrderedDict()
