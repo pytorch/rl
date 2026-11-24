@@ -130,9 +130,9 @@ class ReplayBufferEnsemble(ReplayBuffer):
             taken from each member, one value per member, summing to 1. The
             batch is then flat, one row per record, ordered by member, and
             each row records its member id and its index in that member.
-            Every batch gets the same counts. If a member cannot provide its
-            share, sampling fails instead of taking more from the others. The
-            members' outputs are concatenated, so collate_fn is not used.
+            Every batch gets the same counts. An empty member makes sampling
+            fail instead of taking more from the others, and a member with
+            fewer records than its share repeats records. The members' outputs are concatenated, so collate_fn is not used.
             With prefetch, a change of fractions applies after the batches
             already prefetched. Cannot be combined with p, sample_from_all or
             num_buffer_sampled. See SamplerEnsemble.
@@ -899,6 +899,13 @@ class ReplayBufferEnsemble(ReplayBuffer):
             index
         )
         priority = torch.as_tensor(priority)
+        present = index.get("present", None)
+        if (
+            present is not None
+            and priority.ndim
+            and priority.shape == leading_shape[:-1]
+        ):
+            priority = priority.unsqueeze(-1).expand(leading_shape)
         if priority.ndim:
             if priority.shape[: len(leading_shape)] != leading_shape:
                 raise ValueError(
@@ -908,7 +915,6 @@ class ReplayBufferEnsemble(ReplayBuffer):
             priority = priority.reshape(flat_buffer_ids.numel(), -1).squeeze(-1)
         else:
             priority = priority.expand(flat_buffer_ids.numel())
-        present = index.get("present", None)
         if present is not None:
             keep = present.reshape(-1)
             flat_buffer_ids = flat_buffer_ids[keep]
@@ -1183,7 +1189,8 @@ class ReplayBufferEnsemble(ReplayBuffer):
 
     @fractions.setter
     def fractions(self, value: Sequence[float] | torch.Tensor | None) -> None:
-        self._sampler.fractions = value
+        with self._replay_lock:
+            self._sampler.fractions = value
 
     def _sample_flat(self, batch_size: int) -> tuple[TensorDictBase, TensorDictBase]:
         with self._replay_lock, self._write_lock:
@@ -1193,7 +1200,10 @@ class ReplayBufferEnsemble(ReplayBuffer):
             parts = []
             generations = []
             start = 0
-            for member_id, count in enumerate(self._sampler.quota_counts(batch_size)):
+            counts = torch.bincount(
+                index.get("buffer_ids").reshape(-1), minlength=len(self._rbs)
+            ).tolist()
+            for member_id, count in enumerate(counts):
                 if not count:
                     continue
                 member = self._rbs[member_id]
