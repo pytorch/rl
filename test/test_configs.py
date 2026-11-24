@@ -92,6 +92,8 @@ from torchrl.trainers.trainers import CountFramesLog
 
 # Test if configs can be imported (requires hydra)
 try:
+    from hydra import compose, initialize_config_dir
+    from hydra.core.global_hydra import GlobalHydra
     from hydra.utils import instantiate as instantiate_config
     from torchrl.trainers.algorithms import configs as algorithm_configs
     from torchrl.trainers.algorithms.configs.modules import (
@@ -3975,9 +3977,6 @@ _SOTA_TRAINER_CONFIGS = sorted(
 )
 def test_sota_trainer_config_runs_in_output_dir(config_file):
     """Every SOTA trainer config makes Hydra run in its own output dir, so runs don't share checkpoints and logs."""
-    from hydra import compose, initialize_config_dir
-    from hydra.core.global_hydra import GlobalHydra
-
     GlobalHydra.instance().clear()
     with initialize_config_dir(config_dir=str(config_file.parent), version_base="1.3"):
         cfg = compose(config_name=config_file.stem, return_hydra_config=True)
