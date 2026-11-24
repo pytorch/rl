@@ -145,8 +145,10 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
             an actor with this name already exists, the existing actor will be used.
         observation_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the observation
             after it has been transformed by the module, or a function that modifies the existing spec.
-            When set, the module also runs at reset, so the observations it
-            adds exist from the first step. Defaults to None (specs unchanged,
+            When set, the module also runs at reset if every key it reads is
+            in the reset output, so the observations it adds exist from the
+            first step. A module that reads step-only keys such as "reward"
+            still runs only after steps. Defaults to None (specs unchanged,
             and the module only runs after steps).
         done_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the done
             after it has been transformed by the module, or a function that modifies the existing spec.
@@ -299,6 +301,9 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         if self.inverse or self.observation_spec_transform is None:
+            return tensordict_reset
+        available = tensordict_reset.keys(include_nested=True)
+        if any(key not in available for key in self.in_keys):
             return tensordict_reset
         return self._call(tensordict_reset)
 
