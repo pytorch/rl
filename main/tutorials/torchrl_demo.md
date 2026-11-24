@@ -53,7 +53,7 @@ print(
 ```
 
 ```
-Collected 107 steps, total reward: 107
+Collected 97 steps, total reward: 97
 ```
 
 That's it! We wrapped a Gym environment, created a Q-value actor with an
@@ -421,11 +421,11 @@ collector.shutdown()
 ```
 
 ```
-Collected batch: torch.Size([200]), reward: -6.93
-Collected batch: torch.Size([200]), reward: -6.83
-Collected batch: torch.Size([200]), reward: -6.97
-Collected batch: torch.Size([200]), reward: -6.72
-Collected batch: torch.Size([200]), reward: -7.04
+Collected batch: torch.Size([200]), reward: -6.78
+Collected batch: torch.Size([200]), reward: -5.74
+Collected batch: torch.Size([200]), reward: -6.59
+Collected batch: torch.Size([200]), reward: -8.15
+Collected batch: torch.Size([200]), reward: -5.79
 ```
 
 For asynchronous collection (useful when training takes longer than
@@ -476,7 +476,7 @@ print("Prioritized sample indices:", info["index"][:5], "...") # First 5 indices
 ```
 
 ```
-Prioritized sample indices: tensor([75, 65, 30, 20, 11]) ...
+Prioritized sample indices: tensor([63, 51, 99, 73, 95]) ...
 ```
 
 ## Loss Functions
@@ -598,10 +598,10 @@ env.close()
 ```
 
 ```
-Step 0: loss=1.031
-Step 5: loss=0.658
-Step 10: loss=0.374
-Step 15: loss=0.221
+Step 0: loss=1.038
+Step 5: loss=0.687
+Step 10: loss=0.423
+Step 15: loss=0.275
 ```
 
 This is a minimal example - a production DQN would include target network
@@ -641,7 +641,7 @@ folder contains production-ready implementations of:
 - [GitHub](https://github.com/pytorch/rl)
 - [Contributing Guide](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md)
 
-**Total running time of the script:** (0 minutes 5.616 seconds)
+**Total running time of the script:** (0 minutes 5.609 seconds)
 
 [`Download Jupyter notebook: torchrl_demo.ipynb`](../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb)
 

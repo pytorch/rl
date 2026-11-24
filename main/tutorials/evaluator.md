@@ -81,7 +81,7 @@ print("First eval:", result)
 ```
 
 ```
-First eval: {'eval/reward': -1166.0167236328125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 712.069841947119, 'eval/step': 0}
+First eval: {'eval/reward': -1080.747314453125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 688.1680957297491, 'eval/step': 0}
 ```
 
 Each subsequent call increments the internal step counter:
@@ -92,7 +92,7 @@ print("Second eval:", result)
 ```
 
 ```
-Second eval: {'eval/reward': -1339.4317626953125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 729.02395680903, 'eval/step': 1}
+Second eval: {'eval/reward': -1177.0323486328125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 692.5953423430022, 'eval/step': 1}
 ```
 
 ## Asynchronous evaluation
@@ -121,7 +121,7 @@ print("poll(timeout=30) returned:", result)
 ```
 
 ```
-poll(timeout=30) returned: {'eval/reward': -1182.828125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 714.264635825798, 'eval/step': 2}
+poll(timeout=30) returned: {'eval/reward': -892.461181640625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 680.0430176104069, 'eval/step': 2}
 ```
 
 By default, calling `trigger_eval()` while a previous evaluation is
@@ -171,7 +171,7 @@ print("Before weight update:", evaluator_w.evaluate())
 ```
 
 ```
-Before weight update: {'eval/reward': -1812.5947265625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 698.1941470210465, 'eval/step': 0}
+Before weight update: {'eval/reward': -1852.3896484375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 660.846156206393, 'eval/step': 0}
 ```
 
 Simulate a "training step" by perturbing the weights:
@@ -191,7 +191,7 @@ print("After weight update:", evaluator_w.evaluate(weights=real_policy))
 ```
 
 ```
-After weight update: {'eval/reward': -1639.1285400390625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 699.0165515183058, 'eval/step': 1}
+After weight update: {'eval/reward': -1786.628662109375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 663.9424554498995, 'eval/step': 1}
 ```
 
 You can also pass a `TensorDictBase` of weights, which is useful
@@ -204,7 +204,7 @@ evaluator_w.shutdown()
 ```
 
 ```
-With TensorDict weights: {'eval/reward': -1753.81005859375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 700.9944661479852, 'eval/step': 2}
+With TensorDict weights: {'eval/reward': -1799.8662109375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 665.58641104385, 'eval/step': 2}
 ```
 
 ## Process-based evaluation
@@ -235,7 +235,7 @@ evaluator_proc.shutdown()
 ```
 
 ```
-Process backend: {'eval/reward': -983.61572265625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 698.3051773727277, 'eval/step': 0}
+Process backend: {'eval/reward': -877.0399780273438, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 668.3863266507501, 'eval/step': 0}
 ```
 
 ## Logging with callbacks
@@ -286,10 +286,10 @@ print(csv_path.read_text())
 ```
 
 ```
-Logged to: /tmp/tmp7mwscy3t/eval_demo/scalars/eval/reward.csv
-0,-1578.2242431640625
-1,-1771.669677734375
-2,-1651.5264892578125
+Logged to: /tmp/tmpxnzuk3m9/eval_demo/scalars/eval/reward.csv
+0,-1812.48681640625
+1,-1629.436767578125
+2,-1711.5064697265625
 ```
 
 The `on_result` callback works with both synchronous and asynchronous
@@ -319,7 +319,7 @@ the latest trained parameters.
 deep dive into how collectors assemble data.
 - [TorchRL documentation](https://pytorch.org/rl/)
 
-**Total running time of the script:** (0 minutes 6.438 seconds)
+**Total running time of the script:** (0 minutes 6.807 seconds)
 
 [`Download Jupyter notebook: evaluator.ipynb`](../_downloads/0b7694ad40d411d9b5498dc6c93ed596/evaluator.ipynb)
 

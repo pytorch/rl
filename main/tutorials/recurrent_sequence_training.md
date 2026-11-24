@@ -150,7 +150,7 @@ TensorDictSequential(
  in_keys=['features'],
  out_keys=['logits'])
  (2): TensorDictModule(
- module=<function make_policy.<locals>.<lambda> at 0x7fd971c4f560>,
+ module=<function make_policy.<locals>.<lambda> at 0x7f1d6a289d00>,
  in_keys=['logits'],
  out_keys=['action'])
  ),
@@ -216,7 +216,7 @@ print(
 Batch shape: torch.Size([64])
 Available keys: ['action', 'collector', 'done', 'features', 'is_init', 'logits', 'next', 'observation', 'rs_c', 'rs_h', 'terminated', 'truncated']
 is_init shape: torch.Size([64, 1])
-# trajectory boundaries in batch: 7
+# trajectory boundaries in batch: 8
 Next-step hidden shape: torch.Size([64, 1, 16]) (batch, num_layers, hidden_size)
 ```
 
@@ -479,7 +479,7 @@ print("Training loss trajectory:", [round(v, 4) for v in losses])
 ```
 
 ```
-Training loss trajectory: [0.4134, 0.4042, 0.4038, 0.4064]
+Training loss trajectory: [0.4136, 0.4074, 0.4093, 0.4064]
 ```
 
 ## Conclusion
@@ -519,7 +519,7 @@ recurrent state.
 `TensorDictPrimer`, `recurrent mode`, `set_keys`, and other
 shorthand that appears throughout the recurrent code paths.
 
-**Total running time of the script:** (0 minutes 0.140 seconds)
+**Total running time of the script:** (0 minutes 0.486 seconds)
 
 [`Download Jupyter notebook: recurrent_sequence_training.ipynb`](../_downloads/70bdaea647addd62eb8379f8c256e50b/recurrent_sequence_training.ipynb)
 
