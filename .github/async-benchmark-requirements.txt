@@ -49,7 +49,7 @@ pytest-benchmark==5.2.3
 pytest-timeout==2.4.0
 pyvers==0.2.3
 pyyaml==6.0.3
-setuptools==83.0.0
+setuptools==84.1.0
 setuptools-scm==10.2.0
 sympy==1.14.0
 tomli==2.4.1
