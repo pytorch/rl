@@ -63,6 +63,8 @@ class SamplerEnsemble(Sampler):
 
     """
 
+    _fractions = None
+
     @property
     def requires_shared_state(self) -> bool:
         return any(sampler.requires_shared_state for sampler in self._samplers)
