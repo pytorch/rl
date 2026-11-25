@@ -14,7 +14,7 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl._utils import compile_with_warmup
+from torchrl._utils import compile_with_warmup, logger as torchrl_logger
 from torchrl.collectors import AsyncCollector, Collector
 from torchrl.data import (
     Binary,
@@ -554,8 +554,17 @@ def make_policy(actor, cfg) -> TensorDictSequential:
 
 
 def make_replay_buffer(cfg, device="cpu") -> ReplayBufferEnsemble:
-    """A demo buffer and an online buffer. Each batch is half from each."""
+    """A demo buffer and an online buffer. Each batch is half from each.
+
+    Each buffer samples with its own generator seeded from env.seed, on the
+    device its sampler draws on. Prefetching is turned off on MPS, where
+    sampling from a background thread aborts the process.
+    """
     rcfg = cfg.replay
+    prefetch = rcfg.prefetch
+    if prefetch and torch.device(device).type == "mps":
+        torchrl_logger.warning("replay.prefetch is not supported on MPS; using 0.")
+        prefetch = 0
     demo_sampler = (
         PrioritizedSampler(rcfg.demo_capacity, alpha=rcfg.alpha, beta=rcfg.beta)
         if rcfg.demo_prioritized
@@ -571,15 +580,19 @@ def make_replay_buffer(cfg, device="cpu") -> ReplayBufferEnsemble:
         storage=LazyTensorStorage(rcfg.online_capacity, device=device),
         writer=TensorDictRoundRobinWriter(track_generations=True),
     )
-    return ReplayBufferEnsemble(
+    replay = ReplayBufferEnsemble(
         demo,
         online,
         routing_key="route",
         routing_mode="mask",
         fractions=[rcfg.demo_fraction, 1.0 - rcfg.demo_fraction],
         batch_size=cfg.optim.batch_size,
-        prefetch=rcfg.prefetch or None,
+        prefetch=prefetch or None,
     )
+    demo_device = "cpu" if demo_sampler is not None else device
+    demo.set_rng(torch.Generator(device=demo_device).manual_seed(cfg.env.seed))
+    online.set_rng(torch.Generator(device=device).manual_seed(cfg.env.seed + 1))
+    return replay
 
 
 def to_replay(batch: TensorDictBase) -> TensorDictBase:
@@ -721,20 +734,35 @@ def relabel(data: TensorDictBase, classifier: SuccessClassifier | None):
 
 
 @torch.no_grad()
-def evaluate(env, actor, episodes: int, max_steps: int) -> TensorDictBase:
-    """Runs deterministic episodes and averages their true success and length."""
+def evaluate(
+    env,
+    actor,
+    episodes: int,
+    max_steps: int,
+    classifier: SuccessClassifier | None = None,
+) -> TensorDictBase:
+    """Runs deterministic episodes and averages their true success and length.
+
+    The predicted success is the classifier's verdict on the episode when one
+    is given, and the simulator's otherwise.
+    """
     results = []
     for _ in range(episodes):
         with set_exploration_type(ExplorationType.DETERMINISTIC):
             rollout = env.rollout(
                 max_steps, actor, break_when_any_done=True, auto_cast_to_device=True
             )
+        if classifier is None:
+            predicted = rollout["next", "terminated"]
+        else:
+            with torch.no_grad():
+                _, predicted = classifier(rollout["next", "observation"])
         results.append(
             TensorDict(
                 {
                     "success": rollout["next", "success"].any().float(),
                     "length": torch.tensor(float(rollout.shape[0])),
-                    "predicted_success": rollout["next", "terminated"].any().float(),
+                    "predicted_success": predicted.any().float(),
                 },
                 [],
             )

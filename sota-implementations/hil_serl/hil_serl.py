@@ -114,7 +114,11 @@ def main(cfg: DictConfig):
             if collected % cfg.logger.eval_every < cfg.collector.frames_per_batch:
                 with timeit("eval"):
                     result = evaluate(
-                        eval_env, actor, cfg.logger.eval_episodes, cfg.env.max_steps
+                        eval_env,
+                        actor,
+                        cfg.logger.eval_episodes,
+                        cfg.env.max_steps,
+                        classifier=classifier,
                     )
                 metrics.update({f"eval_{k}": v for k, v in result.items()})
             metrics.update(timeit.todict(prefix="time"))
