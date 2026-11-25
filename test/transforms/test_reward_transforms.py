@@ -64,6 +64,7 @@ from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     MultiKeyCountingEnv,
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
@@ -688,6 +689,21 @@ class TestRewardSum(TransformBase):
         final_reward = td_base["next", "reward"].sum(-2)
         assert torch.allclose(td["next", "reward"], reward)
         assert torch.allclose(td["next", out_key][..., -1, :], final_reward)
+
+    def test_sum_observation_entry(self):
+        """An observation entry, like the cost of a constrained env, is summed per episode and reset at episode end."""
+        env = TransformedEnv(
+            CountingEnv(max_steps=3),
+            RewardSum(in_keys=["observation"], out_keys=["episode_observation"]),
+        )
+        check_env_specs(env)
+        policy = CountingEnvCountPolicy(env.action_spec)
+        rollout = env.rollout(6, policy, break_when_any_done=False)
+        # The count goes 1, 2, 3, 4, then the episode ends and restarts.
+        expected_sums = torch.tensor([1, 3, 6, 10, 1, 3], dtype=torch.int32)
+        torch.testing.assert_close(
+            rollout["next", "episode_observation"], expected_sums.unsqueeze(-1)
+        )
 
     @pytest.mark.skipif(not _has_gym, reason="Test executed on gym")
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
