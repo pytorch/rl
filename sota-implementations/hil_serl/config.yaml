@@ -4,7 +4,7 @@ env:
   control_freq: 20
   max_steps: 100
   position_only: true
-  hard_reset: false
+  hard_reset: true
   seed: 0
 
 demos:
