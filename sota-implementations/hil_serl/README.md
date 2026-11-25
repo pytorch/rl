@@ -12,7 +12,10 @@ Robosuite Lift stands in for the robot.
 - Replay: one demo buffer and one online buffer. Each batch is half from each,
   and corrected steps are stored in both.
 - Reward: the simulator's success, or a success classifier. Whichever is used
-  also decides when an episode ends. The simulator's success is always stored
+  also decides when an episode ends, unless `reward.end_episode_on_success`
+  is false: then episodes run to `env.max_steps` and successes are only
+  marked terminal in the stored data, so a false success from the classifier
+  does not cut the episode short. The simulator's success is always stored
   for evaluation, and the loss never reads it.
 - SAC: settings from the authors' code (critic updated twice per actor update,
   discount 0.97, batch 256), with 10 critics, which keeps the critic stable

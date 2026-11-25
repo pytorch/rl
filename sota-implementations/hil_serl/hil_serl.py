@@ -79,7 +79,11 @@ def main(cfg: DictConfig):
     try:
         for batch in collector:
             with timeit("extend"):
-                replay.extend(to_replay(batch).to(replay_device))
+                replay.extend(
+                    to_replay(
+                        batch, end_on_success=cfg.reward.end_episode_on_success
+                    ).to(replay_device)
+                )
             collected += batch.numel()
             intervened += int(batch["intervention"].sum())
             pbar.update(batch.numel())

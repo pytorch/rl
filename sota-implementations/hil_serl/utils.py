@@ -208,12 +208,20 @@ def _add_classifier_specs(spec):
     return spec
 
 
-def make_env(cfg, classifier: SuccessClassifier | None = None, device="cpu"):
+def make_env(
+    cfg,
+    classifier: SuccessClassifier | None = None,
+    device="cpu",
+    *,
+    end_on_success: bool = True,
+):
     """Lift with a success reward from the simulator or from a classifier.
 
-    The classifier, when given, decides both the reward and when the episode
-    ends. The simulator's own success flag is always kept in the data, for
-    evaluation and for simulated label checks.
+    The classifier, when given, decides the reward and, with end_on_success,
+    when the episode ends. Without it the episode runs to max_steps, and
+    to_replay marks the successful steps as terminal instead. The simulator's
+    own success flag is always kept in the data, for evaluation and for
+    simulated label checks.
     """
     transforms = [DoubleToFloat(), InitTracker()]
     if classifier is None:
@@ -227,12 +235,10 @@ def make_env(cfg, classifier: SuccessClassifier | None = None, device="cpu"):
                 observation_spec_transform=_add_classifier_specs,
             )
         )
-    transforms += [
-        SuccessReward(success_key=success_key),
-        TerminateTransform(lambda next_td: next_td.get(success_key)),
-        StepCounter(max_steps=cfg.env.max_steps),
-        RewardSum(),
-    ]
+    transforms.append(SuccessReward(success_key=success_key))
+    if end_on_success:
+        transforms.append(TerminateTransform(lambda next_td: next_td.get(success_key)))
+    transforms += [StepCounter(max_steps=cfg.env.max_steps), RewardSum()]
     env = TransformedEnv(make_base_env(cfg, device=device), Compose(*transforms))
     env.set_seed(cfg.env.seed)
     return env
@@ -536,16 +542,20 @@ def make_collector(cfg, policy, device, classifier: SuccessClassifier | None = N
         "frames_per_batch": cfg.collector.frames_per_batch,
         "total_frames": cfg.collector.total_frames,
     }
+    end_on_success = cfg.reward.end_episode_on_success
     if cfg.collector.async_collection:
         return AsyncCollector(
-            functools.partial(make_env, cfg, classifier),
+            functools.partial(make_env, cfg, classifier, end_on_success=end_on_success),
             policy,
             device=device,
             env_device=torch.device("cpu"),
             **kwargs,
         )
     return Collector(
-        make_env(cfg, classifier=classifier), policy, policy_device=device, **kwargs
+        make_env(cfg, classifier=classifier, end_on_success=end_on_success),
+        policy,
+        policy_device=device,
+        **kwargs,
     )
 
 
@@ -595,9 +605,18 @@ def make_replay_buffer(cfg, device="cpu") -> ReplayBufferEnsemble:
     return replay
 
 
-def to_replay(batch: TensorDictBase) -> TensorDictBase:
-    """Keeps the keys the buffers store and marks intervened steps for both buffers."""
+def to_replay(batch: TensorDictBase, *, end_on_success: bool = True) -> TensorDictBase:
+    """Keeps the keys the buffers store and marks intervened steps for both buffers.
+
+    When the episode did not end on success (end_on_success=False), the steps
+    with a success reward are marked terminal here, so the critic still
+    treats a success as the end of the task.
+    """
     batch = batch.reshape(-1).select(*REPLAY_KEYS, strict=False)
+    if not end_on_success:
+        success = batch.get(("next", "reward")) > 0
+        batch.set(("next", "terminated"), success)
+        batch.set(("next", "done"), success | batch.get(("next", "truncated")))
     if ("next", "success_prob") not in batch.keys(True):
         batch.set(("next", "success_prob"), batch.get(("next", "success")).float())
     intervention = batch.get("intervention").reshape(-1)

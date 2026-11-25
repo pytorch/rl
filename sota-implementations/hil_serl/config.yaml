@@ -14,6 +14,7 @@ demos:
 reward:
   source: oracle
   classifier_path: null
+  end_episode_on_success: true
 
 intervention:
   enabled: true
