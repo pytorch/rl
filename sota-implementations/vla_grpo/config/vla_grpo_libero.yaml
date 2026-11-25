@@ -168,3 +168,7 @@ logger:
 checkpoint:
   save_iter: 25
   resume: null
+
+hydra:
+  job:
+    chdir: true

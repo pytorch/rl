@@ -185,3 +185,7 @@ trainer:
   observation_key: [agents, observation]
   async_collection: false
   weight_update_map: null
+
+hydra:
+  job:
+    chdir: true

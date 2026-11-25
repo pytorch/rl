@@ -19,6 +19,7 @@ import types
 import typing
 import warnings
 from functools import partial
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -91,6 +92,8 @@ from torchrl.trainers.trainers import CountFramesLog
 
 # Test if configs can be imported (requires hydra)
 try:
+    from hydra import compose, initialize_config_dir
+    from hydra.core.global_hydra import GlobalHydra
     from hydra.utils import instantiate as instantiate_config
     from torchrl.trainers.algorithms import configs as algorithm_configs
     from torchrl.trainers.algorithms.configs.modules import (
@@ -3955,6 +3958,29 @@ trainer:
   optim_steps_per_batch: 2
   async_collection: false
 """
+
+
+_SOTA_DIR = Path(__file__).parents[1] / "sota-implementations"
+_SOTA_TRAINER_CONFIGS = sorted(
+    [
+        *_SOTA_DIR.glob("*_trainer/config/*.yaml"),
+        *_SOTA_DIR.glob("vla_grpo/config/*.yaml"),
+    ]
+)
+
+
+@pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+@pytest.mark.parametrize(
+    "config_file",
+    _SOTA_TRAINER_CONFIGS,
+    ids=[f"{path.parents[1].name}/{path.stem}" for path in _SOTA_TRAINER_CONFIGS],
+)
+def test_sota_trainer_config_runs_in_output_dir(config_file):
+    """Every SOTA trainer config makes Hydra run in its own output dir, so runs don't share checkpoints and logs."""
+    GlobalHydra.instance().clear()
+    with initialize_config_dir(config_dir=str(config_file.parent), version_base="1.3"):
+        cfg = compose(config_name=config_file.stem, return_hydra_config=True)
+    assert cfg.hydra.job.chdir is True
 
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
