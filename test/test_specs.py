@@ -1589,6 +1589,26 @@ class TestSpec:
         assert not multi.is_in(torch.tensor([1, 1, 1, 0], dtype=torch.bool))
         assert multi.is_in(torch.tensor([1, 0, 1, 0], dtype=torch.bool))
 
+    @pytest.mark.parametrize("dtype", [torch.bool, torch.int64])
+    def test_multi_one_hot_masked_project_mixed_invalid_groups(self, dtype):
+        # Per-row masks, with one group multi-hot and the other empty in each row.
+        mask = torch.tensor(
+            [[True, False, True, True, False], [False, True, False, True, True]]
+        )
+        spec = MultiOneHot([2, 3], shape=(2, 5), dtype=dtype, mask=mask)
+        value = torch.tensor([[1, 1, 0, 0, 0], [0, 0, 1, 1, 1]], dtype=dtype)
+        original = value.clone()
+        assert not spec.is_in(value)
+        projected = spec.project(value)
+        assert projected.dtype == dtype
+        assert projected.shape == value.shape
+        assert spec.is_in(projected)
+        assert (projected[..., :2].sum(-1) == 1).all()
+        assert (projected[..., 2:].sum(-1) == 1).all()
+        assert not projected[~mask].any()
+        assert projected[:, :2].tolist() == [[1, 0], [0, 1]]
+        torch.testing.assert_close(value, original)
+
     def test_bounded_rand(self):
         spec = Bounded(-3, 3, torch.Size((1,)))
         sample = torch.stack([spec.rand() for _ in range(100)])
