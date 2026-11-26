@@ -95,7 +95,7 @@ class MeanActionSelector(Transform):
         observation_spec[self._observation_key] = Composite(
             mean=obs_spec.clone(),
             var=Unbounded(shape=(*obs_spec.shape, D), dtype=obs_spec.dtype),
-            shape=obs_spec.shape,
+            shape=obs_spec.shape[:-1],
         )
         return observation_spec
 
