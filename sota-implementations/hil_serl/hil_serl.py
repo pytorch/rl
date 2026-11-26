@@ -9,6 +9,12 @@ half from the demo buffer and half from the online buffer, and intervened
 steps are stored in both. The reward comes from the simulator
 (reward.source=oracle) or from a trained success classifier
 (reward.source=classifier, see train_reward_classifier.py).
+
+With a classifier, reward.false_positives_out saves the states where it
+claimed a success that did not happen. HIL-SERL fixes a classifier by adding
+such states as negatives and retraining it (classifier.extra_negatives), then
+training the policy again, a few rounds if needed. A person reviews the
+claimed successes on a robot; here the simulator's success flag does.
 """
 from __future__ import annotations
 
@@ -17,6 +23,7 @@ import numpy as np
 import torch
 import tqdm
 from omegaconf import DictConfig
+from tensordict import TensorDict
 from torchrl._utils import get_available_device, timeit
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
@@ -74,7 +81,9 @@ def main(cfg: DictConfig):
     num_updates = cfg.collector.frames_per_batch * cfg.optim.utd_ratio
     collected = 0
     intervened = 0
+    claims = 0
     update_count = 0
+    false_positives = []
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     try:
         for batch in collector:
@@ -87,6 +96,13 @@ def main(cfg: DictConfig):
             collected += batch.numel()
             intervened += int(batch["intervention"].sum())
             pbar.update(batch.numel())
+            if classifier is not None:
+                claimed = batch["next", "success_pred"].reshape(-1)
+                wrong = claimed & ~batch["next", "success"].reshape(-1)
+                claims += int(claimed.sum())
+                false_positives.append(
+                    batch["next", "observation"].reshape(batch.numel(), -1)[wrong]
+                )
 
             losses = []
             if collected >= cfg.optim.training_starts:
@@ -105,6 +121,9 @@ def main(cfg: DictConfig):
                 "intervention_rate": batch["intervention"].float().mean(),
                 "human_seconds": intervened / cfg.env.control_freq,
             }
+            if classifier is not None:
+                metrics["claims"] = claims
+                metrics["false_claims"] = sum(len(obs) for obs in false_positives)
             done = batch["next", "done"].squeeze(-1)
             if done.any():
                 metrics["train_success"] = (
@@ -132,6 +151,11 @@ def main(cfg: DictConfig):
         collector.shutdown()
         eval_env.close()
         pbar.close()
+        if classifier is not None and cfg.reward.false_positives_out:
+            observation = torch.cat(false_positives).cpu()
+            TensorDict(observation=observation, batch_size=[len(observation)]).memmap(
+                cfg.reward.false_positives_out
+            )
 
 
 if __name__ == "__main__":

@@ -46,5 +46,19 @@ The classifier script labels Lift states with the simulator, keeps 200
 successes and 1000 failures, and saves the held-out error rates next to the
 model.
 
+The policy soon finds states the classifier wrongly calls successes. As in
+HIL-SERL, save them, add them to the classifier's failures and retrain it,
+then train the policy again; repeat for a few rounds if needed:
+
+```bash
+python hil_serl.py ... reward.classifier_path=classifier.pt reward.false_positives_out=fp_0
+python train_reward_classifier.py classifier.out=classifier_1.pt "classifier.extra_negatives=[fp_0]"
+python hil_serl.py ... reward.classifier_path=classifier_1.pt reward.false_positives_out=fp_1
+python train_reward_classifier.py classifier.out=classifier_2.pt "classifier.extra_negatives=[fp_0,fp_1]"
+```
+
+On a robot a person reviews the claimed successes; here the simulator's
+success flag does. The logs count the claims and the false ones.
+
 The logs include the true evaluation success, how often the human takes over,
 and the total time the human spent correcting.

@@ -19,10 +19,19 @@ is set up.
 Both keep the paper's 1 to 5 ratio, and states just before a success count as
 failures. The classifier is saved with its error rates.
 
+A policy learns to reach states the classifier wrongly calls successes.
+hil_serl.py saves them (reward.false_positives_out), and
+classifier.extra_negatives adds every saved state to the next training set as
+a failure. Repeating this for a few rounds is how HIL-SERL fixes a classifier.
+
 Usage::
 
     python train_reward_classifier.py demos.path=/path/to/lift_ph.hdf5 \\
         classifier.out=classifier.pt
+    python hil_serl.py reward.source=classifier \\
+        reward.classifier_path=classifier.pt reward.false_positives_out=fp_0
+    python train_reward_classifier.py classifier.out=classifier_1.pt \\
+        "classifier.extra_negatives=[fp_0]"
 """
 from __future__ import annotations
 
@@ -186,6 +195,17 @@ def main(cfg: DictConfig):
     train = subsample(
         pool, ccfg.positives, ccfg.negatives, ccfg.near_miss_share, generator
     )
+    if ccfg.extra_negatives:
+        extra = torch.cat(
+            [
+                TensorDict.load_memmap(path).to_tensordict()
+                for path in ccfg.extra_negatives
+            ]
+        )
+        extra["label"] = torch.zeros(len(extra), dtype=torch.bool)
+        extra["steps_to_success"] = torch.zeros(len(extra), dtype=torch.long)
+        held_out["extra_negatives"] = extra
+        train = torch.cat([train, extra])
 
     classifier = SuccessClassifier(train["observation"].shape[-1])
     optimizer = torch.optim.Adam(classifier.parameters(), lr=ccfg.lr)
