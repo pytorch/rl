@@ -1003,10 +1003,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
             ("next", self.tensor_keys.done),
             done.masked_fill(done_mask, True),
         )
-        tensordict.set(
-            ("next", self.tensor_keys.terminated),
-            terminated.masked_fill(done_mask, False),
-        )
+        # The synthetic boundary is a truncation: it stops the recursion but
+        # must not erase a real termination on the last retained transition.
+        tensordict.set(("next", self.tensor_keys.terminated), terminated)
         return tensordict
 
     def _mask_shifted_output(

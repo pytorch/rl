@@ -779,7 +779,6 @@ class TestValues:
         done = done.clone()
         terminated = td["next", "terminated"].clone()
         done[last_valid] = True
-        terminated[last_valid] = False
         td["next", "done"] = done
         td["next", "terminated"] = terminated
         return td, valid
@@ -848,6 +847,62 @@ class TestValues:
         expected_drops = (internal_resets.sum(-1) + 1 - shifted_budget).clamp_min(0)
         assert (~valid).sum() == expected_drops.sum()
         assert (out["advantage"][~mask] == 0).all()
+
+    @pytest.mark.parametrize(
+        "estimator,kwargs",
+        [
+            (TD0Estimator, {}),
+            (TD1Estimator, {}),
+            (TDLambdaEstimator, {"lmbda": 0.95}),
+            (GAE, {"lmbda": 0.95}),
+        ],
+    )
+    def test_shifted_keeps_termination_on_last_retained_step(self, estimator, kwargs):
+        # A truncation at t=1 uses up the shifted budget, so the last transition
+        # (t=5) is dropped and t=4 becomes the last retained step. t=4 is a real
+        # termination: its target must not bootstrap from the terminal state.
+        torch.manual_seed(0)
+        B, T, obs_dim = 2, 6, 6
+        all_obs = torch.randn(B, T + 1, obs_dim)
+        obs = all_obs[:, :T].clone()
+        next_obs = all_obs[:, 1:].clone()
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        for reset_step in (1, 4):
+            done[:, reset_step, 0] = True
+            next_obs[:, reset_step] = torch.randn(B, obs_dim)
+        terminated = torch.zeros_like(done)
+        terminated[:, 4, 0] = True
+        td = TensorDict(
+            {
+                "observation": obs,
+                "next": TensorDict(
+                    {
+                        "observation": next_obs,
+                        "reward": torch.randn(B, T, 1),
+                        "done": done,
+                        "terminated": terminated,
+                    },
+                    [B, T],
+                ),
+            },
+            [B, T],
+        )
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        ref = estimator(gamma=0.9, value_network=value_net, shifted=False, **kwargs)(
+            td.clone()
+        )
+        out = estimator(gamma=0.9, value_network=value_net, shifted=True, **kwargs)(
+            td.clone()
+        )
+        valid = out["shifted_valid"]
+        assert not valid[:, -1].any() and valid[:, :-1].all()
+        mask = valid.unsqueeze(-1)
+        torch.testing.assert_close(out["value_target"][mask], ref["value_target"][mask])
+        torch.testing.assert_close(out["advantage"][mask], ref["advantage"][mask])
 
     def test_gae_shifted_terminal_done_does_not_drop_samples(self):
         torch.manual_seed(0)
