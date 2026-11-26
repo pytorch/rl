@@ -145,8 +145,9 @@ def main(cfg: DictConfig):
                     )
                 metrics.update({f"eval_{k}": v for k, v in result.items()})
             metrics.update(timeit.todict(prefix="time"))
-            for key, value in metrics.items():
-                logger.log_scalar(key, float(value), step=collected)
+            if logger is not None:
+                for key, value in metrics.items():
+                    logger.log_scalar(key, float(value), step=collected)
     finally:
         collector.shutdown()
         eval_env.close()

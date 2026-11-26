@@ -95,6 +95,8 @@ uv pip install \
   "imageio==2.26.0" \
   dm_control \
   "mujoco<3.3.6" \
+  robosuite \
+  h5py \
   mlflow \
   av \
   coverage \
