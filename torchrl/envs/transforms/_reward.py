@@ -601,8 +601,6 @@ class RewardSum(Transform):
         """Returns the parent spec of ``in_key``, looked up in the reward spec and then in the observation spec."""
         if in_key in self.parent.reward_keys:
             return self.parent.full_reward_spec[in_key]
-        # A per-step signal stored as an observation, like the cost of a
-        # constrained env, is summed the same way as a reward.
         observation_spec = self.parent.full_observation_spec
         if in_key in observation_spec.keys(True, True):
             return observation_spec[in_key]
