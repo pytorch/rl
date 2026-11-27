@@ -365,6 +365,35 @@ class TestInterventionModule:
         assert not out["intervention"].any()
         assert out["action"].tolist() == [[1.0], [1.0]]
         assert ("intervener", "active") not in out.keys(True)
+        out.select(*module.out_keys, strict=True)
+
+    def test_one_flag_per_agent(self):
+        module = InterventionModule(
+            self._intervener(),
+            action_key=("agents", "action"),
+            policy_action_key=("agents", "policy_action"),
+            intervention_key=("agents", "intervention"),
+        )
+        td = TensorDict(
+            {
+                "observation": torch.tensor([[[3.0], [4.0]], [[5.0], [6.0]]]),
+                ("agents", "action"): torch.ones(2, 2, 1),
+            },
+            [2],
+        )
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            out = module(td)
+
+        assert out["agents", "intervention"].squeeze(-1).tolist() == [
+            [True, False],
+            [False, True],
+        ]
+        assert out["agents", "action"].squeeze(-1).tolist() == [[0.0, 1.0], [1.0, 0.0]]
+
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            evaluated = module(td.exclude(("agents", "intervention")))
+        assert evaluated["agents", "intervention"].shape == (2, 2, 1)
 
     def test_nested_action_key(self):
         module = InterventionModule(
