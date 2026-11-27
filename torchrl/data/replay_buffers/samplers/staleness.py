@@ -12,6 +12,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.utils import NestedKey
 from torchrl.data.replay_buffers.storages import Storage, TensorStorage
+from torchrl.data.replay_buffers.utils import unravel_index
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -150,7 +151,9 @@ class StalenessAwareSampler(Sampler):
         all_data = storage[:n]
         return all_data.get(self._version_key, None)
 
-    def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
+    def sample(
+        self, storage: Storage, batch_size: int
+    ) -> tuple[torch.Tensor | tuple[torch.Tensor, ...], dict]:
         n = len(storage)
         if n == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
@@ -192,10 +195,11 @@ class StalenessAwareSampler(Sampler):
             weights, batch_size, replacement=batch_size > len(valid_indices)
         )
         index = valid_indices[sampled_local]
+        info = {"staleness": staleness[index]}
+        if storage.ndim > 1:
+            index = unravel_index(index, storage.shape)
 
-        return index, {
-            "staleness": staleness[index],
-        }
+        return index, info
 
     def _empty(self):
         self._consumer_version = 0
