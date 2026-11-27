@@ -126,7 +126,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
             stored. A member that receives only part of a trajectory has gaps
             in it; if it is sampled in slices, use a SliceSampler with
             fragmented=True so slices never cross a gap.
-        fractions (sequence of float, optional): the share of each batch
+        fractions (sequence of float or torch.Tensor, optional): the share of each batch
             taken from each member, one value per member, summing to 1. The
             batch is then flat, one row per record, ordered by member, and
             each row records its member id and its index in that member.
@@ -135,7 +135,9 @@ class ReplayBufferEnsemble(ReplayBuffer):
             fewer records than its share repeats records. The members' outputs are concatenated, so collate_fn is not used.
             With prefetch, a change of fractions applies after the batches
             already prefetched. Cannot be combined with p, sample_from_all or
-            num_buffer_sampled. See SamplerEnsemble.
+            num_buffer_sampled, including when set after construction.
+            Checkpoints save the current value, None included. See
+            SamplerEnsemble.
         generator (torch.Generator, optional): a generator to use for sampling.
             Using a dedicated generator for the replay buffer can allow a fine-grained control
             over seeding, for instance keeping the global seed different but the RB seed identical
