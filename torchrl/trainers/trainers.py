@@ -3607,7 +3607,7 @@ class TargetNetUpdaterHook(TrainerHookBase):
         return tensordict
 
     def register(self, trainer: Trainer, name: str):
-        trainer.register_op("post_steps", self)
+        trainer.register_op("post_optim", self)
 
 
 class ValueEstimatorHook(TrainerHookBase):
