@@ -14,10 +14,11 @@ import pytest
 import tensordict
 import torch
 from tensordict import lazy_stack, MetaData, TensorDict
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
 from torchrl.data.llm.history import _CHAT_TEMPLATES
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
+from torchrl.modules.distributions import LLMMaskedCategorical
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
 from torchrl.objectives.llm import (
@@ -721,6 +722,29 @@ class _FixedLogProbPolicy(torch.nn.Module):
         )
 
 
+class _TokenPolicy(TensorDictModuleBase):
+    in_keys = ["obs", "mask"]
+    out_keys = [("tokens", "full")]
+
+    def __init__(self, network):
+        super().__init__()
+        self.network = TensorDictModule(network, in_keys=["obs"], out_keys=["logits"])
+
+    def forward(self, tensordict):
+        tensordict = self.network(tensordict)
+        dist = LLMMaskedCategorical(
+            logits=tensordict["logits"], mask=tensordict["mask"]
+        )
+        tensordict[("tokens", "full")] = dist.sample()
+        return tensordict
+
+    def get_dist(self, tensordict, logits_key="logits"):
+        tensordict = self.network(tensordict)
+        return LLMMaskedCategorical(
+            logits=tensordict[logits_key], mask=tensordict["mask"]
+        )
+
+
 def _policy_loss_data(current_log_prob, sample_log_prob, advantage):
     current_log_prob = torch.tensor([current_log_prob], dtype=torch.float32)
     sample_log_prob = torch.tensor([sample_log_prob], dtype=torch.float32)
@@ -901,17 +925,85 @@ class TestLosses:
         with pytest.raises(KeyError, match="Couldn't find the ref log-prob"):
             loss_fn_with_kl(data_missing_ref_for_kl)
 
-    def test_cispo_clips_importance_weight(self):
-        data = _policy_loss_data(
-            current_log_prob=[torch.log(torch.tensor(0.5))],
-            sample_log_prob=[0.0],
-            advantage=[1.0],
-        )
-        loss = CISPOLoss(_FixedLogProbPolicy(), clip_epsilon=0.2, entropy_bonus=False)(
-            data
+    @pytest.mark.parametrize("old_probability", [0.4, 0.2, 0.1])
+    @pytest.mark.parametrize("advantage", [1.0, -1.5])
+    def test_cispo_gradients_and_loss_against_paper(self, old_probability, advantage):
+        linear = torch.nn.Linear(1, 2, bias=False, dtype=torch.float64)
+        with torch.no_grad():
+            linear.weight.copy_(torch.tensor([[0.2], [0.8]], dtype=torch.float64).log())
+        actor = _TokenPolicy(linear)
+        loss = CISPOLoss(actor, clip_epsilon=0.2, entropy_bonus=False)
+
+        data = TensorDict(
+            {
+                "obs": torch.ones(1, 1, 1, dtype=torch.float64),
+                "mask": torch.ones(1, 1, dtype=torch.bool),
+                ("tokens", "full"): torch.zeros(1, 1, dtype=torch.long),
+                ("log_probs", "full"): torch.tensor(
+                    [[old_probability]], dtype=torch.float64
+                ).log(),
+                "advantage": torch.tensor([[[advantage]]], dtype=torch.float64),
+            },
+            batch_size=[1],
         )
 
-        torch.testing.assert_close(loss.loss_objective, torch.tensor(-0.8))
+        output = loss(data)
+        output.loss_objective.backward()
+
+        ratio = 0.2 / old_probability
+        weight = min(max(ratio, 0.8), 1.2)
+        cur_log_prob = torch.tensor(0.2, dtype=torch.float64).log()
+        expected_loss = -weight * cur_log_prob * advantage
+        expected_grad = torch.tensor(
+            [[-0.8 * weight * advantage], [0.8 * weight * advantage]],
+            dtype=torch.float64,
+        )
+
+        torch.testing.assert_close(output.loss_objective, expected_loss)
+        torch.testing.assert_close(linear.weight.grad, expected_grad)
+        # Ensure gradients outside clipping bounds are non-zero (MiniMax-M1 Eq. 4)
+        assert linear.weight.grad.abs().min() > 0.0
+        expected_clip_fraction = torch.tensor(
+            1.0 if ratio != weight else 0.0, dtype=torch.float64
+        )
+        torch.testing.assert_close(output.clip_fraction, expected_clip_fraction)
+
+    def test_cispo_mask_padded_tokens(self):
+        linear = torch.nn.Linear(1, 2, bias=False, dtype=torch.float64)
+        with torch.no_grad():
+            linear.weight.copy_(torch.tensor([[0.2], [0.8]], dtype=torch.float64).log())
+        actor = _TokenPolicy(linear)
+        loss = CISPOLoss(actor, clip_epsilon=0.2, entropy_bonus=False)
+
+        # Batch of 1 sequence with 2 tokens: token 0 is active (mask=True), token 1 is padded (mask=False)
+        data = TensorDict(
+            {
+                "obs": torch.ones(1, 2, 1, dtype=torch.float64),
+                "mask": torch.tensor([[True, False]], dtype=torch.bool),
+                ("tokens", "full"): torch.tensor([[0, 1]], dtype=torch.long),
+                ("log_probs", "full"): torch.tensor(
+                    [[0.4, 0.1]], dtype=torch.float64
+                ).log(),
+                "advantage": torch.tensor([[[1.0], [10.0]]], dtype=torch.float64),
+            },
+            batch_size=[1],
+        )
+
+        output = loss(data)
+        output.loss_objective.backward()
+
+        # Token 0: ratio = 0.2 / 0.4 = 0.5 -> clipped to 0.8; adv = 1.0
+        # Token 1 is masked out and must contribute nothing to loss or gradients
+        weight_0 = 0.8
+        cur_log_prob_0 = torch.tensor(0.2, dtype=torch.float64).log()
+        expected_loss = -weight_0 * cur_log_prob_0 * 1.0
+        expected_grad = torch.tensor(
+            [[-0.8 * weight_0 * 1.0], [0.8 * weight_0 * 1.0]],
+            dtype=torch.float64,
+        )
+
+        torch.testing.assert_close(output.loss_objective, expected_loss)
+        torch.testing.assert_close(linear.weight.grad, expected_grad)
 
 
 class _FixedSFTPolicy(torch.nn.Module):
