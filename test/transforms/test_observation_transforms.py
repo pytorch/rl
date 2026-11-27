@@ -2301,6 +2301,28 @@ class TestObservationNorm(TransformBase):
         with pytest.raises(RuntimeError, match=err_msg):
             transform._apply_transform(torch.Tensor([1]))
 
+    def test_observationnorm_load_state_dict_uninitialized(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), ObservationNorm(in_keys=["observation"])
+        )
+        env.transform.init_stats(num_iter=11)
+        state_dict = env.state_dict()
+
+        env2 = TransformedEnv(
+            ContinuousActionVecMockEnv(), ObservationNorm(in_keys=["observation"])
+        )
+        assert not env2.transform.initialized
+        env2.load_state_dict(state_dict)
+        assert env2.transform.initialized
+        torch.testing.assert_close(env2.transform.loc, env.transform.loc)
+        torch.testing.assert_close(env2.transform.scale, env.transform.scale)
+        td = TensorDict({"observation": torch.randn(7)}, [])
+        torch.testing.assert_close(
+            env2.transform(td.clone())["observation"],
+            env.transform(td.clone())["observation"],
+        )
+
     @pytest.mark.parametrize("standard_normal", [True, False])
     def test_compile_fullgraph(self, standard_normal):
         t = ObservationNorm(

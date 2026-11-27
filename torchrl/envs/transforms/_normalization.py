@@ -176,6 +176,37 @@ class ObservationNorm(ObservationTransform):
     def initialized(self) -> bool:
         return not isinstance(self.loc, nn.UninitializedBuffer)
 
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ) -> None:
+        # Materialize lazy loc / scale so that a checkpoint can be loaded in a
+        # transform that has not been initialized yet.
+        for name in ("loc", "scale"):
+            buffer = getattr(self, name)
+            value = state_dict.get(prefix + name)
+            if isinstance(buffer, nn.UninitializedBuffer) and isinstance(
+                value, torch.Tensor
+            ):
+                # Leave the device to the module (like init_stats does), so a
+                # CPU checkpoint loads into a transform that lives on CUDA.
+                buffer.materialize(shape=value.shape, dtype=value.dtype)
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
+
     def init_stats(
         self,
         num_iter: int,
