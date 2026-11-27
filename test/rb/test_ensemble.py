@@ -687,6 +687,10 @@ class TestEnsemble:
             ReplayBufferEnsemble(*members, fractions=[1.5, -0.5])
         with pytest.raises(ValueError, match="one fraction per member"):
             ReplayBufferEnsemble(*members, fractions=[1.0])
+        weighted = ReplayBufferEnsemble(*members, p=[0.9, 0.1])
+        with pytest.raises(ValueError, match="exclusive"):
+            weighted.fractions = [0.5, 0.5]
+        assert weighted.fractions is None
 
     def test_fractions_slice_members_count_slices(self):
         members = [
@@ -953,6 +957,23 @@ class TestEnsemble:
         restored.load_state_dict(state)
 
         assert restored.fractions.tolist() == [0.25, 0.75]
+
+    @pytest.mark.parametrize("checkpoint", ["state_dict", "dumps"])
+    def test_loading_a_checkpoint_without_fractions_clears_them(
+        self, checkpoint, tmp_path
+    ):
+        demo, online, rb = self._make_demo_online(batch_size=8)
+        restored_demo, restored_online, restored = self._make_demo_online(
+            fractions=[0.5, 0.5], batch_size=8
+        )
+
+        if checkpoint == "state_dict":
+            restored.load_state_dict(rb.state_dict())
+        else:
+            rb.dumps(tmp_path)
+            restored.loads(tmp_path)
+
+        assert restored.fractions is None
 
     def test_fractions_dumps_round_trip(self, tmp_path):
         demo, online, rb = self._make_demo_online(fractions=[0.5, 0.5], batch_size=8)

@@ -42,7 +42,7 @@ class SamplerEnsemble(Sampler):
             if ``sample_from_all=True``, this has no effect, as it defaults to the
             number of buffers. If ``sample_from_all=False``, buffers will be
             sampled according to the probabilities ``p``.
-        fractions (sequence of float, optional): the share of each batch
+        fractions (sequence of float or torch.Tensor, optional): the share of each batch
             taken from each member, one value per member, summing to 1. Every
             batch gets the same counts, rounded so they add up to the batch
             size. The sampled index is flat and ordered by member. With slice
@@ -138,6 +138,15 @@ class SamplerEnsemble(Sampler):
         if value is None:
             self._fractions = None
             return
+        num_buffer_sampled = self.__dict__.get("_num_buffer_sampled")
+        if (
+            getattr(self, "_p", None) is not None
+            or self.sample_from_all
+            or num_buffer_sampled not in (None, len(self._samplers))
+        ):
+            raise ValueError(
+                "fractions is exclusive with p, sample_from_all and num_buffer_sampled."
+            )
         value = torch.as_tensor(value, dtype=torch.double).flatten()
         if value.numel() != len(self._samplers):
             raise ValueError(
@@ -547,8 +556,7 @@ class SamplerEnsemble(Sampler):
         path.mkdir(parents=True, exist_ok=True)
         for i, sampler in enumerate(self._samplers):
             sampler.dumps(path / str(i))
-        if self._fractions is not None:
-            torch.save(self._fractions, path / "fractions.pt")
+        torch.save(self._fractions, path / "fractions.pt")
 
     def loads(self, path: Path):
         path = Path(path).absolute()
@@ -562,8 +570,9 @@ class SamplerEnsemble(Sampler):
         state_dict = OrderedDict()
         for i, sampler in enumerate(self._samplers):
             state_dict[str(i)] = sampler.state_dict()
-        if self._fractions is not None:
-            state_dict["fractions"] = self._fractions.clone()
+        state_dict["fractions"] = (
+            self._fractions.clone() if self._fractions is not None else None
+        )
         return state_dict
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
