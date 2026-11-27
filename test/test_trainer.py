@@ -3585,6 +3585,40 @@ class TestGRPOTrainer:
         assert stepper.optimizer_step_count == 2
         assert sender.update_calls == 1
 
+    def test_gradient_accumulation_within_a_batch(self):
+        # Two micro-steps per collected batch: only the second one steps the
+        # optimizer and reports grad_norm, so the first step has no grad_norm.
+        model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(model.weight)
+        collector = MockingIterableCollector([_make_grpo_batch()])
+        collector.init_random_frames = 0
+        with pytest.warns(UserWarning, match="experimental"):
+            trainer = GRPOTrainer(
+                collector=collector,
+                total_frames=2,
+                frame_skip=1,
+                optim_steps_per_batch=2,
+                loss_module=_GRPORegressionLoss(model),
+                optimizer=torch.optim.SGD(model.parameters(), lr=0.05),
+                gradient_accumulation_steps=2,
+                progress_bar=False,
+            )
+        reported = {}
+
+        def capture(optim_steps, average_losses):
+            reported.update(average_losses.to_dict())
+
+        trainer.register_op("post_optim_complete_log", capture)
+
+        trainer.train()
+
+        assert trainer.optimization_stepper.optimizer_step_count == 1
+        # Both micro-steps use the initial zero weight: mean(2**2, 4**2) = 10.
+        assert reported["loss_objective"] == pytest.approx(10.0)
+        # grad_norm comes from the one step that reported it: the accumulated
+        # gradient is d/dw mean((w * x - y) ** 2) = -10 at w = 0.
+        assert reported["grad_norm"] == pytest.approx(10.0)
+
     def test_buffer_writing_collector_trains_from_replay_buffer(self):
         # LLM collectors created with a replay_buffer write to it directly and
         # yield None; the trainer must sample from the buffer and track frames
