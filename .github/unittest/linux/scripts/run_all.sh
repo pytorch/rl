@@ -115,6 +115,8 @@ export BATCHED_PIPE_TIMEOUT=60
 
 printf "* Installing dependencies\n"
 
+# pygame has no Python 3.15 support yet; pygame-ce provides the same import.
+# onnxruntime has no Python 3.15 wheels; its tests skip when it is unavailable.
 # Install base dependencies
 uv_pip_install \
   hypothesis \
@@ -122,7 +124,8 @@ uv_pip_install \
   cloudpickle \
   "pyvers>=0.2.3" \
   packaging \
-  pygame \
+  "pygame; python_version < '3.15'" \
+  "pygame-ce; python_version >= '3.15'" \
   "moviepy<2.0.0" \
   tqdm \
   pytest \
@@ -155,7 +158,7 @@ uv_pip_install \
   timm \
   onnx \
   "onnxscript>=0.7.1" \
-  onnxruntime
+  "onnxruntime; python_version < '3.15'"
 
 # Dataset adapter tests are collected by the CPU bulk shard.
 if [[ "${CU_VERSION:-}" == cpu && "${TORCHRL_TEST_SHARD:-all}" == bulk ]]; then
@@ -169,33 +172,33 @@ fi
 
 # Install dm_control for Python < 3.13
 # labmaze (dm_control dependency) doesn't have Python 3.13+ wheels
-if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
+if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" && "$PYTHON_VERSION" != "3.15" ]]; then
   echo "installing dm_control"
   uv_pip_install "dm_control>=1.0.41" "mujoco>=3.8.1,<3.9.0"
 fi
 
 # Install ray for Python < 3.14 (ray doesn't support Python 3.14 yet)
-if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+if [[ "$PYTHON_VERSION" != "3.14" && "$PYTHON_VERSION" != "3.15" ]]; then
   echo "installing ray"
   uv_pip_install ray
 fi
 
 # Install trackio for Python < 3.14 (trackio wheels may not be available for Python 3.14 yet)
-if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+if [[ "$PYTHON_VERSION" != "3.14" && "$PYTHON_VERSION" != "3.15" ]]; then
   echo "installing trackio"
   uv_pip_install trackio
 fi
 
 # Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
-if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+if [[ "$PYTHON_VERSION" != "3.14" && "$PYTHON_VERSION" != "3.15" ]]; then
   echo "installing mujoco"
   uv_pip_install "mujoco>=3.8.1,<3.9.0"
 fi
 
 # Install gymnasium
 echo "installing gymnasium"
-if [[ "$PYTHON_VERSION" == "3.14" ]]; then
-  # Python 3.14: no mujoco wheels available, ale_py also failing
+if [[ "$PYTHON_VERSION" == "3.14" || "$PYTHON_VERSION" == "3.15" ]]; then
+  # Avoid mujoco and ale_py on the newest Python versions.
   uv_pip_install "gymnasium>=1.1"
 elif [[ "$PYTHON_VERSION" == "3.12" ]]; then
   uv_pip_install ale-py sympy
@@ -205,7 +208,7 @@ else
 fi
 
 # sanity check
-if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
+if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" && "$PYTHON_VERSION" != "3.15" ]]; then
   python -c "
 import dm_control
 from dm_control import composer
