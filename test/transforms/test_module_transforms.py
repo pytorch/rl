@@ -159,6 +159,34 @@ class TestModuleTransform(TransformBase):
         assert rollout["feature"].shape == (3, 2)
         env.check_env_specs()
 
+    def test_reset_keeps_reward_out_of_the_reset_data(self):
+        def add_feature(spec):
+            spec = spec.clone()
+            spec["feature"] = Unbounded(shape=(*spec.shape, 2))
+            return spec
+
+        env = ContinuousActionVecMockEnv().append_transform(
+            ModuleTransform(
+                module=TensorDictModule(
+                    lambda obs: (obs[..., :2] * 2, obs[..., :1]),
+                    in_keys=["observation"],
+                    out_keys=["feature", "reward"],
+                ),
+                observation_spec_transform=add_feature,
+                reward_spec_transform=lambda spec: spec,
+            )
+        )
+
+        reset = env.reset()
+        rollout = env.rollout(3)
+
+        assert "reward" not in reset.keys()
+        torch.testing.assert_close(reset["feature"], reset["observation"][..., :2] * 2)
+        torch.testing.assert_close(
+            rollout["next", "reward"], rollout["next", "observation"][..., :1]
+        )
+        env.check_env_specs()
+
     def test_step_only_inputs_skip_reset(self):
         def add_feature(spec):
             spec = spec.clone()

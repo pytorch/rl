@@ -9,7 +9,7 @@ from contextlib import nullcontext
 from typing import overload, TYPE_CHECKING
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import _RayServiceMetaClass, logger as torchrl_logger
 
@@ -147,9 +147,10 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
             after it has been transformed by the module, or a function that modifies the existing spec.
             When set, the module also runs at reset if every key it reads is
             in the reset output, so the observations it adds exist from the
-            first step. A module that reads step-only keys such as "reward"
-            still runs only after steps. Defaults to None (specs unchanged,
-            and the module only runs after steps).
+            first step. Its reward and done outputs are not written at reset.
+            A module that reads step-only keys such as "reward" still runs
+            only after steps. Defaults to None (specs unchanged, and the
+            module only runs after steps).
         done_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the done
             after it has been transformed by the module, or a function that modifies the existing spec.
             Defaults to `None` (done specs remain unchanged).
@@ -305,7 +306,16 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         available = tensordict_reset.keys(include_nested=True)
         if any(key not in available for key in self.in_keys):
             return tensordict_reset
-        return self._call(tensordict_reset)
+        out = self._call(tensordict_reset.select(*self.in_keys))
+        parent = self.parent
+        step_only = (
+            {*parent.reward_keys, *parent.done_keys} if parent is not None else set()
+        )
+        for key in self.module.out_keys:
+            key = unravel_key(key)
+            if key not in step_only:
+                tensordict_reset.set(key, out.get(key))
+        return tensordict_reset
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.inverse:
