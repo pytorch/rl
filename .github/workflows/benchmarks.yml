@@ -54,9 +54,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    outputs:
-      python-matrix: ${{ (github.event_name == 'push' || inputs.suite == 'async') && '[{"version":"3.10.20","series":"3.10"}]' || '[{"version":"3.10.20","series":"3.10"},{"version":"3.12.16","series":"3.12"}]' }}
-      tensordict-revision: ${{ steps.tensordict.outputs.revision }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -64,26 +61,18 @@ jobs:
           python-version: '3.10.20'
       - run: python -m pip install 'pytest==9.1.1'
       - run: python -m pytest .github/scripts/test_pr_benchmark_workflow.py -q
-      - name: Resolve TensorDict revision for full benchmarks
-        id: tensordict
-        if: ${{ github.event_name != 'pull_request' && github.event_name != 'push' && inputs.suite != 'async' }}
-        run: |
-          # Use the same TensorDict commit for both Python versions and devices.
-          revision="$(git ls-remote --exit-code https://github.com/pytorch/tensordict.git refs/heads/main | cut -f1)"
-          test -n "$revision"
-          echo "revision=$revision" >> "$GITHUB_OUTPUT"
 
   benchmark:
     if: github.event_name != 'pull_request'
     needs: validate-report
-    name: ${{ matrix.device }} Pytest benchmark${{ matrix.python.series != '3.10' && format(' (Python {0})', matrix.python.series) || '' }}
+    name: ${{ matrix.device }} Pytest benchmark${{ matrix.python != '3.10.20' && format(' (Python {0})', matrix.python) || '' }}
     runs-on: mt-l-x86aavx2-11-41-a10g
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         # Pushes and manual async runs keep the existing Python 3.10 suite.
-        python: ${{ fromJSON(needs.validate-report.outputs.python-matrix) }}
+        python: ${{ fromJSON((github.event_name == 'push' || inputs.suite == 'async') && '["3.10.20"]' || '["3.10.20","3.12.16"]') }}
         device: [CPU, GPU]
         include:
           - device: CPU
@@ -99,7 +88,7 @@ jobs:
     env:
       MKL_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
-      BENCHMARK_PYTHON_VERSION: ${{ matrix.python.version }}
+      BENCHMARK_PYTHON_VERSION: ${{ matrix.python }}
     steps:
       - name: Who triggered this?
         run: |
@@ -113,7 +102,7 @@ jobs:
       - name: Python Setup
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python.version }}
+          python-version: ${{ matrix.python }}
       - name: Setup Environment
         run: |
           export TZ=Europe/London
@@ -168,8 +157,6 @@ jobs:
           key: async-benchmark-v1-${{ runner.os }}-${{ matrix.device }}-${{ hashFiles('.github/async-benchmark-requirements.txt', '.github/workflows/benchmarks.yml') }}
       - name: Run
         id: measure
-        env:
-          TENSORDICT_REVISION: ${{ needs.validate-report.outputs.tensordict-revision }}
         run: |
           set -euxo pipefail
           if [ "$BENCHMARK_SUITE" = async ]; then
@@ -226,7 +213,7 @@ jobs:
             python -m pip install -c /tmp/torch-constraints.txt ninja pytest pytest-benchmark pytest-timeout "hoptorch>=0.1.4" "mujoco>=3.8.1,<3.9.0" "dm_control>=1.0.41" "${gym_requirements[@]}" transformers accelerate
             python -m pip install -c /tmp/torch-constraints.txt "pybind11[global]"
             python -m pip install -c /tmp/torch-constraints.txt cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
-            python -m pip install --no-deps "git+https://github.com/pytorch/tensordict@${TENSORDICT_REVISION}"
+            python -m pip install --no-deps git+https://github.com/pytorch/tensordict
             python -m pip install -c /tmp/torch-constraints.txt safetensors tqdm pandas numpy matplotlib ray psutil hydra-core omegaconf
 
             bash .github/unittest/helpers/assert_torch_version.sh nightly
@@ -303,7 +290,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: ${{ matrix.device }}-benchmark-results${{ matrix.python.series != '3.10' && format('-py{0}', matrix.python.series) || '' }}
+          name: ${{ matrix.device }}-benchmark-results${{ matrix.python != '3.10.20' && format('-py{0}', matrix.python) || '' }}
           path: |
             benchmarks/*.json
             benchmarks/dependencies.txt
@@ -315,9 +302,9 @@ jobs:
           if-no-files-found: warn
 
   benchmark-upload:
-    name: Publish ${{ matrix.device }} benchmark${{ matrix.python.series != '3.10' && format(' (Python {0})', matrix.python.series) || '' }}
+    name: Publish ${{ matrix.device }} benchmark${{ matrix.python != '3.10.20' && format(' (Python {0})', matrix.python) || '' }}
     runs-on: ubuntu-latest
-    needs: [validate-report, benchmark]
+    needs: benchmark
     # One failed device must not suppress another device's successful history.
     # Branch/manual validation never enters the main trend.
     if: ${{ !cancelled() && !inputs.skip-upload && github.ref == 'refs/heads/main' }}
@@ -326,10 +313,10 @@ jobs:
       # Each job pushes to gh-pages; serialize writes within this workflow run.
       max-parallel: 1
       matrix:
-        python: ${{ fromJSON(needs.validate-report.outputs.python-matrix || '[{"version":"3.10.20","series":"3.10"}]') }}
+        python: ${{ fromJSON((github.event_name == 'push' || inputs.suite == 'async') && '["3.10.20"]' || '["3.10.20","3.12.16"]') }}
         device: [CPU, GPU]
     env:
-      BENCHMARK_ARTIFACT: ${{ format('{0}-benchmark-results{1}', matrix.device, matrix.python.series != '3.10' && format('-py{0}', matrix.python.series) || '') }}
+      BENCHMARK_ARTIFACT: ${{ format('{0}-benchmark-results{1}', matrix.device, matrix.python != '3.10.20' && format('-py{0}', matrix.python) || '') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -342,10 +329,10 @@ jobs:
         if: ${{ !cancelled() && hashFiles(format('results/{0}/success.txt', env.BENCHMARK_ARTIFACT)) != '' }}
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: ${{ env.BENCHMARK_SUITE == 'async' && format('Async {0} (v1)', matrix.device) || matrix.python.series == '3.10' && format('{0} Benchmark Results', matrix.device) || format('{0} Benchmark Results (Python {1})', matrix.device, matrix.python.series) }}
+          name: ${{ env.BENCHMARK_SUITE == 'async' && format('Async {0} (v1)', matrix.device) || matrix.python == '3.10.20' && format('{0} Benchmark Results', matrix.device) || format('{0} Benchmark Results (Python {1})', matrix.device, matrix.python) }}
           tool: ${{ env.BENCHMARK_SUITE == 'async' && 'customBiggerIsBetter' || 'pytest' }}
           output-file-path: ${{ format('results/{0}/{1}', env.BENCHMARK_ARTIFACT, env.BENCHMARK_SUITE == 'async' && 'trend.json' || 'output.json') }}
-          benchmark-data-dir-path: ${{ env.BENCHMARK_SUITE == 'async' && 'dev/bench/async' || matrix.python.series == '3.10' && 'dev/bench' || format('dev/bench/py{0}', matrix.python.series) }}
+          benchmark-data-dir-path: ${{ env.BENCHMARK_SUITE == 'async' && 'dev/bench/async' || matrix.python == '3.10.20' && 'dev/bench' || format('dev/bench/py{0}', matrix.python) }}
           fail-on-alert: false
           alert-threshold: '200%'
           comment-on-alert: false
