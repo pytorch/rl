@@ -27,7 +27,7 @@ jobs:
   tests:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        python_version: ["3.11"]
         cuda_arch_version: ["13.0"]
         # Two parallel shards over the smoke-test list; see the SOTA_SHARD
         # filtering in .github/unittest/linux_sota/scripts/test_sota.py.
