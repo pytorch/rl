@@ -242,12 +242,17 @@ class InterventionModule(TensorDictModuleBase):
         policy_action_key (NestedKey, optional): where the policy's action is
             saved. Defaults to "policy_action".
         intervention_key (NestedKey, optional): where the take-over flag is
-            saved, with a trailing dimension of 1. Defaults to "intervention".
+            saved, shaped like the action with a last dimension of 1.
+            Defaults to "intervention".
         intervener_action_key (NestedKey, optional): where the intervener
             writes its action, shaped like the policy's action. Defaults to
             ("intervener", "action").
         intervener_active_key (NestedKey, optional): where the intervener
-            writes its take-over flag. Defaults to ("intervener", "active").
+            writes its take-over flag, one value per action (for example one
+            per agent). Defaults to ("intervener", "active"). The
+            intervener's outputs stay in the tensordict during exploration
+            but are not among this module's ``out_keys``, since they are not
+            written in deterministic mode.
         spec (TensorSpec, optional): if given, the intervener's action is
             clipped to this spec. Defaults to None.
 
@@ -315,27 +320,25 @@ class InterventionModule(TensorDictModuleBase):
             if key not in in_keys:
                 in_keys.append(key)
         self.in_keys = in_keys
-        out_keys = [self.action_key, self.policy_action_key, self.intervention_key]
-        for key in intervener_out:
-            if key not in out_keys:
-                out_keys.append(key)
-        self.out_keys = out_keys
+        self.out_keys = [self.action_key, self.policy_action_key, self.intervention_key]
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         policy_action = tensordict.get(self.action_key)
-        batch_shape = tensordict.batch_size
+        action_batch_shape = policy_action.shape[:-1]
         if exploration_type() not in (ExplorationType.RANDOM, None):
             tensordict.set(self.policy_action_key, policy_action)
             tensordict.set(
                 self.intervention_key,
                 torch.zeros(
-                    (*batch_shape, 1), dtype=torch.bool, device=policy_action.device
+                    (*action_batch_shape, 1),
+                    dtype=torch.bool,
+                    device=policy_action.device,
                 ),
             )
             return tensordict
         tensordict = self.intervener(tensordict)
         active = tensordict.get(self.intervener_active_key)
-        active = active.to(torch.bool).reshape(batch_shape)
+        active = active.to(torch.bool).reshape(action_batch_shape)
         intervener_action = tensordict.get(self.intervener_action_key)
         if self.spec is not None:
             intervener_action = self.spec.project(intervener_action)
