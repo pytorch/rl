@@ -738,6 +738,42 @@ def _policy_loss_data(current_log_prob, sample_log_prob, advantage):
 
 
 class TestLosses:
+    @pytest.mark.parametrize("reduction", [None, "mean", "sum", "none"])
+    @pytest.mark.parametrize("padding", [0, 2])
+    def test_grpo_token_mean_reduction(self, reduction, padding):
+        """Token reduction respects the requested loss and gradient scaling."""
+        data = _policy_loss_data(
+            current_log_prob=[-1.0] * (2 + padding),
+            sample_log_prob=[-1.0] * (2 + padding),
+            advantage=[1.0, 3.0] + [99.0] * padding,
+        )
+        data["mask"][..., 2:] = False
+        current_log_prob = data["current_log_prob"].requires_grad_()
+        loss_fn = GRPOLoss(
+            _FixedLogProbPolicy(),
+            reduction=reduction,
+            entropy_bonus=False,
+        )
+
+        loss = loss_fn(data).loss_objective
+        (gradient,) = torch.autograd.grad(loss.sum(), current_log_prob)
+
+        # Ratios are one, so each valid token contributes -advantage to both
+        # the loss and its derivative with respect to current log-probability.
+        expected_gradient = current_log_prob.new_tensor(
+            [[-1.0, -3.0] + [0.0] * padding]
+        )
+        if reduction == "none":
+            expected_loss = expected_gradient.unsqueeze(-1)
+        elif reduction == "sum":
+            expected_loss = current_log_prob.new_tensor(-4.0)
+        else:
+            expected_loss = current_log_prob.new_tensor(-2.0)
+            expected_gradient = expected_gradient / 2
+
+        torch.testing.assert_close(loss, expected_loss)
+        torch.testing.assert_close(gradient, expected_gradient)
+
     def test_grpo_entropy_mc_when_analytic_is_nonfinite(self):
         loss_fn = GRPOLoss(actor_network=None)
         loc = torch.zeros(3, 4)
