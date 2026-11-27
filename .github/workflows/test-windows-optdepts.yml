@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.10"
+          - "3.11"
         runner: ["windows.4xlarge"]
         gpu-arch-type: ["cpu"]
       fail-fast: false
