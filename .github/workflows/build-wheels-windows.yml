@@ -29,7 +29,7 @@ on:
         description: 'JSON list of Python versions to build'
         required: false
         type: string
-        default: '["3.11", "3.12", "3.13", "3.14"]'
+        default: '["3.11", "3.12", "3.13", "3.14", "3.15"]'
       test-infra-ref:
         description: 'PyTorch test-infra ref (main for nightly, release/X.Y for stable)'
         required: false
@@ -76,7 +76,7 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
-      python-versions: ${{ inputs.python-versions || '["3.11", "3.12", "3.13", "3.14"]' }}
+      python-versions: ${{ inputs.python-versions || '["3.11", "3.12", "3.13", "3.14", "3.15"]' }}
       # For workflow_dispatch: convert boolean to enable/disable string
       # For workflow_call: use the string input directly
       # Default: disable CUDA (torchrl is CPU-only), enable CPU (Windows has no ROCm)
