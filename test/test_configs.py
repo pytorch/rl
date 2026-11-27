@@ -545,9 +545,7 @@ class TestEnvConfigs:
         batched_env_type = (
             "parallel"
             if cls == ParallelEnv
-            else "serial"
-            if cls == SerialEnv
-            else "async"
+            else "serial" if cls == SerialEnv else "async"
         )
         cfg = BatchedEnvConfig(
             create_env_fn=GymEnvConfig(env_name="CartPole-v1"),
@@ -1392,6 +1390,12 @@ class TestModuleConfigs:
             algorithm_configs.LowLevelControllerConfig(
                 state_key=["state", "low"],
                 policy_action_key=["motor", "output"],
+            ),
+            policy=policy,
+        )
+        env = instantiate_config(
+            algorithm_configs.ClosedLoopMultiActionConfig(
+                steps=2,
                 decision_spec={
                     "_target_": "torchrl.data.Composite",
                     "decision": {
@@ -1404,12 +1408,6 @@ class TestModuleConfigs:
                         },
                     },
                 },
-            ),
-            policy=policy,
-        )
-        env = instantiate_config(
-            algorithm_configs.ClosedLoopMultiActionConfig(
-                steps=2,
                 _target_="torchrl.envs.transforms.ClosedLoopMultiAction.from_env",
             ),
             env=CountingEnv(),
