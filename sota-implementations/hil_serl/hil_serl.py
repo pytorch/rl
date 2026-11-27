@@ -130,7 +130,7 @@ def main(cfg: DictConfig):
                     batch["next", "success"].squeeze(-1)[done].float().mean()
                 )
                 metrics["train_predicted_success"] = (
-                    batch["next", "terminated"].squeeze(-1)[done].float().mean()
+                    (batch["next", "reward"].squeeze(-1)[done] > 0).float().mean()
                 )
             if losses:
                 metrics.update(torch.stack(losses).mean().to_dict())
@@ -152,7 +152,11 @@ def main(cfg: DictConfig):
         collector.shutdown()
         eval_env.close()
         pbar.close()
-        if classifier is not None and cfg.reward.false_positives_out:
+        if (
+            classifier is not None
+            and cfg.reward.false_positives_out
+            and false_positives
+        ):
             observation = torch.cat(false_positives).cpu()
             TensorDict(observation=observation, batch_size=[len(observation)]).memmap(
                 cfg.reward.false_positives_out

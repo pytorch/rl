@@ -273,7 +273,8 @@ commands = {
   replay.online_capacity=1000 \
   compile.compile=false \
   logger.eval_every=48 \
-  logger.eval_episodes=1
+  logger.eval_episodes=1 \
+  logger.backend=
 """,
     "sac": """python sota-implementations/sac/sac.py \
   env.max_episode_steps=20 \

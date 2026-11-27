@@ -314,8 +314,9 @@ class StallIntervener(nn.Module):
     from the cube. A takeover starts reaction_delay steps after either is
     noticed and lasts at most max_takeover steps. Noise is added to the
     controller's actions so the help is imperfect. The takeover state resets at
-    the start of each episode. It is kept out of the module's
-    buffers so collector weight updates never copy it.
+    the start of each episode, and is rebuilt if the batch shape or device
+    changes. It is kept out of the module's buffers so collector weight
+    updates never copy it.
     """
 
     def __init__(
@@ -347,7 +348,11 @@ class StallIntervener(nn.Module):
     def forward(self, observation, is_init):
         eef = observation[..., EEF_POS]
         batch = observation.shape[:-1]
-        if self.last_eef is None or self.last_eef.shape != eef.shape:
+        if (
+            self.last_eef is None
+            or self.last_eef.shape != eef.shape
+            or self.last_eef.device != eef.device
+        ):
             self.last_eef = eef.clone()
             self.stalled = torch.zeros(batch, dtype=torch.long, device=eef.device)
             self.takeover_left = torch.zeros_like(self.stalled)
@@ -457,6 +462,11 @@ def make_sac_agent(cfg, env, device):
 
 
 def make_loss(cfg, actor, qvalue):
+    """Builds the SAC loss and its target updater.
+
+    The loss creates its target-entropy buffer on first use; it is read here
+    so the buffer exists before the update is compiled.
+    """
     loss = SACLoss(
         actor_network=actor,
         qvalue_network=qvalue,
@@ -624,6 +634,11 @@ def to_replay(batch: TensorDictBase, *, end_on_success: bool = True) -> TensorDi
     return batch
 
 
+def _demo_names(data) -> list[str]:
+    """The demo names in recorded order: demo_0, demo_1, ..., demo_10."""
+    return sorted(data.keys(), key=lambda name: int(name.split("_")[-1]))
+
+
 def load_demos(
     path: str,
     num_demos: int,
@@ -644,8 +659,7 @@ def load_demos(
     episodes = []
     with h5py.File(path, "r") as f:
         data = f["data"]
-        names = sorted(data.keys(), key=lambda name: int(name.split("_")[-1]))
-        for k, name in enumerate(names[:num_demos]):
+        for k, name in enumerate(_demo_names(data)[:num_demos]):
             demo = data[name]
             obs = torch.cat(
                 [torch.as_tensor(demo["obs"][key][()]) for key in DEMO_OBS_KEYS], -1
@@ -802,7 +816,7 @@ def check_obs_alignment(
     worst = 0.0
     with h5py.File(path, "r") as f:
         data = f["data"]
-        for name in sorted(data.keys())[:num_demos]:
+        for name in _demo_names(data)[:num_demos]:
             demo = data[name]
             suite.reset_from_xml_string(suite.edit_model_xml(demo.attrs["model_file"]))
             suite.sim.reset()
