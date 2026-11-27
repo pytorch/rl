@@ -1,3 +1,7 @@
+<p align="center">
+  <b>English</b> · <a href="README.zh.md">简体中文</a>
+</p>
+
 [![Unit-tests](https://github.com/pytorch/rl/actions/workflows/test-linux.yml/badge.svg)](https://github.com/pytorch/rl/actions/workflows/test-linux.yml)
 [![Nightly](https://github.com/pytorch/rl/actions/workflows/nightly_orchestrator.yml/badge.svg)](https://pytorch.github.io/rl/nightly-status/)
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg)](https://pytorch.org/rl/)
