@@ -55,6 +55,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      python-matrix: ${{ (github.event_name == 'push' || inputs.suite == 'async') && '[{"version":"3.10.20","series":"3.10"}]' || '[{"version":"3.10.20","series":"3.10"},{"version":"3.12.16","series":"3.12"}]' }}
       tensordict-revision: ${{ steps.tensordict.outputs.revision }}
     steps:
       - uses: actions/checkout@v4
@@ -75,14 +76,14 @@ jobs:
   benchmark:
     if: github.event_name != 'pull_request'
     needs: validate-report
-    name: ${{ matrix.device }} Pytest benchmark${{ matrix.python-version == '3.12.16' && ' (Python 3.12)' || '' }}
+    name: ${{ matrix.device }} Pytest benchmark${{ matrix.python.series != '3.10' && format(' (Python {0})', matrix.python.series) || '' }}
     runs-on: mt-l-x86aavx2-11-41-a10g
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         # Pushes and manual async runs keep the existing Python 3.10 suite.
-        python-version: ${{ fromJSON((github.event_name == 'push' || inputs.suite == 'async') && '["3.10.20"]' || '["3.10.20", "3.12.16"]') }}
+        python: ${{ fromJSON(needs.validate-report.outputs.python-matrix) }}
         device: [CPU, GPU]
         include:
           - device: CPU
@@ -98,7 +99,7 @@ jobs:
     env:
       MKL_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
-      BENCHMARK_PYTHON_VERSION: ${{ matrix.python-version }}
+      BENCHMARK_PYTHON_VERSION: ${{ matrix.python.version }}
     steps:
       - name: Who triggered this?
         run: |
@@ -112,7 +113,7 @@ jobs:
       - name: Python Setup
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python.version }}
       - name: Setup Environment
         run: |
           export TZ=Europe/London
@@ -186,18 +187,18 @@ jobs:
             fi
             source .async-benchmark-venv/bin/activate
           else
-            if [ "$BENCHMARK_PYTHON_VERSION" = '3.12.16' ]; then
-              python -m venv ./py312
-              source ./py312/bin/activate
-            else
+            if [[ "$BENCHMARK_PYTHON_VERSION" == 3.10.* ]]; then
               python -m venv ./py310
               source ./py310/bin/activate
+            else
+              python -m venv ./pybenchmark
+              source ./pybenchmark/bin/activate
             fi
           fi
-          if [ "$BENCHMARK_PYTHON_VERSION" = '3.12.16' ]; then
-            export PYTHON_INCLUDE_DIR="$(python -c 'import sysconfig; print(sysconfig.get_path("include"))')"
-          else
+          if [[ "$BENCHMARK_PYTHON_VERSION" == 3.10.* ]]; then
             export PYTHON_INCLUDE_DIR=/usr/include/python3.10
+          else
+            export PYTHON_INCLUDE_DIR="$(python -c 'import sysconfig; print(sysconfig.get_path("include"))')"
           fi
           export TORCHRL_BENCHMARK_DEVICE="${{ matrix.device }}"
           if [ "${TORCHRL_BENCHMARK_DEVICE}" = "CPU" ]; then
@@ -205,13 +206,12 @@ jobs:
           fi
 
           if [ "$BENCHMARK_SUITE" = full ]; then
-            if [ "$BENCHMARK_PYTHON_VERSION" = '3.12.16' ]; then
-              torch_python_tag=cp312
+            torch_python_tag="$(python -c 'import sys; print(f"cp{sys.version_info.major}{sys.version_info.minor}")')"
+            if [[ "$BENCHMARK_PYTHON_VERSION" == 3.10.* ]]; then
+              gym_requirements=('gym[accept-rom-license,atari]')
+            else
               # ALE 0.8 has no Python 3.12 wheel; ALE 0.9 uses Gymnasium.
               gym_requirements=('gym==0.26.2' 'gymnasium==1.2.3' 'ale-py==0.9.1')
-            else
-              torch_python_tag=cp310
-              gym_requirements=('gym[accept-rom-license,atari]')
             fi
             # TODO: Remove these pins and return to current nightlies after
             # deprecating the CUDA 12.6 benchmark job in favor of a newer CUDA.
@@ -303,7 +303,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: ${{ matrix.device }}-benchmark-results${{ matrix.python-version == '3.12.16' && '-py312' || '' }}
+          name: ${{ matrix.device }}-benchmark-results${{ matrix.python.series != '3.10' && format('-py{0}', matrix.python.series) || '' }}
           path: |
             benchmarks/*.json
             benchmarks/dependencies.txt
@@ -315,94 +315,43 @@ jobs:
           if-no-files-found: warn
 
   benchmark-upload:
-    name: Upload benchmark results
+    name: Publish ${{ matrix.device }} benchmark${{ matrix.python.series != '3.10' && format(' (Python {0})', matrix.python.series) || '' }}
     runs-on: ubuntu-latest
-    needs: benchmark
+    needs: [validate-report, benchmark]
     # One failed device must not suppress another device's successful history.
     # Branch/manual validation never enters the main trend.
     if: ${{ !cancelled() && !inputs.skip-upload && github.ref == 'refs/heads/main' }}
+    strategy:
+      fail-fast: false
+      # Each job pushes to gh-pages; serialize writes within this workflow run.
+      max-parallel: 1
+      matrix:
+        python: ${{ fromJSON(needs.validate-report.outputs.python-matrix || '[{"version":"3.10.20","series":"3.10"}]') }}
+        device: [CPU, GPU]
+    env:
+      BENCHMARK_ARTIFACT: ${{ format('{0}-benchmark-results{1}', matrix.device, matrix.python.series != '3.10' && format('-py{0}', matrix.python.series) || '') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Download benchmark results
         uses: actions/download-artifact@v4
         with:
-          pattern: '*-benchmark-results*'
+          pattern: ${{ env.BENCHMARK_ARTIFACT }}
           path: results
-      - name: Store CPU benchmark results
-        if: ${{ !cancelled() && hashFiles('results/CPU-benchmark-results/success.txt') != '' }}
+      - name: Store benchmark results
+        if: ${{ !cancelled() && hashFiles(format('results/{0}/success.txt', env.BENCHMARK_ARTIFACT)) != '' }}
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: ${{ env.BENCHMARK_SUITE == 'async' && 'Async CPU (v1)' || 'CPU Benchmark Results' }}
+          name: ${{ env.BENCHMARK_SUITE == 'async' && format('Async {0} (v1)', matrix.device) || matrix.python.series == '3.10' && format('{0} Benchmark Results', matrix.device) || format('{0} Benchmark Results (Python {1})', matrix.device, matrix.python.series) }}
           tool: ${{ env.BENCHMARK_SUITE == 'async' && 'customBiggerIsBetter' || 'pytest' }}
-          output-file-path: results/CPU-benchmark-results/${{ env.BENCHMARK_SUITE == 'async' && 'trend.json' || 'output.json' }}
-          benchmark-data-dir-path: ${{ env.BENCHMARK_SUITE == 'async' && 'dev/bench/async' || 'dev/bench' }}
-          # A performance alert must not fail publication: the red upload job
-          # hid a month-long publication outage. The job summary compares every
-          # series against its previous point instead.
+          output-file-path: ${{ format('results/{0}/{1}', env.BENCHMARK_ARTIFACT, env.BENCHMARK_SUITE == 'async' && 'trend.json' || 'output.json') }}
+          benchmark-data-dir-path: ${{ env.BENCHMARK_SUITE == 'async' && 'dev/bench/async' || matrix.python.series == '3.10' && 'dev/bench' || format('dev/bench/py{0}', matrix.python.series) }}
           fail-on-alert: false
           alert-threshold: '200%'
           comment-on-alert: false
           summary-always: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Label the point with the benchmarked commit. Without this, dispatched
-          # and scheduled runs record whatever main's head is at upload time.
-          ref: ${{ github.sha }}
-          gh-pages-branch: gh-pages
-          auto-push: true
-          max-items-in-chart: 250
-      - name: Store GPU benchmark results
-        if: ${{ !cancelled() && hashFiles('results/GPU-benchmark-results/success.txt') != '' }}
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: ${{ env.BENCHMARK_SUITE == 'async' && 'Async GPU (v1)' || 'GPU Benchmark Results' }}
-          tool: ${{ env.BENCHMARK_SUITE == 'async' && 'customBiggerIsBetter' || 'pytest' }}
-          output-file-path: results/GPU-benchmark-results/${{ env.BENCHMARK_SUITE == 'async' && 'trend.json' || 'output.json' }}
-          benchmark-data-dir-path: ${{ env.BENCHMARK_SUITE == 'async' && 'dev/bench/async' || 'dev/bench' }}
-          # A performance alert must not fail publication: the red upload job
-          # hid a month-long publication outage. The job summary compares every
-          # series against its previous point instead.
-          fail-on-alert: false
-          alert-threshold: '200%'
-          comment-on-alert: false
-          summary-always: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Label the point with the benchmarked commit. Without this, dispatched
-          # and scheduled runs record whatever main's head is at upload time.
-          ref: ${{ github.sha }}
-          gh-pages-branch: gh-pages
-          auto-push: true
-          max-items-in-chart: 250
-      - name: Store Python 3.12 CPU benchmark results
-        if: ${{ !cancelled() && hashFiles('results/CPU-benchmark-results-py312/success.txt') != '' }}
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: CPU Benchmark Results (Python 3.12)
-          tool: pytest
-          output-file-path: results/CPU-benchmark-results-py312/output.json
-          benchmark-data-dir-path: dev/bench/py312
-          fail-on-alert: false
-          alert-threshold: '200%'
-          comment-on-alert: false
-          summary-always: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.sha }}
-          gh-pages-branch: gh-pages
-          auto-push: true
-          max-items-in-chart: 250
-      - name: Store Python 3.12 GPU benchmark results
-        if: ${{ !cancelled() && hashFiles('results/GPU-benchmark-results-py312/success.txt') != '' }}
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: GPU Benchmark Results (Python 3.12)
-          tool: pytest
-          output-file-path: results/GPU-benchmark-results-py312/output.json
-          benchmark-data-dir-path: dev/bench/py312
-          fail-on-alert: false
-          alert-threshold: '200%'
-          comment-on-alert: false
-          summary-always: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Label the point with the benchmarked commit, not main at upload time.
           ref: ${{ github.sha }}
           gh-pages-branch: gh-pages
           auto-push: true
