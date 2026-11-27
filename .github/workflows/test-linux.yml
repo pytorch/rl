@@ -27,7 +27,7 @@ jobs:
   test-setup-minimal:
     strategy:
       matrix:
-        python_version: ["3.11", "3.14"]
+        python_version: ["3.11", "3.15"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
