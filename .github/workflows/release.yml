@@ -271,7 +271,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-      python-versions: '["3.11", "3.12", "3.13", "3.14"]'
+      python-versions: '["3.11", "3.12", "3.13", "3.14", "3.15"]'
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -302,7 +302,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-      python-versions: '["3.11", "3.12", "3.13", "3.14"]'
+      python-versions: '["3.11", "3.12", "3.13", "3.14", "3.15"]'
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -331,7 +331,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-m1.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-      python-versions: '["3.11", "3.12", "3.13", "3.14"]'
+      python-versions: '["3.11", "3.12", "3.13", "3.14", "3.15"]'
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -358,7 +358,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-      python-versions: '["3.11", "3.12", "3.13", "3.14"]'
+      python-versions: '["3.11", "3.12", "3.13", "3.14", "3.15"]'
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
