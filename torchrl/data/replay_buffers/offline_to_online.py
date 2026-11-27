@@ -192,7 +192,13 @@ class OfflineToOnlineReplayBuffer:
         elif n_offline == 0:
             out = self._online_buffer.sample(batch_size)
         else:
-            offline_batch = self._offline_buffer.sample(n_offline)
+            offline_batch, info = self._offline_buffer.sample(
+                n_offline, return_info=True
+            )
+            # Drop the sampling metadata that TensorDictReplayBuffer (and the
+            # datasets built on it) writes into the sample, e.g. "index": it
+            # points into the offline storage and the online sample lacks it.
+            offline_batch = offline_batch.exclude(*info.keys())
             online_batch = self._online_buffer.sample(n_online)
             out = torch.cat([offline_batch, online_batch], dim=0)
 
@@ -229,6 +235,20 @@ class OfflineToOnlineReplayBuffer:
     def online_buffer(self) -> ReplayBuffer:
         """The mutable online replay buffer."""
         return self._online_buffer
+
+    @property
+    def batch_size(self) -> int | None:
+        """The default batch size for :meth:`sample`."""
+        return self._batch_size
+
+    @property
+    def write_count(self) -> int:
+        """The number of transitions written to the online buffer.
+
+        The offline dataset is never written to, so this counts online data
+        only (it is what :class:`~torchrl.trainers.UTDRHook` reads).
+        """
+        return self._online_buffer.write_count
 
     def __len__(self) -> int:
         return len(self._offline_buffer) + len(self._online_buffer)

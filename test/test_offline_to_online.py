@@ -153,6 +153,33 @@ class TestOfflineToOnlineReplayBuffer:
         # Flat [64], NOT [2, 32]
         assert batch.batch_size == torch.Size([64])
 
+    def test_sample_drops_offline_sample_metadata(self):
+        # TensorDictReplayBuffer (the base class of the Minari/D4RL datasets)
+        # writes "index" into its samples; the online samples don't have it.
+        offline = TensorDictReplayBuffer(storage=LazyTensorStorage(100))
+        offline.extend(_make_online_data(100))
+        rb = OfflineToOnlineReplayBuffer(
+            offline_dataset=offline,
+            online_capacity=500,
+            batch_size=32,
+        )
+        rb.extend(_make_online_data(50))
+        batch = rb.sample(32)
+        assert batch.batch_size == torch.Size([32])
+        assert "index" not in batch.keys()
+
+    def test_write_count_and_batch_size(self):
+        rb = OfflineToOnlineReplayBuffer(
+            offline_dataset=_make_offline_buffer(),
+            online_capacity=500,
+            batch_size=32,
+        )
+        assert rb.batch_size == 32
+        assert rb.write_count == 0
+        rb.extend(_make_online_data(50))
+        # Only online writes count: the offline dataset is never written to.
+        assert rb.write_count == 50
+
     def test_sample_uses_default_batch_size(self):
         offline = _make_offline_buffer()
         rb = OfflineToOnlineReplayBuffer(
@@ -988,7 +1015,13 @@ class TestOfflineToOnlineTrainer:
         not (_has_gym and _LOSS_RUNNABLE),
         reason="needs gym and a tensordict supporting to_module(preserve_module_state)",
     )
-    def test_train_grows_online_and_anneals(self, tmp_path):
+    @pytest.mark.parametrize(
+        "offline_cls, enable_logging",
+        [(ReplayBuffer, False), (TensorDictReplayBuffer, True)],
+    )
+    def test_train_grows_online_and_anneals(
+        self, tmp_path, offline_cls, enable_logging
+    ):
         import warnings
 
         from tensordict.nn import NormalParamExtractor, TensorDictModule
@@ -1045,7 +1078,7 @@ class TestOfflineToOnlineTrainer:
 
         # Seed an offline dataset from the same env so its keys match the online
         # transitions (no Minari/D4RL required).
-        offline = ReplayBuffer(storage=LazyTensorStorage(200))
+        offline = offline_cls(storage=LazyTensorStorage(200))
         offline.extend(env.rollout(50).reshape(-1).exclude("collector"))
 
         rb = OfflineToOnlineReplayBuffer(
@@ -1068,7 +1101,9 @@ class TestOfflineToOnlineTrainer:
                 optimizer=torch.optim.Adam(loss.parameters(), lr=1e-3),
                 target_net_updater=target_updater,
                 progress_bar=False,
-                enable_logging=False,
+                enable_logging=enable_logging,
+                # This env has no RewardSum, so there is no episode return.
+                log_rewards=False,
             )
             # extend (pre_epoch), sample (process_optim_batch), anneal (post_steps)
             assert len(trainer._pre_epoch_ops) >= 1

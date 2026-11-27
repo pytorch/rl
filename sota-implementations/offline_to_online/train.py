@@ -29,7 +29,7 @@ from torch import nn
 from torchrl.collectors import Collector
 from torchrl.data import OfflineToOnlineReplayBuffer
 from torchrl.data.datasets.utils import load_dataset
-from torchrl.envs import DoubleToFloat, GymEnv, TransformedEnv
+from torchrl.envs import Compose, DoubleToFloat, GymEnv, RewardSum, TransformedEnv
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import SACLoss, SoftUpdate
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
@@ -105,8 +105,14 @@ def main():
     torch.manual_seed(args.seed)
     device = torch.device(args.device)
 
-    # Online environment.
-    env = TransformedEnv(GymEnv(args.env, device=device), DoubleToFloat())
+    # Online environment. RewardSum writes the "reward_sum" episode return that
+    # the trainer logs as r_total.
+    env = TransformedEnv(
+        GymEnv(args.env, device=device),
+        Compose(
+            DoubleToFloat(), RewardSum(in_keys=["reward"], out_keys=["reward_sum"])
+        ),
+    )
     env.set_seed(args.seed)
 
     # SAC agent.
