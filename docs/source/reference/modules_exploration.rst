@@ -18,6 +18,7 @@ the ``pre_optim_steps`` hook when ``cfg.noisy`` is set.
     AdditiveGaussianModule
     ConsistentDropoutModule
     EGreedyModule
+    InterventionModule
     NoisyLazyLinear
     NoisyLinear
     OrnsteinUhlenbeckProcessModule

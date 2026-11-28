@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-from tensordict import NestedKey, TensorDictBase
+from tensordict import NestedKey, TensorDictBase, unravel_key
 from tensordict.nn import (
     TensorDictModule,
     TensorDictModuleBase,
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 __all__ = [
     "EGreedyWrapper",
     "EGreedyModule",
+    "InterventionModule",
     "AdditiveGaussianModule",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
@@ -203,6 +204,153 @@ class EGreedyModule(TensorDictModuleBase):
             else:
                 raise RuntimeError("spec must be provided to the exploration wrapper.")
             action_tensordict.set(action_key, action)
+        return tensordict
+
+
+class InterventionModule(TensorDictModuleBase):
+    """Lets a person or a script take over from the policy, as in HIL-SERL.
+
+    Put it after the policy in a TensorDictSequential. On every step it runs
+    the intervener, which proposes an action and says whether it takes over.
+    When it does, the intervener's action is executed; otherwise the policy's
+    action is used unchanged. The policy's own action and an intervention
+    flag are saved too, so a replay buffer can send intervened steps where it
+    needs to, for example to both a demo and an online buffer.
+
+    Like EGreedyModule, it only acts during exploration. In deterministic
+    mode the intervener is not called and the policy acts alone, so
+    evaluation never includes help.
+
+    Reference: Luo et al., "Precise and Dexterous Robotic Manipulation via
+    Human-in-the-Loop Reinforcement Learning" (HIL-SERL),
+    https://arxiv.org/abs/2410.21845.
+
+    .. note::
+        The saved action is the executed one, so use this module with
+        off-policy losses only. Log-probabilities from the policy describe
+        the policy's action, not the executed one.
+
+    Args:
+        intervener (TensorDictModuleBase): a module that reads the policy's
+            input and writes a proposed action and a take-over flag. It runs
+            on every exploration step, so devices can be polled from it.
+
+    Keyword Args:
+        action_key (NestedKey, optional): the action key. It holds the
+            policy's action on input and the executed action on output.
+            Defaults to "action".
+        policy_action_key (NestedKey, optional): where the policy's action is
+            saved. Defaults to "policy_action".
+        intervention_key (NestedKey, optional): where the take-over flag is
+            saved, shaped like the action with a last dimension of 1.
+            Defaults to "intervention".
+        intervener_action_key (NestedKey, optional): where the intervener
+            writes its action, shaped like the policy's action. Defaults to
+            ("intervener", "action").
+        intervener_active_key (NestedKey, optional): where the intervener
+            writes its take-over flag, one value per action (for example one
+            per agent). Defaults to ("intervener", "active"). The
+            intervener's outputs stay in the tensordict during exploration
+            but are not among this module's ``out_keys``, since they are not
+            written in deterministic mode.
+        spec (TensorSpec, optional): if given, the intervener's action is
+            clipped to this spec. Defaults to None.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule, TensorDictSequential
+        >>> from torchrl.data import Bounded
+        >>> from torchrl.envs.utils import ExplorationType, set_exploration_type
+        >>> from torchrl.modules import InterventionModule
+        >>> actor = TensorDictModule(torch.nn.Linear(3, 2), in_keys=["observation"], out_keys=["action"])
+        >>> class Takeover(torch.nn.Module):
+        ...     def forward(self, observation):
+        ...         return torch.full((*observation.shape[:-1], 2), 5.0), observation[..., :1] > 0
+        >>> intervener = TensorDictModule(
+        ...     Takeover(), in_keys=["observation"], out_keys=[("intervener", "action"), ("intervener", "active")]
+        ... )
+        >>> policy = TensorDictSequential(actor, InterventionModule(intervener, spec=Bounded(-1.0, 1.0, shape=(2,))))
+        >>> td = TensorDict({"observation": torch.tensor([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])}, batch_size=[2])
+        >>> with set_exploration_type(ExplorationType.RANDOM):
+        ...     out = policy(td)
+        >>> out["intervention"].squeeze(-1).tolist()
+        [True, False]
+        >>> out["action"][0].tolist()
+        [1.0, 1.0]
+        >>> bool((out["action"][1] == out["policy_action"][1]).all())
+        True
+        >>> with set_exploration_type(ExplorationType.DETERMINISTIC):
+        ...     evaluated = policy(td.exclude("action", "intervention", "policy_action"))
+        >>> evaluated["intervention"].any().item()
+        False
+    """
+
+    def __init__(
+        self,
+        intervener: TensorDictModuleBase,
+        *,
+        action_key: NestedKey = "action",
+        policy_action_key: NestedKey = "policy_action",
+        intervention_key: NestedKey = "intervention",
+        intervener_action_key: NestedKey = ("intervener", "action"),
+        intervener_active_key: NestedKey = ("intervener", "active"),
+        spec: TensorSpec | None = None,
+    ) -> None:
+        super().__init__()
+        self.intervener = intervener
+        self.action_key = unravel_key(action_key)
+        self.policy_action_key = unravel_key(policy_action_key)
+        self.intervention_key = unravel_key(intervention_key)
+        self.intervener_action_key = unravel_key(intervener_action_key)
+        self.intervener_active_key = unravel_key(intervener_active_key)
+        if isinstance(spec, Composite):
+            spec = spec[self.action_key]
+        self.spec = spec
+        intervener_out = [unravel_key(key) for key in intervener.out_keys]
+        for key in (self.intervener_action_key, self.intervener_active_key):
+            if key not in intervener_out:
+                raise ValueError(
+                    f"The intervener must write {key!r}; its out_keys are "
+                    f"{intervener_out}."
+                )
+        in_keys = [self.action_key]
+        for key in intervener.in_keys:
+            key = unravel_key(key)
+            if key not in in_keys:
+                in_keys.append(key)
+        self.in_keys = in_keys
+        self.out_keys = [self.action_key, self.policy_action_key, self.intervention_key]
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        policy_action = tensordict.get(self.action_key)
+        action_batch_shape = policy_action.shape[:-1]
+        if exploration_type() not in (ExplorationType.RANDOM, None):
+            tensordict.set(self.policy_action_key, policy_action)
+            tensordict.set(
+                self.intervention_key,
+                torch.zeros(
+                    (*action_batch_shape, 1),
+                    dtype=torch.bool,
+                    device=policy_action.device,
+                ),
+            )
+            return tensordict
+        tensordict = self.intervener(tensordict)
+        active = tensordict.get(self.intervener_active_key)
+        active = active.to(torch.bool).reshape(action_batch_shape)
+        intervener_action = tensordict.get(self.intervener_action_key)
+        if self.spec is not None:
+            intervener_action = self.spec.project(intervener_action)
+        intervener_action = intervener_action.to(
+            device=policy_action.device, dtype=policy_action.dtype
+        )
+        action = torch.where(
+            expand_as_right(active, policy_action), intervener_action, policy_action
+        )
+        tensordict.set(self.policy_action_key, policy_action)
+        tensordict.set(self.action_key, action)
+        tensordict.set(self.intervention_key, active.unsqueeze(-1))
         return tensordict
 
 
