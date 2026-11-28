@@ -2335,6 +2335,19 @@ class TestTargetReturn(TransformBase):
         ):
             _ = rb.sample(2)
 
+    def test_nested_in_key_tuple_is_one_key(self):
+        transform = TargetReturn(1.0, in_keys=("agent", "reward"))
+        assert transform.in_keys == [("agent", "reward")]
+        assert len(transform.out_keys) == 1
+        assert transform.out_keys[0] == ("agent", "target_return")
+
+        transform = TargetReturn(1.0, in_keys=[("agent", "reward"), ("agent", "gift")])
+        with pytest.raises(
+            ValueError,
+            match="multiple rewards are located at the same level",
+        ):
+            transform.out_keys
+
 
 class TestExpandAs(TransformBase):
     @staticmethod
