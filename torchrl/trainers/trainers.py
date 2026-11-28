@@ -1223,7 +1223,9 @@ class Trainer:
         return self.collected_frames
 
     def _save_interval_elapsed(self) -> bool:
-        return (self.checkpoint_step - self._last_save) > self.save_trainer_interval
+        return (self.checkpoint_step - self._last_save) >= max(
+            self.save_trainer_interval, 1
+        )
 
     def _save_due(self, force_save: bool = False) -> bool:
         """Whether a destination is configured and a save is due now."""
@@ -2113,7 +2115,9 @@ class Trainer:
             self._log_dict[key].append(item)
 
             # Check if enough frames have passed since last logging for this key
-            if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
+            if (collected_frames - self._last_log.get(key, 0)) >= max(
+                self._log_interval, 1
+            ):
                 self._last_log[key] = collected_frames
                 _log = True
             else:

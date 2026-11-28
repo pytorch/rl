@@ -15,7 +15,7 @@ import sys
 import tempfile
 import warnings
 from argparse import Namespace
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from functools import partial
 from operator import attrgetter
@@ -93,6 +93,7 @@ from torchrl.trainers.algorithms.dqn import DQNTrainer
 from torchrl.trainers.algorithms.grpo import GRPOTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
+from torchrl.trainers.algorithms.on_policy import OnPolicyTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
@@ -651,11 +652,39 @@ def test_checkpoint_rotation_is_a_save_destination(tmp_path):
         checkpoint_rotation=rotation,
     )
     trainer.save_trainer_interval = 10
-    trainer.collected_frames = 11
+    trainer.collected_frames = 10
 
     trainer.save_trainer()
 
     assert rotation.latest() is not None
+
+
+def test_trainer_logs_at_interval_boundary():
+    logger = MagicMock()
+    trainer = mocking_trainer(logger=logger)
+    trainer._log_interval = 10
+    trainer.collected_frames = 10
+
+    trainer._log(metric=1.0)
+
+    logger.log_scalar.assert_called_once_with("metric", 1.0, step=10)
+
+
+def test_on_policy_logs_at_interval_boundary():
+    trainer = object.__new__(OnPolicyTrainer)
+    trainer._log_dict = defaultdict(list)
+    trainer._last_log = {}
+    trainer._log_interval = 10
+    trainer.collected_frames = 10
+    trainer.progress_bar = False
+    trainer._pbar_str = {}
+    trainer._training_logger = MagicMock()
+
+    trainer._log_standard({"reward": 1.0})
+
+    trainer._training_logger.log_metrics.assert_called_once_with(
+        {"reward": 1.0}, step=10
+    )
 
 
 def test_checkpoint_rotation_requires_checkpoint(tmp_path):

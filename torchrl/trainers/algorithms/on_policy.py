@@ -613,7 +613,7 @@ class OnPolicyTrainer(Trainer):
                 )
             if (
                 self.collected_frames - self._last_log.get(history_key, 0)
-                > self._log_interval
+                >= max(self._log_interval, 1)
             ):
                 self._last_log[history_key] = self.collected_frames
                 due[key] = value
