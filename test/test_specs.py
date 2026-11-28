@@ -1572,6 +1572,43 @@ class TestSpec:
         assert projected.shape == expected.shape
         assert (projected == expected).all()
 
+    def test_one_hot_masked_rejects_multi_hot(self):
+        # Index 1 is masked out.
+        mask = torch.tensor([True, False, True, True])
+        spec = OneHot(4, shape=(3, 4), mask=mask.expand(3, 4))
+        val = torch.tensor([[1, 1, 0, 0], [1, 0, 1, 0], [0, 0, 0, 1]], dtype=torch.bool)
+        assert not spec.is_in(val)
+        projected = spec.project(val)
+        assert spec.is_in(projected)
+        # Each row keeps one of its allowed entries; a valid row is unchanged.
+        assert projected[0].tolist() == [True, False, False, False]
+        assert projected[1, [1, 3]].tolist() == [False, False]
+        assert projected[2].tolist() == [False, False, False, True]
+
+        multi = MultiOneHot([2, 2], mask=mask)
+        assert not multi.is_in(torch.tensor([1, 1, 1, 0], dtype=torch.bool))
+        assert multi.is_in(torch.tensor([1, 0, 1, 0], dtype=torch.bool))
+
+    @pytest.mark.parametrize("dtype", [torch.bool, torch.int64])
+    def test_multi_one_hot_masked_project_mixed_invalid_groups(self, dtype):
+        # Per-row masks, with one group multi-hot and the other empty in each row.
+        mask = torch.tensor(
+            [[True, False, True, True, False], [False, True, False, True, True]]
+        )
+        spec = MultiOneHot([2, 3], shape=(2, 5), dtype=dtype, mask=mask)
+        value = torch.tensor([[1, 1, 0, 0, 0], [0, 0, 1, 1, 1]], dtype=dtype)
+        original = value.clone()
+        assert not spec.is_in(value)
+        projected = spec.project(value)
+        assert projected.dtype == dtype
+        assert projected.shape == value.shape
+        assert spec.is_in(projected)
+        assert (projected[..., :2].sum(-1) == 1).all()
+        assert (projected[..., 2:].sum(-1) == 1).all()
+        assert not projected[~mask].any()
+        assert projected[:, :2].tolist() == [[1, 0], [0, 1]]
+        torch.testing.assert_close(value, original)
+
     def test_bounded_rand(self):
         spec = Bounded(-3, 3, torch.Size((1,)))
         sample = torch.stack([spec.rand() for _ in range(100)])
