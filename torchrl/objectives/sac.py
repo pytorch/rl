@@ -312,6 +312,7 @@ class SACLoss(LossModule):
     _schedulable_buffers = frozenset(
         {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
     )
+    backup_entropy: bool = True
 
     actor_network: TensorDictModule
     qvalue_network: TensorDictModule
@@ -1179,6 +1180,7 @@ class DiscreteSACLoss(LossModule):
         {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
     )
     delay_actor: bool = False
+    backup_entropy: bool = True
     out_keys = [
         "loss_actor",
         "loss_qvalue",

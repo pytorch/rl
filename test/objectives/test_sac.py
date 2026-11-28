@@ -1120,6 +1120,24 @@ class TestSAC(LossModuleTestBase):
         else:
             torch.testing.assert_close(low, high)
 
+    def test_sac_backup_entropy_absent_from_older_objects(self, version):
+        """A loss saved before backup_entropy existed still keeps the entropy term."""
+        td = self._create_mock_data_sac()
+        torch.manual_seed(self.seed)
+        loss_fn = SACLoss(
+            actor_network=self._create_mock_actor(),
+            qvalue_network=self._create_mock_qvalue(),
+            value_network=self._create_mock_value() if version == 1 else None,
+            num_qvalue_nets=2,
+            loss_function="l2",
+        )
+        key = "loss_value" if version == 1 else "loss_qvalue"
+        torch.manual_seed(0)
+        expected = loss_fn(td.clone())[key]
+        del loss_fn.backup_entropy
+        torch.manual_seed(0)
+        torch.testing.assert_close(loss_fn(td.clone())[key], expected)
+
     @pytest.mark.parametrize("action_key", ["action", "action2"])
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
@@ -1735,6 +1753,22 @@ class TestDiscreteSAC(LossModuleTestBase):
             assert not torch.allclose(low, high)
         else:
             torch.testing.assert_close(low, high)
+
+    def test_discrete_sac_backup_entropy_absent_from_older_objects(self):
+        """A loss saved before backup_entropy existed still keeps the entropy term."""
+        td = self._create_mock_data_sac()
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor()
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=self._create_mock_qvalue(),
+            num_actions=actor.spec["action"].space.n,
+            action_space="one-hot",
+            loss_function="l2",
+        )
+        expected = loss_fn(td.clone())["loss_qvalue"]
+        del loss_fn.backup_entropy
+        torch.testing.assert_close(loss_fn(td.clone())["loss_qvalue"], expected)
 
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
