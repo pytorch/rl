@@ -586,11 +586,25 @@ class A2CLoss(LossModule):
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         update_norm = advantage is None
         if advantage is None:
-            self.value_estimator(
-                tensordict,
-                params=self._cached_detach_critic_network_params,
-                target_params=self.target_critic_network_params,
-            )
+            if (
+                self.functional
+                and self.value_estimator.shifted
+                and not self.value_estimator.is_stateless
+                and self.value_estimator.value_network is self.critic_network
+            ):
+                # A2C uses the current critic at both times. Bind its detached
+                # parameters once instead of passing distinct parameter views
+                # to the shifted estimator's single value-network call.
+                with self._cached_detach_critic_network_params.to_module(
+                    self.critic_network, preserve_module_state=False
+                ):
+                    self.value_estimator(tensordict)
+            else:
+                self.value_estimator(
+                    tensordict,
+                    params=self._cached_detach_critic_network_params,
+                    target_params=self.target_critic_network_params,
+                )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.advantage_norm is not None:
             advantage = self._scale_advantage(advantage, tensordict, update=update_norm)
