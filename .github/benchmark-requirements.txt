@@ -104,7 +104,7 @@ rich==15.0.0
 rpds-py==0.30.0
 safetensors==0.8.0
 scipy==1.15.3
-setuptools==83.0.0
+setuptools==84.1.0
 setuptools-scm==10.2.0
 shellingham==1.5.4
 six==1.17.0
