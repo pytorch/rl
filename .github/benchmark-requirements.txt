@@ -123,7 +123,7 @@ triton==3.8.0+gitc01b6774
 typer==0.26.8
 typing-extensions==4.16.0
 tzdata==2026.3
-urllib3==2.7.0
+urllib3==2.8.0
 vcs-versioning==2.2.2
 wrapt==2.2.2
 zipp==4.1.0
