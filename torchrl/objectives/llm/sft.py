@@ -73,6 +73,18 @@ def minor_sft_loss(
     raise ValueError(f"Invalid reduction: {reduction}")
 
 
+def _check_log_prob_shapes(
+    cur_log_probs: list[torch.Tensor],
+    ref_log_probs: list[torch.Tensor],
+) -> None:
+    """Check current and reference log-prob shapes match."""
+    for cur, ref in zip(cur_log_probs, ref_log_probs, strict=True):
+        if cur.shape != ref.shape:
+            raise ValueError(
+                f"Current log probabilities and reference log probabilities have different shapes: {cur.shape=} vs {ref.shape=}."
+            )
+
+
 class SFTLossOutput(TensorClass["nocast"]):
     """SFT Loss Output.
 
@@ -112,8 +124,8 @@ class SFTLoss(LossModule):
             This can be used to override arguments such as the `chat_template` or `chat_template_name`.
         reduction (Literal["mean", "sum", "none"], optional): the reduction to apply to the loss. Defaults to `"mean"`.
         normalize_by_seq_length (bool, optional): whether to normalize the loss by the sequence length. Defaults to `True`.
-        kl_to_ref_coeff (float | None, optional): coefficient for KL divergence to reference model. Defaults to `None`.
-        loss_function (Literal["sft", "minor_sft"], optional): The loss function to use. Defaults to `"sft"`.
+        kl_to_ref_coeff (float | None, optional): coefficient for KL divergence to reference model. The KL is the k3 estimate restricted to the assistant tokens, averaged over the valid assistant tokens of the batch: prompt and padding values of the full-length reference log-probabilities do not contribute. Defaults to `None`.
+        loss_function (Literal["sft", "minor_sft"], optional): The loss function to use. Both variants apply the same assistant/attention mask to the current and the reference log-probabilities. Defaults to `"sft"`.
         beta (float, optional): The beta parameter for MinorSFT loss. This is only used when `loss_function` is `"minor_sft"`.
             Higher values of beta make the loss more aggressive (pushes the model to generate responses further from the reference model):
 
@@ -132,6 +144,12 @@ class SFTLoss(LossModule):
             - ``("next", "ref_log_probs")`` (optional): Reference model log probabilities, required if kl_to_ref_coeff is set
 
         These keys can be customized using the ``set_keys()`` method.
+
+        Reference log probabilities are full-length: they cover the prompt,
+        padding and response tokens. The assistant mask (combined with the
+        attention mask) selects the tokens that contribute, so excluded prompt
+        and padding values are ignored by the SFT and MinorSFT reference terms
+        and by the KL divergence.
 
     .. seealso:: :class:`~torchrl.envs.llm.transforms.RetrieveLogProb` for the KL divergence computation.
 
@@ -314,27 +332,32 @@ class SFTLoss(LossModule):
         self,
         cur_log_prob: list[torch.Tensor],
         ref_log_prob: list[torch.Tensor],
+        assistant_masks: list[torch.Tensor],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute KL divergence to reference model.
+        """Compute KL divergence to reference model on the assistant tokens.
+
+        Both the current and the reference log-probabilities are restricted to
+        the assistant tokens before the k3 estimate is computed. The mean is
+        therefore taken over the valid assistant tokens only: prompt and padding
+        values of the full-length reference log-probabilities are ignored.
 
         Args:
-            cur_log_prob (List[torch.Tensor]): Log probabilities from current model. Must have shape [T] where T is the number of tokens in the assistant response.
-            ref_log_prob (List[torch.Tensor]): Log probabilities from reference model. Must have shape [T] where T is the number of tokens in the assistant response.
+            cur_log_prob (List[torch.Tensor]): Log probabilities from current model. Must have shape [T] where T is the number of tokens in the sequence.
+            ref_log_prob (List[torch.Tensor]): Full-length log probabilities from reference model. Each tensor must have the same shape as the matching current log probabilities.
+            assistant_masks (List[torch.Tensor]): Boolean masks of the assistant tokens, with the same shape as the log probabilities.
 
         Returns:
             tuple[torch.Tensor, torch.Tensor]: (KL loss term, KL penalty for logging)
         """
-        # Apply mask
-        ref_log_prob = torch.cat(ref_log_prob)
-        cur_log_prob = torch.cat(cur_log_prob)
-        # ref_log_prob = ref_log_prob[mask]
-        # cur_log_prob = cur_log_prob[mask].squeeze()
-        if cur_log_prob.shape != ref_log_prob.shape:
-            raise ValueError(
-                f"Current log probabilities and reference log probabilities have different shapes: {cur_log_prob.shape=} vs {ref_log_prob.shape=}."
-            )
+        _check_log_prob_shapes(cur_log_prob, ref_log_prob)
+        cur_tokens = torch.cat(
+            [lp[mask] for lp, mask in zip(cur_log_prob, assistant_masks, strict=True)]
+        )
+        ref_tokens = torch.cat(
+            [lp[mask] for lp, mask in zip(ref_log_prob, assistant_masks, strict=True)]
+        )
         # Compute KL using same approximation as GRPO
-        diff = ref_log_prob - cur_log_prob
+        diff = ref_tokens - cur_tokens
 
         kl_penalty = (diff.expm1() - diff).mean()
         return self.kl_to_ref_coeff * kl_penalty, kl_penalty
@@ -437,14 +460,10 @@ class SFTLoss(LossModule):
                         f"Existing keys in tensordict: {set(tensordict.keys(include_nested=True, leaves_only=True))}"
                     )
 
-                log_probs_masked = [
-                    lp.masked_fill(~mask, 0.0)
-                    for lp, mask in zip(log_probs, assistant_masks, strict=True)
-                ]
-
                 loss_kl, kl_penalty = self._kl_to_ref(
-                    log_probs_masked,
+                    log_probs,
                     ref_log_probs,
+                    assistant_masks,
                 )
                 output = SFTLossOutput(
                     loss_sft=loss,
@@ -460,10 +479,15 @@ class SFTLoss(LossModule):
                     f"Reference log probs not found at {self.tensor_keys.ref_log_prob=} in tensordict with keys {tensordict.keys(True, True)} but loss_function is 'minor_sft'"
                 )
 
-            # we need to re-sum ref_log_probs as they are not summed per-sequence
-            summed_ref_log_probs = torch.stack([lp.sum() for lp in ref_log_probs]).to(
-                summed_log_probs.device
-            )
+            # The reference log probs are full-length: keep only the assistant
+            # tokens so prompt and padding values do not enter the sum.
+            _check_log_prob_shapes(log_probs, ref_log_probs)
+            summed_ref_log_probs = torch.stack(
+                [
+                    ref[mask].sum()
+                    for ref, mask in zip(ref_log_probs, assistant_masks, strict=True)
+                ]
+            ).to(summed_log_probs.device)
             if self.normalize_by_seq_length:
                 summed_ref_log_probs = summed_ref_log_probs / seq_lengths.clamp(min=1)
             loss = minor_sft_loss(
@@ -471,13 +495,10 @@ class SFTLoss(LossModule):
             )
             if self.kl_to_ref_coeff is not None:
                 with torch.no_grad():
-                    log_probs_masked = [
-                        lp.masked_fill(~mask, 0.0)
-                        for lp, mask in zip(log_probs, assistant_masks, strict=True)
-                    ]
                     loss_kl, kl_penalty = self._kl_to_ref(
-                        log_probs_masked,
+                        log_probs,
                         ref_log_probs,
+                        assistant_masks,
                     )
                 output = SFTLossOutput(
                     loss_sft=loss,
