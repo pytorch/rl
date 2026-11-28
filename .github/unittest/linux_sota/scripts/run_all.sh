@@ -109,6 +109,9 @@ uv pip install \
 # Install gymnasium with atari and mujoco support
 uv pip install "gymnasium[atari,mujoco]>=1.1.0"
 
+uv pip uninstall opencv-python
+uv pip install opencv-python-headless
+
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
 
