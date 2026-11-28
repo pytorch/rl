@@ -212,7 +212,9 @@ preserve when extending. The natural mapping is:
   collector itself produces ``[num_envs, frames_per_env]`` batches (e.g.
   :class:`~torchrl.envs.ParallelEnv` rollouts), because that lets the
   :class:`~torchrl.data.replay_buffers.SliceSampler` infer one trajectory per row without
-  scanning ``done`` keys.
+  scanning ``done`` keys. Do **not** ``reshape(-1)`` those batches before
+  ``extend``: flattening destroys the time dimension (and, when ``T=1``,
+  interleaves environments) so the sampler only sees length-1 trajectories.
 * ``ndim=3`` and beyond — when both an outer worker dim and an env dim
   exist, e.g. ``Collector(lambda: ParallelEnv(2, ...),
   num_collectors=4, sync=True, ...)``.
