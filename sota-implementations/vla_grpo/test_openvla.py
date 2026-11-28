@@ -1005,6 +1005,7 @@ class TestLiberoWorkers:
             policy=SimpleNamespace(use_wrist_image=False),
         )
         monkeypatch.setattr(utils, "LiberoEnv", _fake_libero_env)
+        monkeypatch.setattr(utils, "_robosuite_egl_device_count", lambda: None)
 
         utils._make_libero_worker(cfg, 7, group_repeats=8)
 
