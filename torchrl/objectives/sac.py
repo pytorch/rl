@@ -133,6 +133,10 @@ class SACLoss(LossModule):
             not be true in MARL settings or when using RNNs. Defaults to ``False``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        backup_entropy (bool, optional): whether the critic's target includes
+            the entropy bonus. Set to ``False`` to use only the smallest
+            next-state Q value, as the SERL and HIL-SERL code does. The actor
+            and temperature losses are unchanged. Defaults to ``True``.
 
     Examples:
         >>> import torch
@@ -308,6 +312,7 @@ class SACLoss(LossModule):
     _schedulable_buffers = frozenset(
         {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
     )
+    backup_entropy: bool = True
 
     actor_network: TensorDictModule
     qvalue_network: TensorDictModule
@@ -344,6 +349,7 @@ class SACLoss(LossModule):
         deactivate_vmap: bool = False,
         use_prioritized_weights: str | bool = "auto",
         scalar_output_mode: str | None = None,
+        backup_entropy: bool = True,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -447,6 +453,7 @@ class SACLoss(LossModule):
         self._make_vmap()
         self.reduction = reduction
         self.skip_done_states = skip_done_states
+        self.backup_entropy = backup_entropy
 
         # Handle scalar_output_mode for reduction="none"
         if reduction == "none" and scalar_output_mode is None:
@@ -893,7 +900,12 @@ class SACLoss(LossModule):
                 != next_sample_log_prob.shape
             ):
                 next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
-            next_state_value = state_action_value - self._alpha * next_sample_log_prob
+            if self.backup_entropy:
+                next_state_value = (
+                    state_action_value - self._alpha * next_sample_log_prob
+                )
+            else:
+                next_state_value = state_action_value
             next_state_value = next_state_value.min(0)[0]
             tensordict.set(
                 ("next", self.value_estimator.tensor_keys.value), next_state_value
@@ -957,7 +969,7 @@ class SACLoss(LossModule):
             raise RuntimeError(
                 f"Losses shape mismatch: {min_qval.shape} and {log_p.shape}"
             )
-        target_val = min_qval - self._alpha * log_p
+        target_val = min_qval - self._alpha * log_p if self.backup_entropy else min_qval
 
         loss_value = distance_loss(
             pred_val, target_val, loss_function=self.loss_function
@@ -1023,6 +1035,10 @@ class DiscreteSACLoss(LossModule):
             not be true in MARL settings or when using RNNs. Defaults to ``False``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        backup_entropy (bool, optional): whether the critic's target includes
+            the entropy bonus. Set to ``False`` to use only the expected
+            smallest next-state Q value. The actor and temperature losses are
+            unchanged. Defaults to ``True``.
 
     Examples:
         >>> import torch
@@ -1164,6 +1180,7 @@ class DiscreteSACLoss(LossModule):
         {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
     )
     delay_actor: bool = False
+    backup_entropy: bool = True
     out_keys = [
         "loss_actor",
         "loss_qvalue",
@@ -1205,6 +1222,7 @@ class DiscreteSACLoss(LossModule):
         deactivate_vmap: bool = False,
         use_prioritized_weights: str | bool = "auto",
         scalar_output_mode: str | None = None,
+        backup_entropy: bool = True,
     ):
         if reduction is None:
             reduction = "mean"
@@ -1290,6 +1308,7 @@ class DiscreteSACLoss(LossModule):
         self._make_vmap()
         self.reduction = reduction
         self.skip_done_states = skip_done_states
+        self.backup_entropy = backup_entropy
 
         # Handle scalar_output_mode for reduction="none"
         if reduction == "none" and scalar_output_mode is None:
@@ -1441,9 +1460,9 @@ class DiscreteSACLoss(LossModule):
                 )
 
                 # like in continuous SAC, we take the minimum of the value ensemble and subtract the entropy term
-                next_state_value = (
-                    next_action_value.min(0)[0] - self._alpha * next_log_prob
-                )
+                next_state_value = next_action_value.min(0)[0]
+                if self.backup_entropy:
+                    next_state_value = next_state_value - self._alpha * next_log_prob
                 # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
                 next_state_value = (next_prob * next_state_value).sum(-1).unsqueeze(-1)
                 if next_tensordict_select is not next_tensordict:
@@ -1468,9 +1487,9 @@ class DiscreteSACLoss(LossModule):
                     self.tensor_keys.action_value
                 )
                 # like in continuous SAC, we take the minimum of the value ensemble and subtract the entropy term
-                next_state_value = (
-                    next_action_value.min(0)[0] - self._alpha * next_log_prob
-                )
+                next_state_value = next_action_value.min(0)[0]
+                if self.backup_entropy:
+                    next_state_value = next_state_value - self._alpha * next_log_prob
                 # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
                 next_state_value = (next_prob * next_state_value).sum(-1).unsqueeze(-1)
 
