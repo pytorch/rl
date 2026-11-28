@@ -2572,7 +2572,13 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                     self._prefetch_queue.append(fut)
 
         index = result[1]["index"]
-        if isinstance(index, tuple):
+        buffer_ids = None
+        if is_tensor_collection(index):
+            buffer_ids = index.get("buffer_ids", None)
+            index = index.get("index")
+        if buffer_ids is not None:
+            sampled_items = buffer_ids.numel()
+        elif isinstance(index, tuple):
             sampled_items = torch.as_tensor(index[0]).numel()
         else:
             index = torch.as_tensor(index)

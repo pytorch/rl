@@ -145,6 +145,7 @@ def _make_sampler_ensemble(
     p: Any = None,
     sample_from_all: bool = False,
     num_buffer_sampled: int | None = None,
+    fractions: Any = None,
 ) -> SamplerEnsemble:
     """Pass Hydra's sampler list as positional arguments to SamplerEnsemble."""
     return SamplerEnsemble(
@@ -152,6 +153,7 @@ def _make_sampler_ensemble(
         p=p,
         sample_from_all=sample_from_all,
         num_buffer_sampled=num_buffer_sampled,
+        fractions=list(fractions) if fractions is not None else None,
     )
 
 
@@ -164,6 +166,7 @@ class SamplerEnsembleConfig(SamplerConfig):
     p: Any = None
     sample_from_all: bool = False
     num_buffer_sampled: int | None = None
+    fractions: Any = None
 
 
 @dataclass
