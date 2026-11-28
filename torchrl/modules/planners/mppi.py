@@ -52,7 +52,7 @@ class MPPIPlanner(MPCPlannerBase):
         reward_key (NestedKey, optional): The key in the TensorDict to use to
             retrieve the reward. Defaults to ``("next", "reward")``.
         action_key (NestedKey, optional): The key in the TensorDict to use to store
-            the action. Defaults to ``"action"``.
+            the action. Defaults to ``env.action_key``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -149,7 +149,7 @@ class MPPIPlanner(MPCPlannerBase):
         num_candidates: int,
         top_k: int,
         reward_key: NestedKey = ("next", "reward"),
-        action_key: NestedKey = "action",
+        action_key: NestedKey | None = None,
     ):
         super().__init__(env=env, action_key=action_key)
         self.advantage_module = advantage_module
@@ -195,7 +195,7 @@ class MPPIPlanner(MPCPlannerBase):
         _action_means = torch.zeros(
             *action_stats_shape,
             device=tensordict.device,
-            dtype=self.env.action_spec.dtype,
+            dtype=self.action_spec.dtype,
         )
         _action_stds = torch.ones_like(_action_means)
         container = TensorDict(
@@ -220,9 +220,11 @@ class MPPIPlanner(MPCPlannerBase):
                 device=actions_means.device,
                 dtype=actions_means.dtype,
             )
-            actions = self.env.action_spec.project(actions)
+            actions = self.action_spec.project(actions)
             optim_tensordict = container.get("tensordict").clone()
-            policy = _PrecomputedActionsSequentialSetter(actions)
+            policy = _PrecomputedActionsSequentialSetter(
+                actions, action_key=self._env_action_key
+            )
             # Full horizon for every candidate; post-done rewards are masked below.
             optim_tensordict = self.env.rollout(
                 max_steps=self.planning_horizon,
@@ -269,14 +271,15 @@ class MPPIPlanner(MPCPlannerBase):
 
 
 class _PrecomputedActionsSequentialSetter:
-    def __init__(self, actions):
+    def __init__(self, actions, action_key: NestedKey = "action"):
         self.actions = actions
+        self.action_key = action_key
         self.cmpt = 0
 
     def __call__(self, tensordict):
         # checks that the step count is lower or equal to the horizon
         if self.cmpt >= self.actions.shape[-2]:
             raise ValueError("Precomputed actions sequence is too short")
-        tensordict = tensordict.set("action", self.actions[..., self.cmpt, :])
+        tensordict = tensordict.set(self.action_key, self.actions[..., self.cmpt, :])
         self.cmpt += 1
         return tensordict

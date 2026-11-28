@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase
 from torch import nn
 from torchrl.data import Categorical, Composite, Unbounded
 from torchrl.envs import EnvBase, ExplorationType, set_exploration_type
@@ -39,7 +39,8 @@ class _TwoSequenceEnv(EnvBase):
     (flags only under ``agent``), ``"both"``, or ``"nested_parent"``
     (the ``"both"`` layout nested under ``team``). With ``"both"`` or
     ``"nested_parent"``, the parent ``done`` stays false so a finished
-    nested agent does not end the env.
+    nested agent does not end the env. The action is read from
+    ``action_key``.
     """
 
     @classmethod
@@ -52,13 +53,16 @@ class _TwoSequenceEnv(EnvBase):
         *,
         terminate_on_done: bool = True,
         done_layout: Literal["root", "nested", "both", "nested_parent"] = "root",
+        action_key: NestedKey = "action",
     ):
         super().__init__(device=device)
         self.observation_spec = Composite(
             observation=Unbounded((1,), device=device),
             device=device,
         )
-        self.action_spec = Unbounded((1,), device=device)
+        self.full_action_spec = Composite(
+            {action_key: Unbounded((1,), device=device)}, device=device
+        )
         self.reward_spec = Unbounded((1,), device=device)
         self.terminate_on_done = terminate_on_done
         self.done_layout = done_layout
@@ -120,7 +124,7 @@ class _TwoSequenceEnv(EnvBase):
         )
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get("action")
+        action = tensordict.get(self.action_key)
         device = action.device
         die = action[..., :1] < 0
         reward = torch.where(
@@ -231,7 +235,7 @@ def _assert_planner_selects(env, planner_name, device, expected_action):
     td = env.reset()
     with _fixed_planner_candidates(planner_name, die_seq, live_seq, die_seq, live_seq):
         out = planner(td)
-    torch.testing.assert_close(out.get("action"), expected_action)
+    torch.testing.assert_close(out.get(env.action_key), expected_action)
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -325,6 +329,40 @@ class TestPlannerDoneMask:
             else _steady_live_sequence(device)[0]
         )
         _assert_planner_selects(env, planner_name, device, expected)
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+class TestPlannerActionKey:
+    @pytest.mark.parametrize("planner_name", ["cem", "mppi"])
+    @pytest.mark.parametrize("action_key", ["action", "force", ("agent", "action")])
+    def test_planner_uses_env_action_key(self, device, planner_name, action_key):
+        # For any key other than "action", env.action_spec is the whole
+        # Composite, so the planner must read the leaf spec, write the
+        # candidates through the env action key and, by default, output the
+        # action under that key too.
+        env = _TwoSequenceEnv(device=device, action_key=action_key)
+        expected = _steady_live_sequence(device)[0]
+        _assert_planner_selects(env, planner_name, device, expected)
+
+    @pytest.mark.parametrize("planner_name", ["cem", "mppi"])
+    @pytest.mark.parametrize("action_key", ["action", "force", ("agent", "action")])
+    def test_planner_as_rollout_policy(self, device, planner_name, action_key):
+        # With the default action_key the planner output is the action the
+        # env steps with, so every step takes the live sequence and earns
+        # LIVE_REWARD.
+        env = _TwoSequenceEnv(device=device, action_key=action_key)
+        planner = _make_planner(planner_name, env)
+        die_seq = _die_then_jackpot_sequence(device)
+        live_seq = _steady_live_sequence(device)
+        with _fixed_planner_candidates(
+            planner_name, die_seq, live_seq, die_seq, live_seq
+        ):
+            rollout = env.rollout(2, planner)
+        expected = torch.full(
+            (2, 1), LIVE_REWARD, device=device, dtype=torch.get_default_dtype()
+        )
+        torch.testing.assert_close(rollout.get(action_key), expected)
+        torch.testing.assert_close(rollout.get(("next", "reward")), expected)
 
 
 TDMPC2_OBSERVATION_DIM = 5
