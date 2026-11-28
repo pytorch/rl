@@ -128,7 +128,8 @@ class SACLoss(LossModule):
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         skip_done_states (bool, optional): whether the actor network used for value computation should only be run on
-            valid, non-terminating next states. If ``True``, it is assumed that the done state can be broadcast to the
+            valid, non-terminating next states. Masking uses the ``terminated`` key, so truncated (done but not
+            terminated) next states are still bootstrapped. If ``True``, it is assumed that the done state can be broadcast to the
             shape of the data and that masking the data results in a valid data structure. Among other things, this may
             not be true in MARL settings or when using RNNs. Defaults to ``False``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
@@ -845,8 +846,13 @@ class SACLoss(LossModule):
             ):
                 next_tensordict = tensordict.get("next").copy()
                 if self.skip_done_states:
-                    # Check done state and avoid passing these to the actor
-                    done = next_tensordict.get(self.tensor_keys.done)
+                    # Avoid passing terminal states to the actor. Truncated
+                    # (done but not terminated) states must still be
+                    # bootstrapped, so mask on the terminated key.
+                    done = next_tensordict.get(
+                        self.tensor_keys.terminated,
+                        default=next_tensordict.get(self.tensor_keys.done),
+                    )
                     if done is not None and done.any():
                         next_tensordict_select = next_tensordict[~done.squeeze(-1)]
                     else:
@@ -1018,7 +1024,8 @@ class DiscreteSACLoss(LossModule):
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         skip_done_states (bool, optional): whether the actor network used for value computation should only be run on
-            valid, non-terminating next states. If ``True``, it is assumed that the done state can be broadcast to the
+            valid, non-terminating next states. Masking uses the ``terminated`` key, so truncated (done but not
+            terminated) next states are still bootstrapped. If ``True``, it is assumed that the done state can be broadcast to the
             shape of the data and that masking the data results in a valid data structure. Among other things, this may
             not be true in MARL settings or when using RNNs. Defaults to ``False``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
@@ -1418,7 +1425,12 @@ class DiscreteSACLoss(LossModule):
             next_tensordict = tensordict.get("next").clone(False)
 
             if self.skip_done_states:
-                done = next_tensordict.get(self.tensor_keys.done)
+                # Only terminal states can be skipped: truncated states must
+                # still be bootstrapped.
+                done = next_tensordict.get(
+                    self.tensor_keys.terminated,
+                    default=next_tensordict.get(self.tensor_keys.done),
+                )
                 if done is not None and done.any():
                     next_tensordict_select = next_tensordict[~done.squeeze(-1)]
                 else:

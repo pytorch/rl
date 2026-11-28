@@ -1247,6 +1247,26 @@ class TestSAC(LossModuleTestBase):
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
         assert loss(td).isfinite().all()
 
+    def test_sac_skip_done_states_bootstraps_truncated(self, version):
+        # Truncated (done but not terminated) next states must be bootstrapped
+        # through the actor, even when skip_done_states=True.
+        if version == 1:
+            pytest.skip("skip_done_states only affects the v2 target.")
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+        td["next", "done"].fill_(True)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        loss = SACLoss(actor_network=actor, qvalue_network=qvalue)
+        torch.manual_seed(0)
+        with torch.no_grad():
+            expected = loss._compute_target_v2(td.clone())
+        loss.skip_done_states = True
+        torch.manual_seed(0)
+        with torch.no_grad():
+            target = loss._compute_target_v2(td.clone())
+        torch.testing.assert_close(target, expected)
+
     def test_state_dict(self, version):
         if version == 1:
             pytest.skip("Test not implemented for version 1.")
@@ -2263,11 +2283,41 @@ class TestDiscreteSAC(LossModuleTestBase):
             observation_key: td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": done,
-            f"next_{terminated_key}": td.get(("next", terminated_key)),
+            f"next_{terminated_key}": done.clone(),
             f"next_{observation_key}": obs_none,
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
         assert loss(td).isfinite().all()
+
+    def test_discrete_sac_skip_done_states_bootstraps_truncated(self):
+        # Truncated (done but not terminated) next states must be bootstrapped,
+        # even when skip_done_states=True.
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+        done = td["next", "done"]
+        done[::2] = True
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        loss = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            action_space="one-hot",
+        )
+        with torch.no_grad():
+            expected = loss._compute_target(td.clone())
+            loss.skip_done_states = True
+            target = loss._compute_target(td.clone())
+        torch.testing.assert_close(target, expected)
+        # terminal states are still skipped
+        td["next", "terminated"].copy_(done)
+        td["next", "observation"][done.squeeze(-1)] = float("nan")
+        with torch.no_grad():
+            target = loss._compute_target(td)
+        assert target.isfinite().all()
+        torch.testing.assert_close(
+            target[done.squeeze(-1)], td["next", "reward"][done].view(-1)
+        )
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_discrete_sac_reduction(self, reduction):
