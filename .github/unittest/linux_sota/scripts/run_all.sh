@@ -95,6 +95,8 @@ uv pip install \
   "imageio==2.26.0" \
   dm_control \
   "mujoco<3.3.6" \
+  robosuite \
+  h5py \
   mlflow \
   av \
   coverage \
@@ -106,6 +108,9 @@ uv pip install \
 
 # Install gymnasium with atari and mujoco support
 uv pip install "gymnasium[atari,mujoco]>=1.1.0"
+
+uv pip uninstall opencv-python
+uv pip install opencv-python-headless
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #

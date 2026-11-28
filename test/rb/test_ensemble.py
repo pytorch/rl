@@ -46,6 +46,7 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StalenessAwareSampler,
     StreamingSliceSampler,
 )
 from torchrl.data.replay_buffers.storages import (
@@ -522,6 +523,546 @@ class TestEnsemble:
         rb = ReplayBufferEnsemble(*members)
         with pytest.raises(RuntimeError, match="writes are disabled"):
             rb.extend(TensorDict({"value": torch.arange(2)}, [2]))
+
+    @staticmethod
+    def _routed_values(values, route):
+        return TensorDict(
+            {"value": torch.as_tensor(values), "route": torch.as_tensor(route)},
+            [len(values)],
+        )
+
+    def _make_demo_online(self, demo_size=4, online_size=4, **kwargs):
+        demo = self._make_routed_member(
+            8, sampler=PrioritizedSampler(8, alpha=1.0, beta=0.5, eps=1e-8)
+        )
+        online = self._make_routed_member(8)
+        rb = ReplayBufferEnsemble(demo, online, routing_key="route", **kwargs)
+        rb.extend(
+            self._routed_values(
+                torch.arange(demo_size + online_size),
+                [0] * demo_size + [1] * online_size,
+            )
+        )
+        return demo, online, rb
+
+    def test_mixed_member_samplers_fill_neutral_priority_weight(self):
+        demo, online, rb = self._make_demo_online(sample_from_all=True, batch_size=64)
+        demo.update_priority(torch.arange(4), torch.tensor([1.0, 100.0, 100.0, 100.0]))
+
+        sample = rb.sample()
+
+        from_demo = sample["index", "buffer_ids"] == 0
+        weight = sample["priority_weight"]
+        local_index = sample["index", "index"]
+        assert from_demo.any() and (~from_demo).any()
+        assert (weight[~from_demo] == 1).all()
+        expected = torch.where(local_index[from_demo] == 0, 1.0, 0.1)
+        torch.testing.assert_close(weight[from_demo], expected, atol=1e-4, rtol=0)
+
+    def test_mixed_member_samplers_reject_other_missing_info(self):
+        stale = self._make_routed_member(8, sampler=StalenessAwareSampler())
+        plain = self._make_routed_member(8)
+        rb = ReplayBufferEnsemble(
+            stale, plain, routing_key="route", sample_from_all=True, batch_size=4
+        )
+        data = self._routed_values(torch.arange(4), [0, 0, 1, 1])
+        data.set("policy_version", torch.zeros(4, dtype=torch.long))
+        rb.extend(data)
+
+        with pytest.raises(KeyError, match=r"staleness.*member\(s\) \[1\]"):
+            rb.sample()
+
+    def test_mixed_member_index_layouts_raise(self):
+        sliced = self._make_routed_member(8, sampler=SliceSampler(slice_len=2))
+        plain = self._make_routed_member(8)
+        rb = ReplayBufferEnsemble(
+            sliced, plain, routing_key="route", sample_from_all=True, batch_size=4
+        )
+        data = self._routed_values(torch.arange(8), [0, 0, 0, 0, 1, 1, 1, 1])
+        data.set("episode", torch.zeros(8, dtype=torch.long))
+        rb.extend(data)
+
+        with pytest.raises(ValueError, match="index layouts"):
+            rb.sample()
+
+    def test_update_tensordict_priority_routes_to_members(self):
+        demo, online, rb = self._make_demo_online(sample_from_all=True, batch_size=16)
+        sample = rb.sample()
+        local_index = sample["index", "index"]
+        from_demo = sample["index", "buffer_ids"] == 0
+        target = local_index[from_demo][0]
+        hit = from_demo & (local_index == target)
+        sample.set("td_error", torch.where(hit, 1e4, 1e-4))
+
+        rb.update_tensordict_priority(sample)
+
+        demo_index = demo.sample(256, return_info=True)[1]["index"]
+        assert (demo_index == target).float().mean() > 0.95
+
+    def test_update_priority_takes_routed_index(self):
+        demo, online, rb = self._make_demo_online()
+        index = TensorDict(
+            {"buffer_ids": torch.tensor([0, 1]), "index": torch.tensor([3, 0])}, [2]
+        )
+
+        rb.update_priority(index, torch.tensor([1e4, 1e4]))
+
+        demo_index = demo.sample(256, return_info=True)[1]["index"]
+        assert (demo_index == 3).float().mean() > 0.95
+
+    def test_update_priority_plain_index_keeps_previous_behavior(self):
+        demo, online, rb = self._make_demo_online()
+        before = demo.sampler.state_dict()
+
+        with pytest.warns(UserWarning, match="update_priority"):
+            rb.update_priority(torch.tensor([0, 1]), torch.tensor([1e4, 1e4]))
+
+        after = demo.sampler.state_dict()
+        assert all(
+            torch.equal(before[key], after[key])
+            for key in before
+            if isinstance(before[key], torch.Tensor)
+        )
+
+    def test_fractions_exact_quotas_flat_output(self):
+        demo, online, rb = self._make_demo_online(fractions=[0.25, 0.75], batch_size=8)
+
+        for _ in range(5):
+            sample = rb.sample()
+            assert sample.batch_size == (8,)
+            assert sample["index", "buffer_ids"].tolist() == [0, 0, 1, 1, 1, 1, 1, 1]
+            stored = torch.where(
+                sample["index", "buffer_ids"] == 0,
+                sample["index", "index"],
+                sample["index", "index"] + 4,
+            )
+            assert sample["value"].tolist() == stored.tolist()
+            assert (sample["priority_weight"][2:] == 1).all()
+
+    @pytest.mark.parametrize(
+        "fractions,batch_size,expected",
+        [
+            ([0.5, 0.5], 3, [2, 1]),
+            ([0.3, 0.7], 256, [77, 179]),
+            ([1.0, 0.0], 5, [5, 0]),
+        ],
+    )
+    def test_fractions_largest_remainder_counts(self, fractions, batch_size, expected):
+        demo, online, rb = self._make_demo_online(fractions=fractions)
+
+        sample = rb.sample(batch_size)
+
+        counts = torch.bincount(sample["index", "buffer_ids"], minlength=2)
+        assert counts.tolist() == expected
+
+    def test_fractions_empty_member_blocks_sampling(self):
+        demo, online, rb = self._make_demo_online(
+            online_size=0, fractions=[0.5, 0.5], batch_size=4
+        )
+
+        assert not rb.can_sample(4)
+        with pytest.raises(RuntimeError, match=r"member\(s\) \[1\]"):
+            rb.sample()
+        rb.fractions = [1.0, 0.0]
+        assert rb.can_sample(4)
+        assert rb.sample()["index", "buffer_ids"].tolist() == [0, 0, 0, 0]
+
+    def test_fractions_member_subset_renormalizes(self):
+        demo, online, rb = self._make_demo_online(fractions=[0.25, 0.75], batch_size=4)
+
+        subset = rb[1:]
+
+        assert subset.fractions.tolist() == [1.0]
+        assert (subset.sample(4)["value"] >= 4).all()
+
+    def test_fractions_validation(self):
+        members = [self._make_routed_member() for _ in range(2)]
+        with pytest.raises(ValueError, match="fractions"):
+            ReplayBufferEnsemble(*members, fractions=[0.5, 0.5], p=[0.5, 0.5])
+        with pytest.raises(ValueError, match="fractions"):
+            ReplayBufferEnsemble(*members, fractions=[0.5, 0.5], sample_from_all=True)
+        with pytest.raises(ValueError, match="sum to 1"):
+            ReplayBufferEnsemble(*members, fractions=[0.5, 0.6])
+        with pytest.raises(ValueError, match="non-negative"):
+            ReplayBufferEnsemble(*members, fractions=[1.5, -0.5])
+        with pytest.raises(ValueError, match="one fraction per member"):
+            ReplayBufferEnsemble(*members, fractions=[1.0])
+        weighted = ReplayBufferEnsemble(*members, p=[0.9, 0.1])
+        with pytest.raises(ValueError, match="exclusive"):
+            weighted.fractions = [0.5, 0.5]
+        assert weighted.fractions is None
+
+    def test_fractions_slice_members_count_slices(self):
+        members = [
+            self._make_routed_member(
+                16, sampler=SliceSampler(slice_len=2, traj_key="episode")
+            )
+            for _ in range(2)
+        ]
+        rb = ReplayBufferEnsemble(*members, routing_key="route", fractions=[0.5, 0.5])
+        data = self._routed_values(torch.arange(16), [0] * 8 + [1] * 8)
+        data.set("episode", torch.arange(16) // 4)
+        rb.extend(data)
+
+        sample = rb.sample(8)
+
+        assert sample["index", "buffer_ids"].tolist() == [0, 0, 0, 0, 1, 1, 1, 1]
+        pairs = sample["value"].reshape(4, 2)
+        assert ((pairs[:, 1] - pairs[:, 0]) == 1).all()
+        assert torch.bincount(rb.sample(6)["index", "buffer_ids"]).tolist() == [4, 2]
+        with pytest.raises(ValueError, match="multiple of the slice length"):
+            rb.sample(7)
+
+    def test_fractions_flat_priority_round_trip(self):
+        demo, online, rb = self._make_demo_online(fractions=[0.5, 0.5], batch_size=8)
+        sample = rb.sample()
+        from_demo = sample["index", "buffer_ids"] == 0
+        target = sample["index", "index"][from_demo][0]
+        hit = from_demo & (sample["index", "index"] == target)
+        sample.set("td_error", torch.where(hit, 1e4, 1e-4))
+
+        rb.update_tensordict_priority(sample)
+
+        demo_index = demo.sample(256, return_info=True)[1]["index"]
+        assert (demo_index == target).float().mean() > 0.95
+
+    def _make_mask_ensemble(self, **kwargs):
+        members = [self._make_routed_member(8) for _ in range(2)]
+        rb = ReplayBufferEnsemble(
+            *members, routing_key=("collector", "route"), routing_mode="mask", **kwargs
+        )
+        return members, rb
+
+    def test_mask_routing_writes_every_copy(self):
+        members, rb = self._make_mask_ensemble()
+        data = TensorDict(
+            {
+                "value": torch.tensor([0, 1, 2]),
+                ("collector", "route"): torch.tensor(
+                    [[True, True], [False, True], [True, True]]
+                ),
+            },
+            [3],
+        )
+
+        addresses = rb.extend(data)
+
+        assert addresses.batch_size == (3, 2)
+        assert addresses["present"].tolist() == [
+            [True, True],
+            [False, True],
+            [True, True],
+        ]
+        assert addresses["buffer_ids"].tolist() == [[0, 1], [0, 1], [0, 1]]
+        assert addresses["index"].tolist() == [[0, 0], [-1, 1], [1, 2]]
+        assert addresses["index_generation"].tolist() == [[0, 0], [-1, 0], [0, 0]]
+        assert members[0][:]["value"].tolist() == [0, 2]
+        assert members[1][:]["value"].tolist() == [0, 1, 2]
+        assert ("collector", "route") not in members[1][:].keys(True)
+
+    def test_mask_routing_update_if_present_patches_every_copy(self):
+        members, rb = self._make_mask_ensemble()
+        data = TensorDict(
+            {
+                "value": torch.tensor([0, 1, 2]),
+                ("collector", "route"): torch.tensor(
+                    [[True, True], [False, True], [True, False]]
+                ),
+            },
+            [3],
+        )
+        addresses = rb.extend(data)
+
+        result = rb.update_if_present(
+            index=addresses.select("buffer_ids", "index", "present"),
+            generation=addresses["index_generation"],
+            patch={"value": torch.tensor([100, 101, 102])},
+        )
+
+        assert result.updated.tolist() == [[True, True], [False, True], [True, False]]
+        assert members[0][:]["value"].tolist() == [100, 102]
+        assert members[1][:]["value"].tolist() == [100, 101]
+
+    def test_mask_routing_validation(self):
+        members = [self._make_routed_member() for _ in range(2)]
+        with pytest.raises(ValueError, match="routing_mode"):
+            ReplayBufferEnsemble(*members, routing_key="route", routing_mode="ids")
+        with pytest.raises(ValueError, match="routing_key"):
+            ReplayBufferEnsemble(*members, routing_dim=0, routing_mode="mask")
+        rb = ReplayBufferEnsemble(*members, routing_key="route", routing_mode="mask")
+        with pytest.raises(TypeError, match="boolean"):
+            rb.extend(self._routed_values([0, 1], [[1, 1], [0, 1]]))
+        with pytest.raises(ValueError, match=r"\[\*B, 2\]"):
+            rb.extend(self._routed_values([0, 1], [[True], [False]]))
+
+    def test_mask_routing_fragmented_slices_never_cross_gaps(self):
+        def fragmented():
+            return SliceSampler(
+                slice_len=2,
+                traj_key=("collector", "traj_ids"),
+                step_key="step_count",
+                fragmented=True,
+            )
+
+        members = [self._make_routed_member(64, sampler=fragmented()) for _ in range(2)]
+        rb = ReplayBufferEnsemble(
+            *members, routing_key="route", routing_mode="mask", fractions=[0.5, 0.5]
+        )
+
+        def steps(values, demo_steps):
+            values = torch.as_tensor(values)
+            demo = torch.tensor([int(value) in demo_steps for value in values])
+            return TensorDict(
+                {
+                    "step_count": values.unsqueeze(-1),
+                    ("collector", "traj_ids"): torch.full_like(values, 7),
+                    "route": torch.stack([demo, torch.ones_like(demo)], -1),
+                },
+                [values.numel()],
+            )
+
+        rb.extend(steps(range(23), {0, 1, 2, 3, 10, 11, 12, 20, 21, 22}))
+        rb.extend(steps(range(23, 26), {23, 24, 25}))
+
+        demo_pairs = []
+        for _ in range(50):
+            sample = rb.sample(16)
+            from_demo = sample["index", "buffer_ids"] == 0
+            demo_pairs.append(sample["step_count"][from_demo].reshape(-1, 2))
+        demo_pairs = torch.cat(demo_pairs)
+        assert ((demo_pairs[:, 1] - demo_pairs[:, 0]) == 1).all()
+        assert ((demo_pairs[:, 0] == 22) & (demo_pairs[:, 1] == 23)).any()
+
+    def test_update_tensordict_priority_plain_members(self):
+        storages = StorageEnsemble(LazyTensorStorage(8), LazyTensorStorage(8))
+        for member, storage in enumerate(storages._storages):
+            storage.set(
+                torch.arange(4),
+                TensorDict({"value": torch.arange(4) + 4 * member}, [4]),
+            )
+        samplers = SamplerEnsemble(
+            PrioritizedSampler(8, alpha=1.0, beta=0.5),
+            RandomSampler(),
+            fractions=[0.5, 0.5],
+        )
+        rb = ReplayBufferEnsemble(
+            storages=storages,
+            samplers=samplers,
+            writers=WriterEnsemble(RoundRobinWriter(), RoundRobinWriter()),
+            batch_size=8,
+        )
+        sample = rb.sample()
+        from_demo = sample["index", "buffer_ids"] == 0
+        target = sample["index", "index"][from_demo][0]
+        hit = from_demo & (sample["index", "index"] == target)
+        sample.set("td_error", torch.where(hit, 1e4, 1e-4))
+
+        rb.update_tensordict_priority(sample)
+
+        member_index, _ = samplers[0].sample(storages._storages[0], 256)
+        assert (member_index == target).float().mean() > 0.95
+
+    def test_mask_patch_is_per_record_when_features_match_members(self):
+        members, rb = self._make_mask_ensemble()
+        data = TensorDict(
+            {
+                "action": torch.zeros(3, 2),
+                ("collector", "route"): torch.tensor(
+                    [[True, True], [False, True], [True, True]]
+                ),
+            },
+            [3],
+        )
+        addresses = rb.extend(data)
+
+        rb.update_if_present(
+            index=addresses.select("buffer_ids", "index", "present"),
+            generation=addresses["index_generation"],
+            patch={"action": torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])},
+        )
+
+        assert members[0][:]["action"].tolist() == [[1.0, 2.0], [5.0, 6.0]]
+        assert members[1][:]["action"].tolist() == [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
+
+    def test_mask_routing_without_copies_keeps_generation(self):
+        members, rb = self._make_mask_ensemble()
+        addresses = rb.extend(
+            TensorDict(
+                {
+                    "value": torch.tensor([0, 1]),
+                    ("collector", "route"): torch.zeros(2, 2, dtype=torch.bool),
+                },
+                [2],
+            )
+        )
+
+        assert addresses["index_generation"].tolist() == [[-1, -1], [-1, -1]]
+        assert not addresses["present"].any()
+
+    def test_fractions_follow_slice_len_changes(self):
+        samplers = [SliceSampler(slice_len=2, traj_key="episode") for _ in range(2)]
+        members = [
+            self._make_routed_member(32, sampler=sampler) for sampler in samplers
+        ]
+        rb = ReplayBufferEnsemble(*members, routing_key="route", fractions=[0.5, 0.5])
+        data = self._routed_values(torch.arange(32), [0] * 16 + [1] * 16)
+        data.set("episode", torch.arange(32) // 8)
+        rb.extend(data)
+        assert torch.bincount(rb.sample(12)["index", "buffer_ids"]).tolist() == [6, 6]
+
+        for sampler in samplers:
+            sampler.slice_len = 4
+
+        assert torch.bincount(rb.sample(12)["index", "buffer_ids"]).tolist() == [8, 4]
+
+    def test_fractions_getter_returns_a_copy(self):
+        demo, online, rb = self._make_demo_online(fractions=[0.5, 0.5], batch_size=8)
+
+        rb.fractions[:] = torch.tensor([0.25, 0.75])
+
+        assert rb.sample()["index", "buffer_ids"].tolist() == [0] * 4 + [1] * 4
+
+    def test_fractions_with_tensor_members(self):
+        members = [ReplayBuffer(storage=ListStorage(8)) for _ in range(2)]
+        members[0].extend(torch.arange(4))
+        members[1].extend(torch.arange(4) + 10)
+        rb = ReplayBufferEnsemble(*members, fractions=[0.25, 0.75])
+
+        sample = rb.sample(4)
+
+        assert sample.shape == (4,)
+        assert (sample[:1] < 4).all() and (sample[1:] >= 10).all()
+
+    def test_fractions_reject_batch_time_slices(self):
+        members = [
+            self._make_routed_member(
+                16,
+                sampler=SliceSampler(
+                    slice_len=2, traj_key="episode", output_layout="batch_time"
+                ),
+            )
+            for _ in range(2)
+        ]
+        with pytest.raises(ValueError, match="flat sampler output"):
+            ReplayBufferEnsemble(*members, fractions=[0.5, 0.5]).sampler.quota_counts(8)
+
+    def test_fractions_state_dict_round_trip(self):
+        demo, online, rb = self._make_demo_online(fractions=[0.5, 0.5], batch_size=8)
+        rb.fractions = [0.25, 0.75]
+        state = rb.state_dict()
+
+        restored_demo, restored_online, restored = self._make_demo_online(
+            fractions=[0.5, 0.5], batch_size=8
+        )
+        restored.load_state_dict(state)
+
+        assert restored.fractions.tolist() == [0.25, 0.75]
+
+    @pytest.mark.parametrize("checkpoint", ["state_dict", "dumps"])
+    def test_loading_a_checkpoint_without_fractions_clears_them(
+        self, checkpoint, tmp_path
+    ):
+        demo, online, rb = self._make_demo_online(batch_size=8)
+        restored_demo, restored_online, restored = self._make_demo_online(
+            fractions=[0.5, 0.5], batch_size=8
+        )
+
+        if checkpoint == "state_dict":
+            restored.load_state_dict(rb.state_dict())
+        else:
+            rb.dumps(tmp_path)
+            restored.loads(tmp_path)
+
+        assert restored.fractions is None
+
+    def test_fractions_dumps_round_trip(self, tmp_path):
+        demo, online, rb = self._make_demo_online(fractions=[0.5, 0.5], batch_size=8)
+        rb.fractions = [0.25, 0.75]
+        rb.dumps(tmp_path)
+
+        restored_demo, restored_online, restored = self._make_demo_online(
+            fractions=[0.5, 0.5], batch_size=8
+        )
+        restored.loads(tmp_path)
+
+        assert restored.fractions.tolist() == [0.25, 0.75]
+
+    def test_fractions_change_during_prefetch_keeps_labels(self):
+        members = [
+            TensorDictReplayBuffer(storage=LazyTensorStorage(500)) for _ in range(2)
+        ]
+        for member_id, member in enumerate(members):
+            member.extend(TensorDict({"member": torch.full((500,), member_id)}, [500]))
+        rb = ReplayBufferEnsemble(
+            *members, fractions=[0.1, 0.9], batch_size=1024, prefetch=2
+        )
+
+        for step in range(100):
+            rb.fractions = [0.9, 0.1] if step % 2 else [0.1, 0.9]
+            sample = rb.sample()
+            assert (sample["member"] == sample["index", "buffer_ids"]).all()
+
+    def test_fractions_reject_non_strict_slices(self):
+        members = [
+            self._make_routed_member(
+                16,
+                sampler=SliceSampler(
+                    slice_len=4, traj_key="episode", strict_length=False
+                ),
+            )
+            for _ in range(2)
+        ]
+        with pytest.raises(ValueError, match="strict_length"):
+            ReplayBufferEnsemble(*members, fractions=[0.5, 0.5]).sampler.quota_counts(8)
+
+    def test_fractions_stats_count_multidim_members(self):
+        members = [
+            TensorDictReplayBuffer(storage=LazyTensorStorage(20, ndim=2))
+            for _ in range(2)
+        ]
+        for member in members:
+            member.extend(TensorDict({"obs": torch.arange(10).view(2, 5)}, [2, 5]))
+        rb = ReplayBufferEnsemble(*members, fractions=[0.5, 0.5])
+
+        rb.sample(6)
+
+        assert rb.stats()["samples_returned"] == 6
+
+    def test_update_priority_one_value_per_masked_record(self):
+        demo, online = (
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(5),
+                sampler=PrioritizedSampler(5, alpha=1.0, beta=1.0),
+            )
+            for _ in range(2)
+        )
+        rb = ReplayBufferEnsemble(
+            demo, online, routing_key="route", routing_mode="mask"
+        )
+        meta = rb.extend(TensorDict({"route": torch.ones(3, 2, dtype=torch.bool)}, [3]))
+
+        rb.update_priority(meta, torch.tensor([1.0, 1.0, 1e4]))
+
+        for member in (demo, online):
+            index = member.sample(256, return_info=True)[1]["index"]
+            assert (index == 2).float().mean() > 0.95
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_fractions_mixed_index_devices(self):
+        demo = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8, device="cuda"),
+            sampler=PrioritizedSampler(8, alpha=1.0, beta=0.5),
+        )
+        online = TensorDictReplayBuffer(storage=LazyTensorStorage(8, device="cuda"))
+        demo.extend(TensorDict({"value": torch.arange(4)}, [4], device="cuda"))
+        online.extend(TensorDict({"value": torch.arange(4) + 4}, [4], device="cuda"))
+        rb = ReplayBufferEnsemble(demo, online, fractions=[0.5, 0.5])
+
+        sample = rb.sample(8)
+
+        assert sample["value"].device.type == "cuda"
+        assert (sample["value"][:4] < 4).all() and (sample["value"][4:] >= 4).all()
 
     def _make_sampler(self, sampler_type):
         if sampler_type is SamplerWithoutReplacement:

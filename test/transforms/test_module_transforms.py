@@ -20,7 +20,7 @@ from torchrl import logger as torchrl_logger, merge_ray_runtime_env
 
 from torchrl.collectors import Collector
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
-from torchrl.data import ReplayBuffer
+from torchrl.data import ReplayBuffer, Unbounded
 from torchrl.envs import Compose, SerialEnv, TransformedEnv
 from torchrl.envs.transforms import ModuleTransform
 from torchrl.envs.transforms.module import RayModuleTransform
@@ -134,6 +134,83 @@ class TestModuleTransform(TransformBase):
             env.check_env_specs()
         finally:
             env.close(raise_if_closed=False)
+
+    def test_new_observation_entry_is_present_at_reset(self):
+        def add_feature(spec):
+            spec = spec.clone()
+            spec["feature"] = Unbounded(shape=(*spec.shape, 2))
+            return spec
+
+        env = ContinuousActionVecMockEnv().append_transform(
+            ModuleTransform(
+                module=TensorDictModule(
+                    lambda obs: obs[..., :2] * 2,
+                    in_keys=["observation"],
+                    out_keys=["feature"],
+                ),
+                observation_spec_transform=add_feature,
+            )
+        )
+
+        reset = env.reset()
+        rollout = env.rollout(3)
+
+        torch.testing.assert_close(reset["feature"], reset["observation"][..., :2] * 2)
+        assert rollout["feature"].shape == (3, 2)
+        env.check_env_specs()
+
+    def test_reset_keeps_reward_out_of_the_reset_data(self):
+        def add_feature(spec):
+            spec = spec.clone()
+            spec["feature"] = Unbounded(shape=(*spec.shape, 2))
+            return spec
+
+        env = ContinuousActionVecMockEnv().append_transform(
+            ModuleTransform(
+                module=TensorDictModule(
+                    lambda obs: (obs[..., :2] * 2, obs[..., :1]),
+                    in_keys=["observation"],
+                    out_keys=["feature", "reward"],
+                ),
+                observation_spec_transform=add_feature,
+                reward_spec_transform=lambda spec: spec,
+            )
+        )
+
+        reset = env.reset()
+        rollout = env.rollout(3)
+
+        assert "reward" not in reset.keys()
+        torch.testing.assert_close(reset["feature"], reset["observation"][..., :2] * 2)
+        torch.testing.assert_close(
+            rollout["next", "reward"], rollout["next", "observation"][..., :1]
+        )
+        env.check_env_specs()
+
+    def test_step_only_inputs_skip_reset(self):
+        def add_feature(spec):
+            spec = spec.clone()
+            spec["scaled_reward"] = Unbounded(shape=(*spec.shape, 1))
+            return spec
+
+        env = ContinuousActionVecMockEnv().append_transform(
+            ModuleTransform(
+                module=TensorDictModule(
+                    lambda reward: reward * 2,
+                    in_keys=["reward"],
+                    out_keys=["scaled_reward"],
+                ),
+                observation_spec_transform=add_feature,
+            )
+        )
+
+        reset = env.reset()
+        rollout = env.rollout(3)
+
+        assert "scaled_reward" not in reset.keys()
+        torch.testing.assert_close(
+            rollout["next", "scaled_reward"], rollout["next", "reward"] * 2
+        )
 
     def test_transform_no_env(self):
         t = ModuleTransform(module_factory=self._module_factory_samespec)

@@ -158,6 +158,49 @@ Documentation Sections
    data_specs
 
 
+Mixed-source replay
+-------------------
+
+ReplayBufferEnsemble can serve RLPD, offline-to-online and
+HIL-SERL style training from one buffer per data source:
+
+- fractions sets the share of each batch taken from each member. Every batch
+  gets the same counts, and the batch is flat, one row per record.
+- Members may use different samplers. Rows from a uniform member next to a
+  prioritized one get an importance weight of 1.
+- routing_mode="mask" writes a record to several members at once (HIL-SERL
+  stores intervened steps in both buffers) and returns the address of every
+  copy, so one update_if_present call can fix all copies of a record.
+- update_tensordict_priority sends TD errors back to the member each row came
+  from.
+
+.. code-block:: python
+
+    demo = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(50_000),
+        sampler=PrioritizedSampler(50_000, alpha=0.6, beta=0.4),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+    )
+    online = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(1_000_000),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+    )
+    rb = ReplayBufferEnsemble(
+        demo, online, routing_key="route", routing_mode="mask",
+        fractions=[0.5, 0.5], batch_size=256,
+    )
+    intervention = data["intervention"].squeeze(-1)
+    data.set("route", torch.stack([intervention, torch.ones_like(intervention)], -1))
+    addresses = rb.extend(data)
+    batch = rb.sample()
+    batch.set("td_error", loss(batch)["td_error"])
+    rb.update_tensordict_priority(batch)
+
+With fractions set, each member's share is fixed, so priorities only change
+sampling inside a member. A member that receives only part of each trajectory
+(the demo member above) has gaps in it. If it is sampled in slices, use a
+SliceSampler with fragmented=True.
+
 Ending replay streams on restart
 --------------------------------
 

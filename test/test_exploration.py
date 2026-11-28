@@ -52,6 +52,7 @@ from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianModule,
     EGreedyModule,
     EGreedyWrapper,
+    InterventionModule,
     OrnsteinUhlenbeckProcessModule,
     set_exploration_modules_spec_from_env,
 )
@@ -59,6 +60,7 @@ from torchrl.modules.tensordict_module.exploration import (
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
+    CountingEnv,
     CountingEnvCountModule,
     NestedCountingEnv,
 )
@@ -270,6 +272,213 @@ class TestEGreedy:
             ValueError, match="Action spec shape does not match the action shape"
         ):
             explorative_policy(td)
+
+
+class _HoldEveryThird(nn.Module):
+    """Takes over with a zero action whenever the observed count is a multiple of 3."""
+
+    def forward(self, observation):
+        active = (observation.long() % 3 == 0).reshape(observation.shape[:-1])
+        return torch.zeros_like(observation), active
+
+
+class TestInterventionModule:
+    @staticmethod
+    def _intervener(action_key=("intervener", "action")):
+        return TensorDictModule(
+            _HoldEveryThird(),
+            in_keys=["observation"],
+            out_keys=[action_key, ("intervener", "active")],
+        )
+
+    def test_swaps_only_intervened_rows(self):
+        module = InterventionModule(self._intervener())
+        policy_action = torch.tensor([[7.0], [7.0], [7.0], [7.0]])
+        td = TensorDict(
+            {
+                "observation": torch.tensor([[3.0], [4.0], [6.0], [5.0]]),
+                "action": policy_action.clone(),
+            },
+            batch_size=[4],
+        )
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            out = module(td)
+
+        assert out["intervention"].tolist() == [[True], [False], [True], [False]]
+        assert out["action"].squeeze(-1).tolist() == [0.0, 7.0, 0.0, 7.0]
+        assert torch.equal(out["policy_action"], policy_action)
+        assert out["action"][1].data_ptr() != policy_action.data_ptr()
+
+    def test_intervener_action_takes_policy_dtype(self):
+        class DoubleAction(nn.Module):
+            def forward(self, observation):
+                return torch.full(
+                    observation.shape, 0.5, dtype=torch.float64
+                ), torch.ones(observation.shape[:-1], dtype=torch.bool)
+
+        intervener = TensorDictModule(
+            DoubleAction(),
+            in_keys=["observation"],
+            out_keys=[("intervener", "action"), ("intervener", "active")],
+        )
+        td = TensorDict(
+            {"observation": torch.zeros(2, 1), "action": torch.zeros(2, 1)}, [2]
+        )
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            out = InterventionModule(intervener)(td)
+
+        assert out["action"].dtype == torch.float32
+        assert out["action"].tolist() == [[0.5], [0.5]]
+
+    def test_projects_intervener_action_onto_spec(self):
+        class Overshoot(nn.Module):
+            def forward(self, observation):
+                return torch.full_like(observation, 9.0), torch.ones(
+                    observation.shape[:-1], dtype=torch.bool
+                )
+
+        intervener = TensorDictModule(
+            Overshoot(),
+            in_keys=["observation"],
+            out_keys=[("intervener", "action"), ("intervener", "active")],
+        )
+        module = InterventionModule(intervener, spec=Bounded(-1.0, 1.0, shape=(1,)))
+        td = TensorDict(
+            {"observation": torch.zeros(2, 1), "action": torch.zeros(2, 1)}, [2]
+        )
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            assert module(td)["action"].tolist() == [[1.0], [1.0]]
+
+    def test_deterministic_exploration_never_intervenes(self):
+        module = InterventionModule(self._intervener())
+        td = TensorDict(
+            {"observation": torch.tensor([[3.0], [6.0]]), "action": torch.ones(2, 1)},
+            [2],
+        )
+
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            out = module(td)
+
+        assert not out["intervention"].any()
+        assert out["action"].tolist() == [[1.0], [1.0]]
+        assert ("intervener", "active") not in out.keys(True)
+        out.select(*module.out_keys, strict=True)
+
+    def test_one_flag_per_agent(self):
+        module = InterventionModule(
+            self._intervener(),
+            action_key=("agents", "action"),
+            policy_action_key=("agents", "policy_action"),
+            intervention_key=("agents", "intervention"),
+        )
+        td = TensorDict(
+            {
+                "observation": torch.tensor([[[3.0], [4.0]], [[5.0], [6.0]]]),
+                ("agents", "action"): torch.ones(2, 2, 1),
+            },
+            [2],
+        )
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            out = module(td)
+
+        assert out["agents", "intervention"].squeeze(-1).tolist() == [
+            [True, False],
+            [False, True],
+        ]
+        assert out["agents", "action"].squeeze(-1).tolist() == [[0.0, 1.0], [1.0, 0.0]]
+
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            evaluated = module(td.exclude(("agents", "intervention")))
+        assert evaluated["agents", "intervention"].shape == (2, 2, 1)
+
+    def test_nested_action_key(self):
+        module = InterventionModule(
+            self._intervener(("intervener", "nested", "action")),
+            action_key=("agent", "action"),
+            policy_action_key=("agent", "policy_action"),
+            intervention_key=("agent", "intervention"),
+            intervener_action_key=("intervener", "nested", "action"),
+        )
+        td = TensorDict(
+            {
+                "observation": torch.tensor([[3.0], [4.0]]),
+                ("agent", "action"): torch.ones(2, 1),
+            },
+            [2],
+        )
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            out = module(td)
+
+        assert out["agent", "action"].tolist() == [[0.0], [1.0]]
+        assert out["agent", "intervention"].tolist() == [[True], [False]]
+        assert out["agent", "policy_action"].tolist() == [[1.0], [1.0]]
+
+    def test_compile_fullgraph(self):
+        module = InterventionModule(
+            self._intervener(), spec=Bounded(-1.0, 1.0, shape=(1,))
+        )
+        td = TensorDict(
+            {"observation": torch.tensor([[3.0], [4.0]]), "action": torch.ones(2, 1)},
+            [2],
+        )
+
+        with set_exploration_type(ExplorationType.RANDOM):
+            eager = module(td.clone())["action"]
+            compiled = torch.compile(module, backend="aot_eager", fullgraph=True)(
+                td.clone()
+            )["action"]
+
+        torch.testing.assert_close(compiled, eager)
+        assert eager.tolist() == [[0.0], [1.0]]
+
+    def test_rejects_intervener_without_required_keys(self):
+        intervener = TensorDictModule(
+            nn.Identity(), in_keys=["observation"], out_keys=[("intervener", "action")]
+        )
+        with pytest.raises(ValueError, match="active"):
+            InterventionModule(intervener)
+
+    def test_collector_executes_intervener_action(self):
+        class StandStill(nn.Module):
+            def forward(self, observation):
+                return torch.zeros_like(observation)
+
+        class PushOnEvenSteps(nn.Module):
+            def forward(self, step_count):
+                active = (step_count % 2 == 0).reshape(step_count.shape[:-1])
+                return torch.ones_like(step_count), active
+
+        env = TransformedEnv(CountingEnv(max_steps=100), StepCounter())
+        intervener = TensorDictModule(
+            PushOnEvenSteps(),
+            in_keys=["step_count"],
+            out_keys=[("intervener", "action"), ("intervener", "active")],
+        )
+        policy = TensorDictSequential(
+            TensorDictModule(
+                StandStill(), in_keys=["observation"], out_keys=["action"]
+            ),
+            InterventionModule(intervener, spec=env.action_spec),
+        )
+        collector = Collector(env, policy, frames_per_batch=12, total_frames=12)
+
+        batch = next(iter(collector))
+        collector.shutdown()
+
+        step = batch["step_count"].squeeze(-1)
+        moved = batch["next", "observation"] - batch["observation"]
+        intervened = batch["intervention"].squeeze(-1)
+        assert intervened.tolist() == (step % 2 == 0).tolist()
+        assert moved.squeeze(-1).tolist() == intervened.long().tolist()
+        assert (batch["policy_action"] == 0).all()
+        assert (
+            batch["action"].squeeze(-1) == intervened.to(batch["action"].dtype)
+        ).all()
 
 
 @pytest.mark.parametrize("device", get_default_devices())

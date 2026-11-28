@@ -1,0 +1,90 @@
+env:
+  task: Lift
+  robot: Panda
+  control_freq: 20
+  max_steps: 100
+  position_only: true
+  hard_reset: true
+  seed: 0
+
+demos:
+  path: null
+  num_demos: 20
+
+reward:
+  source: oracle
+  classifier_path: null
+  end_episode_on_success: true
+  false_positives_out: null
+
+intervention:
+  enabled: true
+  stall_steps: 10
+  stall_speed: 0.002
+  workspace_radius: 0.35
+  max_takeover: 30
+  noise_std: 0.1
+  reaction_delay: 0
+
+collector:
+  total_frames: 40_000
+  frames_per_batch: 50
+  async_collection: false
+
+replay:
+  demo_capacity: 100_000
+  online_capacity: 1_000_000
+  demo_fraction: 0.5
+  demo_prioritized: false
+  alpha: 0.6
+  beta: 0.4
+  prefetch: 2
+  device: null
+
+network:
+  hidden_sizes: [256, 256]
+  device: null
+
+optim:
+  batch_size: 256
+  utd_ratio: 4
+  cta_ratio: 2
+  training_starts: 100
+  lr: 3.0e-4
+  gamma: 0.97
+  tau: 0.005
+  alpha_init: 0.01
+  num_qvalue_nets: 10
+  backup_entropy: false
+  bc_weight: 0.0
+
+compile:
+  compile: true
+  mode: reduce-overhead
+
+logger:
+  backend: csv
+  exp_name: hil_serl_lift
+  log_dir: hil_serl_logs
+  eval_every: 5_000
+  eval_episodes: 10
+
+classifier:
+  source: synthetic
+  human_paths: []
+  extra_negatives: []
+  out: classifier.pt
+  seed: 0
+  positives: 200
+  negatives: 1000
+  near_miss_share: 0.3
+  episode_steps: 100
+  collect_env:
+    position_only: false
+    hard_reset: true
+  controller_noise: 0.3
+  random_noise: 2.0
+  train_episodes: 40
+  held_out_episodes: 40
+  epochs: 200
+  lr: 1.0e-3
