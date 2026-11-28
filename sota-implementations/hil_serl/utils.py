@@ -165,6 +165,35 @@ class PositionGripperActions(Transform):
         return input_spec
 
 
+class EpisodeSuccess(Transform):
+    """Records whether the simulator reported a success at any step of the episode.
+
+    The training success rate reads it at the end of each episode, so it
+    counts the same thing as the evaluation whether or not a success ends the
+    episode.
+    """
+
+    def __init__(self):
+        super().__init__(in_keys=["success"], out_keys=["episode_success"])
+
+    def _reset(self, tensordict, tensordict_reset):
+        tensordict_reset.set(
+            "episode_success", self.parent.full_observation_spec["success"].zero()
+        )
+        return tensordict_reset
+
+    def _step(self, tensordict, next_tensordict):
+        next_tensordict.set(
+            "episode_success",
+            tensordict.get("episode_success") | next_tensordict.get("success"),
+        )
+        return next_tensordict
+
+    def transform_observation_spec(self, observation_spec):
+        observation_spec["episode_success"] = observation_spec["success"].clone()
+        return observation_spec
+
+
 def _suite_env(env):
     while isinstance(env, TransformedEnv):
         env = env.base_env
@@ -235,7 +264,7 @@ def make_env(
                 observation_spec_transform=_add_classifier_specs,
             )
         )
-    transforms.append(SuccessReward(success_key=success_key))
+    transforms += [SuccessReward(success_key=success_key), EpisodeSuccess()]
     if end_on_success:
         transforms.append(TerminateTransform(lambda next_td: next_td.get(success_key)))
     transforms += [StepCounter(max_steps=cfg.env.max_steps), RewardSum()]

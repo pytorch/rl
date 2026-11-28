@@ -82,6 +82,7 @@ def main(cfg: DictConfig):
     collected = 0
     intervened = 0
     claims = 0
+    false_claims = 0
     update_count = 0
     false_positives = []
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
@@ -100,6 +101,7 @@ def main(cfg: DictConfig):
                 claimed = batch["next", "success_pred"].reshape(-1)
                 wrong = claimed & ~batch["next", "success"].reshape(-1)
                 claims += int(claimed.sum())
+                false_claims += int(wrong.sum())
                 false_positives.append(
                     batch["next", "observation"].reshape(batch.numel(), -1)[wrong]
                 )
@@ -123,14 +125,16 @@ def main(cfg: DictConfig):
             }
             if classifier is not None:
                 metrics["claims"] = claims
-                metrics["false_claims"] = sum(len(obs) for obs in false_positives)
+                metrics["false_claims"] = false_claims
             done = batch["next", "done"].squeeze(-1)
             if done.any():
                 metrics["train_success"] = (
-                    batch["next", "success"].squeeze(-1)[done].float().mean()
+                    batch["next", "episode_success"].squeeze(-1)[done].float().mean()
                 )
                 metrics["train_predicted_success"] = (
-                    (batch["next", "reward"].squeeze(-1)[done] > 0).float().mean()
+                    (batch["next", "episode_reward"].squeeze(-1)[done] > 0)
+                    .float()
+                    .mean()
                 )
             if losses:
                 metrics.update(torch.stack(losses).mean().to_dict())
