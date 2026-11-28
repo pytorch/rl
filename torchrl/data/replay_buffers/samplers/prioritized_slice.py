@@ -292,32 +292,6 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     ) -> None:
         return PrioritizedSampler.mark_update(self, index, storage=storage)
 
-    def _padded_indices(self, shapes, arange) -> torch.Tensor:
-        # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
-        # tensor([[ 0,  1,  2,  3,  4],
-        #         [-1, -1,  5,  6,  7],
-        #         [-1,  8,  9, 10, 11]])
-        # where the -1 items on the left are padded values
-        num_groups = shapes.shape[0]
-        max_group_len = shapes.max()
-        pad_lengths = max_group_len - shapes
-
-        # Get all the start and end indices within arange for each group
-        group_ends = shapes.cumsum(0)
-        group_starts = torch.empty_like(group_ends)
-        group_starts[0] = 0
-        group_starts[1:] = group_ends[:-1]
-        pad = torch.empty(
-            (num_groups, max_group_len), dtype=arange.dtype, device=arange.device
-        )
-        for pad_row, group_start, group_end, pad_len in zip(
-            pad, group_starts, group_ends, pad_lengths
-        ):
-            pad_row[:pad_len] = -1
-            pad_row[pad_len:] = arange[group_start:group_end]
-
-        return pad
-
     @staticmethod
     def _wrap_within_columns(
         flat_index: torch.Tensor, start_idx: torch.Tensor, time_length: int
@@ -345,28 +319,20 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
         if preceding_stop_idx is not None:
             return preceding_stop_idx
-        arange = torch.arange(storage.shape.numel())
-        shapes = lengths.view(-1, 1).cpu()
-        if not shapes.sum() - 1 == arange[-1]:
+        lengths = lengths.reshape(-1).to("cpu", torch.long)
+        if lengths.sum() != storage.shape.numel():
             raise RuntimeError("Wrong shapes / arange configuration")
-        if not self.strict_length:
-            # First, remove the starts from the arange
-            # We do this because each traj can be sampled
-            all_but_starts = torch.ones(arange.shape, dtype=torch.bool)
-            starts = lengths.cumsum(0)
-            starts = torch.cat([torch.zeros_like(starts[:1]), starts[:-1]])
-            all_but_starts[starts] = False
-            arange = arange[all_but_starts]
-            shapes = shapes - 1
-        pad = self._padded_indices(shapes, arange)
         _, span_right = self.span[0], self.span[1]
         if span_right and isinstance(span_right, bool):
-            preceding_stop_idx = pad[:, -1:]
+            num_forbidden = 1
         else:
-            # Mask the rightmost values of that padded tensor
-            num_forbidden = seq_length - 1 - span_right
-            preceding_stop_idx = pad[:, max(pad.shape[1] - num_forbidden, 0) :]
-        preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
+            num_forbidden = max(seq_length - 1 - span_right, 0)
+        # Start candidates are a trajectory's steps (all but the first one if not strict_length);
+        # the last ``num_forbidden`` candidates of each trajectory are excluded from the starts.
+        candidates = lengths if self.strict_length else lengths - 1
+        counts = candidates.clamp(0, num_forbidden)
+        offsets = torch.repeat_interleave(lengths.cumsum(0) - counts.cumsum(0), counts)
+        preceding_stop_idx = offsets + torch.arange(offsets.numel())
         if storage._is_full:
             preceding_stop_idx = self._wrap_within_columns(
                 preceding_stop_idx, start_idx, time_length=storage.shape[0]

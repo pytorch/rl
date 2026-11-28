@@ -657,6 +657,48 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
     benchmark(sample, rb)
 
 
+@pytest.mark.parametrize(
+    "episode_lengths",
+    [
+        pytest.param((1000,), id="episodes-1000"),
+        # early terminations next to time-limit truncations
+        pytest.param((50, 10_000), id="episodes-50-and-10000"),
+    ],
+)
+def test_prioritized_slice_sampler_sample(benchmark, episode_lengths):
+    size = 1_000_000
+    # the steps are split evenly between the episode lengths
+    lengths = torch.cat(
+        [torch.full((size // len(episode_lengths) // n,), n) for n in episode_lengths]
+    )
+    lengths = lengths[
+        torch.randperm(lengths.numel(), generator=torch.Generator().manual_seed(0))
+    ]
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size),
+        sampler=PrioritizedSliceSampler(
+            max_capacity=size,
+            alpha=0.7,
+            beta=0.5,
+            slice_len=64,
+            traj_key="episode",
+        ),
+        batch_size=1024,
+    )
+    rb.extend(
+        TensorDict(
+            {
+                "episode": torch.repeat_interleave(
+                    torch.arange(lengths.numel()), lengths
+                )
+            },
+            [size],
+        )
+    )
+    torch.manual_seed(0)
+    benchmark(sample, rb)
+
+
 @pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
 @pytest.mark.parametrize("size", [10_000, 100_000])
 def test_rb_checkpoint_dump(benchmark, tmp_path, storage, size):
